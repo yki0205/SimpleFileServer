@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -46,7 +46,7 @@ interface PreviewState {
   currentIndex?: number;
 }
 
-export default function FileExplorer() {
+function FileExplorerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -828,5 +828,13 @@ export default function FileExplorer() {
         </a>
       </footer>
     </main>
+  );
+}
+
+export default function FileExplorer() {
+  return (
+    <Suspense fallback={<Loading message="Loading..." />}>
+      <FileExplorerContent />
+    </Suspense>
   );
 }
