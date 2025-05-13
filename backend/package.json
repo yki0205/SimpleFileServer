@@ -8,6 +8,7 @@
     "dev": "nodemon app.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "cors": "^2.8.5",
     "express": "^5.1.0"
   },

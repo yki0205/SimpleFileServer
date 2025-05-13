@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs')
 const path = require('path')
 const cors = require('cors')
+const AdmZip = require('adm-zip')
 const config = require('./config')
 
 const app = express();
@@ -36,7 +37,6 @@ app.get('/api/files', (req, res) => {
       return {
         name: file,
         path: path.join(dir, file).replace(/\\/g, '/'),
-        isDirectory,
         size: fileStats.size,
         mtime: fileStats.mtime,
         type: isDirectory ? 'directory' : getFileType(extension)
@@ -74,6 +74,46 @@ app.get('/api/download', (req, res) => {
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      const zip = new AdmZip();
+      zip.addLocalFolder(fullPath);
+      const zipBuffer = zip.toBuffer();
+      const fileName = path.basename(fullPath);
+      const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}.zip`);
+      res.send(zipBuffer);
+    } else {
+      const fileName = path.basename(fullPath);
+      const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
+      
+      const extension = path.extname(fullPath).toLowerCase();
+      const contentType = getContentType(extension);
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+      res.sendFile(fullPath);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/content', (req, res) => {
+  const { path: filePath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, filePath);
+  
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   
   try {
     if (!fs.existsSync(fullPath)) {
@@ -82,19 +122,33 @@ app.get('/api/download', (req, res) => {
     
     const stats = fs.statSync(fullPath);
     if (stats.isDirectory()) {
-      const zip = new AdmZip();
-      zip.addLocalFolder(fullPath);
-      const zipBuffer = zip.toBuffer();
-      const fileName = path.basename(fullPath);
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}.zip"`);
-      res.send(zipBuffer);
-    } else {
-      const fileName = path.basename(fullPath);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      res.sendFile(fullPath);
+      return res.status(400).json({ error: 'Cannot read content of a directory' });
     }
+    
+    // Check file size to prevent loading very large files
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    if (stats.size > MAX_SIZE) {
+      return res.status(413).json({ error: 'File too large to preview' });
+    }
+    
+    // Set appropriate content type for text files
+    const extension = path.extname(fullPath).toLowerCase();
+    const contentType = getContentType(extension);
+    const fileName = path.basename(fullPath);
+    const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
+    
+    // res.setHeader('Content-Type', contentType);
+    // Always set content type as text/plain to ensure content is treated as string
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+
+    // Read and send file content
+    fs.readFile(fullPath, 'utf8', (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: 'Error reading file' });
+      }
+      res.send(data);
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -114,7 +168,6 @@ function searchFiles(dir, query, basePath) {
         results.push({
           name: file,
           path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
-          isDirectory: stats.isDirectory(),
           size: stats.size,
           mtime: stats.mtime,
           type: stats.isDirectory() ? 'directory' : getFileType(path.extname(file).toLowerCase())
@@ -136,14 +189,113 @@ function getFileType(extension) {
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg'];
   const videoExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv'];
   const audioExtensions = ['.mp3', '.wav', '.ogg', '.flac'];
-  const documentExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.md'];
+  const documentExtensions = [
+    // '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
+    '.txt', '.md'];
+  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app'];
+  const codeExtensions = ['jsx', 'tsx,', '.js', '.ts', '.py', '.java', '.cpp', '.h', '.css', '.html', '.json', '.xml', '.yaml', '.yml', '.toml', '.ini', '.conf', '.sh', '.bash', '.zsh', '.fish', '.powershell', '.ps1', '.psm1', '.psd1', '.psd2', '.psd3', '.psd4', '.psd5', '.psd6', '.psd7', '.psd8', '.psd9', '.psd10'];
   
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
   if (audioExtensions.includes(extension)) return 'audio';
   if (documentExtensions.includes(extension)) return 'document';
-  
+  if (archiveExtensions.includes(extension)) return 'archive';
+  if (codeExtensions.includes(extension)) return 'code';
+
   return 'other';
+}
+
+function getContentType(extension) {
+  const contentTypes = {
+    // Plain text
+    '.txt': 'text/plain',
+    '.ini': 'text/plain',
+    '.cfg': 'text/plain',
+    '.conf': 'text/plain',
+    
+    // Markup and styling
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.md': 'text/markdown',
+    '.xml': 'application/xml',
+    
+    // Data formats
+    '.json': 'application/json',
+    '.csv': 'text/csv',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.toml': 'text/toml',
+    
+    // Programming languages
+    '.js': 'text/javascript',
+    '.jsx': 'text/javascript',
+    '.ts': 'text/typescript',
+    '.tsx': 'text/typescript',
+    '.py': 'text/x-python',
+    '.java': 'text/x-java',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-c++',
+    '.cs': 'text/x-csharp',
+    '.go': 'text/x-go',
+    '.rb': 'text/x-ruby',
+    '.php': 'text/x-php',
+    '.sh': 'text/x-sh',
+    '.bash': 'text/x-sh',
+    '.zsh': 'text/x-sh',
+    '.fish': 'text/x-sh',
+    '.powershell': 'text/x-sh',
+    '.ps1': 'text/x-sh',
+    '.psm1': 'text/x-sh',
+    
+    // Images
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    
+    // Videos
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.avi': 'video/x-msvideo',
+    '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska',
+    
+    // Audio
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    
+    // Documents
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+    // Archives
+    '.zip': 'application/zip',
+    '.rar': 'application/x-rar-compressed',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    '.bz2': 'application/x-bzip2',
+    '.7z': 'application/x-7z-compressed',
+    '.iso': 'application/x-iso9660-image',
+    '.dmg': 'application/x-apple-diskimage',
+    '.pkg': 'application/vnd.apple.installer+xml',
+    '.deb': 'application/x-debian-package',
+    '.rpm': 'application/x-redhat-package-manager',
+    '.exe': 'application/x-msdownload',
+    '.msi': 'application/x-msdownload',
+    '.app': 'application/x-apple-application',
+  };
+  
+  return contentTypes[extension] || 'application/octet-stream';
 }
 
 app.listen(PORT, () => {
