@@ -309,14 +309,54 @@ function searchFiles(dir, query, basePath) {
 }
 
 function getFileType(extension) {
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg'];
-  const videoExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv'];
-  const audioExtensions = ['.mp3', '.wav', '.ogg', '.flac'];
+  // Image file extensions
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico', '.raw', '.psd'];
+  
+  // Video file extensions
+  const videoExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.mpg', '.mpeg', '.3gp', '.ts'];
+  
+  // Audio file extensions
+  const audioExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.alac', '.mid', '.midi'];
+  
+  // Document file extensions
   const documentExtensions = [
     // '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
-    '.txt', '.md'];
-  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app'];
-  const codeExtensions = ['jsx', 'tsx,', '.js', '.ts', '.py', '.java', '.cpp', '.h', '.css', '.html', '.json', '.xml', '.yaml', '.yml', '.toml', '.ini', '.conf', '.sh', '.bash', '.zsh', '.fish', '.powershell', '.ps1', '.psm1', '.psd1', '.psd2', '.psd3', '.psd4', '.psd5', '.psd6', '.psd7', '.psd8', '.psd9', '.psd10'];
+    '.txt', '.md', '.rtf', '.odt', '.ods', '.odp', '.csv', '.log', '.tex'];
+  
+  // Archive and executable file extensions
+  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app', 
+    '.apk', '.xz', '.tgz', '.jar', '.war', '.ear'];
+  
+  // Code and programming file extensions
+  const codeExtensions = [
+    // C/C++ family
+    '.c', '.cpp', '.h', '.hpp', '.cc', '.cxx', '.hxx', '.cu', '.cuh',
+    
+    // Web development
+    '.jsx', '.tsx', '.js', '.ts', '.html', '.css', '.scss', '.sass', '.less', '.vue', '.svelte',
+    
+    // Scripting languages
+    '.py', '.rb', '.php', '.lua', '.pl', '.pm', '.perl', '.tcl', '.awk',
+    
+    // JVM languages
+    '.java', '.kt', '.groovy', '.scala', '.clj', '.gradle',
+    
+    // Data formats
+    '.json', '.xml', '.yaml', '.yml', '.toml', '.proto', '.graphql', '.gql',
+    
+    // Configuration files
+    '.ini', '.conf', '.properties', '.env', '.config',
+    
+    // Shell scripts
+    '.sh', '.bash', '.zsh', '.fish', '.ksh',
+    
+    // PowerShell
+    '.powershell', '.ps1', '.psm1', '.psd1', '.ps1xml',
+    
+    // Other languages
+    '.go', '.rs', '.swift', '.cs', '.fs', '.vb', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
+    '.f', '.f90', '.f95', '.hs', '.lhs', '.lisp', '.cl', '.nim', '.ml', '.mli', '.d', '.erl', '.hrl'
+  ];
   
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
@@ -335,12 +375,16 @@ function getContentType(extension) {
     '.ini': 'text/plain',
     '.cfg': 'text/plain',
     '.conf': 'text/plain',
+    '.log': 'text/plain',
+    '.env': 'text/plain',
     
     // Markup and styling
     '.html': 'text/html',
     '.css': 'text/css',
     '.md': 'text/markdown',
     '.xml': 'application/xml',
+    '.svg': 'image/svg+xml',
+    '.rtf': 'application/rtf',
     
     // Data formats
     '.json': 'application/json',
@@ -348,6 +392,9 @@ function getContentType(extension) {
     '.yaml': 'text/yaml',
     '.yml': 'text/yaml',
     '.toml': 'text/toml',
+    '.proto': 'text/plain',
+    '.graphql': 'text/plain',
+    '.gql': 'text/plain',
     
     // Programming languages
     '.js': 'text/javascript',
@@ -369,6 +416,15 @@ function getContentType(extension) {
     '.powershell': 'text/x-sh',
     '.ps1': 'text/x-sh',
     '.psm1': 'text/x-sh',
+    '.vue': 'text/plain',
+    '.svelte': 'text/plain',
+    '.rs': 'text/plain',
+    '.swift': 'text/plain',
+    '.kt': 'text/plain',
+    '.dart': 'text/plain',
+    '.lua': 'text/plain',
+    '.sql': 'text/plain',
+    '.r': 'text/plain',
     
     // Images
     '.png': 'image/png',
@@ -377,7 +433,10 @@ function getContentType(extension) {
     '.gif': 'image/gif',
     '.bmp': 'image/bmp',
     '.webp': 'image/webp',
-    '.svg': 'image/svg+xml',
+    '.tiff': 'image/tiff',
+    '.ico': 'image/x-icon',
+    '.raw': 'image/x-raw',
+    '.psd': 'image/vnd.adobe.photoshop',
     
     // Videos
     '.mp4': 'video/mp4',
@@ -385,12 +444,26 @@ function getContentType(extension) {
     '.avi': 'video/x-msvideo',
     '.mov': 'video/quicktime',
     '.mkv': 'video/x-matroska',
+    '.flv': 'video/x-flv',
+    '.wmv': 'video/x-ms-wmv',
+    '.m4v': 'video/x-m4v',
+    '.mpg': 'video/mpeg',
+    '.mpeg': 'video/mpeg',
+    '.3gp': 'video/3gpp',
+    '.ts': 'video/mp2t',
     
     // Audio
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
     '.ogg': 'audio/ogg',
     '.flac': 'audio/flac',
+    '.aac': 'audio/aac',
+    '.m4a': 'audio/x-m4a',
+    '.wma': 'audio/x-ms-wma',
+    '.aiff': 'audio/aiff',
+    '.alac': 'audio/alac',
+    '.mid': 'audio/midi',
+    '.midi': 'audio/midi',
     
     // Documents
     '.pdf': 'application/pdf',
@@ -400,6 +473,10 @@ function getContentType(extension) {
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.ppt': 'application/vnd.ms-powerpoint',
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.odt': 'application/vnd.oasis.opendocument.text',
+    '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+    '.odp': 'application/vnd.oasis.opendocument.presentation',
+    '.tex': 'application/x-tex',
 
     // Archives
     '.zip': 'application/zip',
@@ -416,6 +493,12 @@ function getContentType(extension) {
     '.exe': 'application/x-msdownload',
     '.msi': 'application/x-msdownload',
     '.app': 'application/x-apple-application',
+    '.apk': 'application/vnd.android.package-archive',
+    '.xz': 'application/x-xz',
+    '.tgz': 'application/gzip',
+    '.jar': 'application/java-archive',
+    '.war': 'application/java-archive',
+    '.ear': 'application/java-archive',
   };
   
   return contentTypes[extension] || 'application/octet-stream';
