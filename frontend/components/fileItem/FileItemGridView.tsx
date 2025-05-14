@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { Folder, File, FileText, FileArchive, Image, Music, Video, FileCode, Download } from "lucide-react";
+import { Folder, File, FileText, FileArchive, Image, Music, Video, FileCode } from "lucide-react";
 
 interface FileItemProps {
   name: string;

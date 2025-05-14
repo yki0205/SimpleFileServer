@@ -3,10 +3,11 @@ const fs = require('fs')
 const path = require('path')
 const cors = require('cors')
 const AdmZip = require('adm-zip')
+const multer = require('multer')
 const config = require('./config')
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 11073;
 
 app.use(cors());
 app.use(express.json());
@@ -105,6 +106,128 @@ app.get('/api/download', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.post('/api/upload', (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const uploadPath = path.join(basePath, dir);
+  
+  if (!uploadPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  
+  if (!fs.existsSync(uploadPath)) {
+    try {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    } catch (error) {
+      return res.status(500).json({ error: `Failed to create directory: ${error.message}` });
+    }
+  }
+  
+  // Configure multer storage
+  const storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+      cb(null, uploadPath);
+    },
+    filename: function(req, file, cb) {
+      // Keep original filename
+      cb(null, file.originalname);
+    }
+  });
+  
+  // File filter to reject unwanted files
+  const fileFilter = (req, file, cb) => {
+    // You can add file type restrictions here if needed
+    cb(null, true);
+  };
+  
+  const upload = multer({ 
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: 1024 * 1024 * 100 // 100MB limit
+    }
+  }).array('files', 10); // Accept up to 10 files with field name 'files'
+  
+  upload(req, res, function(err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    } else if (err) {
+      return res.status(500).json({ error: `Server error: ${err.message}` });
+    }
+    
+    const uploadedFiles = req.files.map(file => ({
+      name: file.originalname,
+      path: path.join(dir, file.originalname).replace(/\\/g, '/'),
+      size: file.size,
+      mimetype: file.mimetype
+    }));
+    
+    res.status(200).json({ 
+      message: 'Files uploaded successfully', 
+      files: uploadedFiles 
+    });
+  });
+})
+
+app.post('/api/mkdir', (req, res) => {
+  const { path: dirPath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, dirPath);
+  
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.mkdirSync(fullPath, { recursive: true });
+    res.status(200).json({ message: 'Directory created successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/rename', (req, res) => {
+  const { path: filePath, newName } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, filePath);
+  
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.renameSync(fullPath, newPath);
+    res.status(200).json({ message: 'File renamed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.delete('/api/delete', (req, res) => {
+  const { path: filePath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, filePath);
+  
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.unlinkSync(fullPath);
+    res.status(200).json({ message: 'File deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/copy_paste', (req, res) => {
+  // TODO: Implement copy
+})
+
+app.post('/api/move', (req, res) => {
+  // TODO: Implement move
+})
 
 app.get('/api/content', (req, res) => {
   const { path: filePath } = req.query;

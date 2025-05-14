@@ -1,86 +1,76 @@
-# Simple File Server
+# SimpleFileServer
 
-A web-based file server application that allows you to browse and view local files through a web interface. It supports three different view modes: List View, Grid View, and Image View, along with file search functionality.
+A simple file server that allows users to browse, upload, download, and manage files.
 
-## Features
+## Example
 
-- Browse local files and directories
-- Three view modes: List, Grid, and Image
-- File search functionality
-- Preview images directly in the browser
-- Download files
+![Example](./example/exam1.png)
 
-## Project Structure
+![Example](./example/exam2.png)
 
-The project consists of two main parts:
+![Example](./example/exam3.png)
 
-1. **Backend**: A simple Express server that serves files from a configured directory
-2. **Frontend**: A Next.js application with a modern UI built using shadcn/ui components
+![Example](./example/exam4.png)
 
-## Setup and Installation
+## Installation and Running
 
-### Backend Setup
+### Prerequisites
+- Node.js 18+ and npm
 
-1. Navigate to the backend directory:
-   ```
-   cd backend
-   ```
+### Installation Steps
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
+1. Clone the repository
+```bash
+git clone https://github.com/Kobayashi2003/SimpleFileServer.git
+cd SimpleFileServer
+```
 
-3. Configure the base directory in `config.js` (default is `D:/Files`):
-   ```javascript
-   module.exports = {
-     baseDirectory: process.env.BASE_DIRECTORY || 'D:/Files',
-     // other settings...
-   };
-   ```
+2. Install dependencies
+```bash
+# Install backend dependencies
+cd backend
+npm install
 
-4. Start the backend server:
-   ```
-   npm run dev
-   ```
+# Install frontend dependencies
+cd ../frontend
+npm install
+```
 
-### Frontend Setup
+3. Configuration
+Set the base directory in `backend/config.js`:
+```js
+module.exports = {
+  baseDirectory: process.env.BASE_DIRECTORY || 'your/path/here',
+}
+```
 
-1. Navigate to the frontend directory:
-   ```
-   cd frontend
-   ```
+4. Run the servers
+```bash
+# Run the backend server (development mode) (Default port: 11073)
+cd backend
+npm run dev
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
+# Or run the backend server (production mode) (Default port: 11073)
+cd backend
+npm start
 
-3. Start the frontend development server:
-   ```
-   npm run dev
-   ```
+# In another terminal, run the frontend server (Default port: 2711)
+cd frontend
+npm run dev
 
-4. Open your browser and navigate to `http://localhost:3000`
+# Or run the frontend server (production mode) (Default port: 2711)
+cd frontend
+npm run build
+npm start
+```
 
-## Technologies Used
+5. Access the application
+Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
-- **Backend**:
-  - Express.js
-  - Node.js file system API
+## License
 
-- **Frontend**:
-  - Next.js
-  - React
-  - Tailwind CSS
-  - shadcn/ui components
-  - Tanstack React Query
-  - Axios
+[MIT](LICENSE)
 
-## Usage
+## Author
 
-1. Browse through your files by clicking on directories
-2. Use the navigation buttons to go back or to the home directory
-3. Switch between view modes using the buttons in the top-right corner
-4. Search for files using the search bar
-5. Click on files to download or view them # SimpleFileServer
+[Kobayashi2003](https://github.com/Kobayashi2003)

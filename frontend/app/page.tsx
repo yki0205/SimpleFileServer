@@ -13,7 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { List, Grid3x3, Image as ImageIcon, Search, ArrowLeft, Home, Download, X, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  List, Grid3x3, Image as ImageIcon, Search, ArrowLeft, Home,
+  Download, Upload, X, ChevronLeft, ChevronRight, FolderPlus,
+  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
+} from "lucide-react";
 
 import { Error } from "@/components/status/Error";
 import { Loading } from "@/components/status/Loading";
@@ -21,6 +25,7 @@ import { NotFound } from "@/components/status/NotFound";
 import { Image } from "@/components/image/Image";
 import { FileItemListView } from "@/components/fileItem/FileItemListView";
 import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
+import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
 
 interface FileData {
   name: string;
@@ -50,6 +55,12 @@ function FileExplorerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [fileToDownload, setFileToDownload] = useState('');
+  const [downloadComfirmDialogOpen, setDownloadComfirmDialogOpen] = useState(false);
+
+  const [fileToDelete, setFileToDelete] = useState('');
+  const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
+
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -60,10 +71,14 @@ function FileExplorerContent() {
   });
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // Get path and query from URL
   const currentPath = searchParams.get('p') || '';
   const searchQuery = searchParams.get('q') || '';
   const isSearching = !!searchQuery;
+  const canGoBack = currentPath !== '' || isSearching;
+
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+  const minSwipeDistance = 50; // Minimum distance required for a swipe
 
   const { data, isLoading, error, refetch } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
@@ -85,6 +100,56 @@ function FileExplorerContent() {
       return response.data;
     },
     enabled: isSearching && searchQuery.length > 0
+  });
+
+  const { data: previewContent, isLoading: isContentLoading, error: contentError, refetch: refetchPreview } = useQuery({
+    queryKey: ['fileContent', preview.path],
+    queryFn: async () => {
+      if (!preview.isOpen || (preview.type !== 'code' && preview.type !== 'document')) {
+        return null;
+      }
+
+      try {
+        const response = await axios.get(`/api/content`, {
+          params: { path: preview.path },
+          responseType: 'text'
+        });
+        return response.data;
+      } catch (error: any) {
+        if (error.response) {
+          return `Error loading file: Server returned ${error.response.status} ${error.response.statusText}`;
+        }
+        return `Error loading file: ${error.message || 'Unknown error'}`;
+      }
+    },
+    enabled: preview.isOpen && (preview.type === 'code' || preview.type === 'document'),
+    retry: false,
+    refetchOnWindowFocus: false
+  });
+
+  const filesToDisplay = isSearching
+    ? searchData?.results || []
+    : data?.files || [];
+
+  const sortedFiles = [...filesToDisplay].sort((a, b) => {
+    if (a.type === 'directory' && b.type !== 'directory') return -1;
+    if (a.type !== 'directory' && b.type === 'directory') return 1;
+    if (sortBy === 'name') {
+      return sortOrder === 'asc'
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    } else if (sortBy === 'size') {
+      return sortOrder === 'asc'
+        ? a.size - b.size
+        : b.size - a.size;
+    } else if (sortBy === 'date') {
+      const dateA = new Date(a.mtime).getTime();
+      const dateB = new Date(b.mtime).getTime();
+      return sortOrder === 'asc'
+        ? dateA - dateB
+        : dateB - dateA;
+    }
+    return 0;
   });
 
   const navigateTo = (path: string, query: string) => {
@@ -117,9 +182,70 @@ function FileExplorerContent() {
     navigateTo(currentPath, query);
   }
 
+  const handleMkdir = (path: string) => {
+    // TODO: Implement mkdir
+  }
+
+  const handleRename = (path: string, newName: string) => {
+    // TODO: Implement rename
+  }
+
+  const handleDelete = (path: string) => {
+    setFileToDelete(path);
+    setDeleteComfirmDialogOpen(true);
+  }
+
+  const handleCopy = (path: string) => {
+    // TODO: Implement copy
+  }
+
+  const handlePaste = (path: string) => {
+    // TODO: Implement paste
+  }
+
+  const handleMove = (path: string) => {
+    // TODO: Implement move
+  }
+
   const handleDownload = (path: string) => {
     window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
   };
+
+  const handleUpload = async () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.multiple = true; // Allow multiple file selection
+
+    fileInput.onchange = async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+
+      try {
+        const response = await axios.post(`/api/upload?dir=${encodeURIComponent(currentPath)}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+
+        if (isSearching) {
+          refetchSearch();
+        } else {
+          refetch();
+        }
+
+        console.log('Files uploaded successfully:', response.data);
+      } catch (error: any) {
+        console.error('Upload error:', error.response?.data || error.message);
+      }
+    };
+
+    fileInput.click();
+  }
 
   const handleFileClick = (path: string, type: string) => {
     if (type === 'directory') {
@@ -127,15 +253,16 @@ function FileExplorerContent() {
     } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'code' || type === 'document') {
       openPreview(path, type);
     } else {
-      window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
+      setFileToDownload(path);
+      setDownloadComfirmDialogOpen(true);
     }
   }
 
   const openPreview = async (path: string, type: string) => {
     setPreviewLoading(true);
-    
+
     const currentIndex = sortedFiles.findIndex(file => file.path === path);
-    
+
     setPreview({
       isOpen: true,
       path,
@@ -153,15 +280,9 @@ function FileExplorerContent() {
     });
   }
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      closePreview();
-    }
-  }
-
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
-    
+
     const sameTypeFiles = sortedFiles.filter(file => file.type === preview.type);
     if (sameTypeFiles.length <= 1) return;
     const currentIndex = sameTypeFiles.findIndex(file => file.path === preview.path);
@@ -172,9 +293,43 @@ function FileExplorerContent() {
     } else {
       newIndex = (currentIndex - 1 + sameTypeFiles.length) % sameTypeFiles.length;
     }
-    
+
     openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
   }
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      closePreview();
+    }
+  }
+
+  // Touch event handlers for swipe gestures
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    if (preview.type !== 'image') return;
+
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      navigatePreview('next');
+    } else if (isRightSwipe) {
+      navigatePreview('prev');
+    }
+
+    // Reset values
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   const getFileExtension = (filename: string) => {
     return filename.split('.').pop()?.toLowerCase() || '';
@@ -222,70 +377,14 @@ function FileExplorerContent() {
       'ps1': 'bash',
       'psm1': 'bash',
     };
-    
+
     return langMap[ext] || 'text';
   };
-
-  const canGoBack = currentPath !== '' || isSearching;
-
-  const filesToDisplay = isSearching
-    ? searchData?.results || []
-    : data?.files || [];
-
-  const sortedFiles = [...filesToDisplay].sort((a, b) => {
-    if (a.type === 'directory' && b.type !== 'directory') return -1;
-    if (a.type !== 'directory' && b.type === 'directory') return 1;
-    if (sortBy === 'name') {
-      return sortOrder === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
-    } else if (sortBy === 'size') {
-      return sortOrder === 'asc'
-        ? a.size - b.size
-        : b.size - a.size;
-    } else if (sortBy === 'date') {
-      const dateA = new Date(a.mtime).getTime();
-      const dateB = new Date(b.mtime).getTime();
-      return sortOrder === 'asc'
-        ? dateA - dateB
-        : dateB - dateA;
-    }
-    return 0;
-  });
-
-  const { data: previewContent, isLoading: isContentLoading, error: contentError } = useQuery({
-    queryKey: ['fileContent', preview.path],
-    queryFn: async () => {
-      if (!preview.isOpen || (preview.type !== 'code' && preview.type !== 'document')) {
-        return null;
-      }
-      
-      try {
-        const response = await axios.get(`/api/content`, {
-          params: { path: preview.path },
-          responseType: 'text'
-        });
-        return response.data;
-      } catch (error: any) {
-        if (error.response) {
-          return `Error loading file: Server returned ${error.response.status} ${error.response.statusText}`;
-        }
-        return `Error loading file: ${error.message || 'Unknown error'}`;
-      }
-    },
-    enabled: preview.isOpen && (preview.type === 'code' || preview.type === 'document'),
-    retry: false,
-    refetchOnWindowFocus: false
-  });
-  
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
-  const minSwipeDistance = 50; // Minimum distance required for a swipe
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!preview.isOpen) return;
-      
+
       switch (e.key) {
         case 'ArrowLeft':
           navigatePreview('prev');
@@ -306,39 +405,17 @@ function FileExplorerContent() {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    
+
     // Cleanup
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [preview.isOpen, preview.path]);
 
-  // Touch event handlers for swipe gestures
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
+  useEffect(() => {
+    closePreview();
+  }, [currentPath, searchQuery])
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
-    
-    const distance = touchStartX.current - touchEndX.current;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      navigatePreview('next');
-    } else if (isRightSwipe) {
-      navigatePreview('prev');
-    }
-    
-    // Reset values
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -350,6 +427,7 @@ function FileExplorerContent() {
             onClick={goBack}
             disabled={!canGoBack}
             className={cn(
+              "max-sm:hidden",
               "text-black",
               "bg-white hover:bg-white/80",
               "transition-colors duration-200"
@@ -369,6 +447,19 @@ function FileExplorerContent() {
           >
             <Home size={18} />
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleUpload}
+            className={cn(
+              "text-black",
+              "bg-white hover:bg-white/80",
+              "transition-colors duration-200"
+            )}
+          >
+            <Upload size={18} />
+          </Button>
+          
         </div>
 
         <form onSubmit={handleSearch} className="order-3 max-sm:w-full flex gap-1">
@@ -573,6 +664,10 @@ function FileExplorerContent() {
                     <Download className="mr-2" size={16} />
                     Download
                   </ContextMenuItem>
+                  <ContextMenuItem onClick={() => handleDelete(file.path)}>
+                    <Trash2 className="mr-2" size={16} />
+                    Delete
+                  </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             ))}
@@ -582,7 +677,7 @@ function FileExplorerContent() {
 
       {/* Grid view */}
       {(!isLoading && !searchLoading && sortedFiles.length > 0 && viewMode === 'grid') && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
           {sortedFiles.map((file) => (
             <ContextMenu key={file.path}>
               <ContextMenuTrigger>
@@ -596,6 +691,10 @@ function FileExplorerContent() {
                 <ContextMenuItem onClick={() => handleDownload(file.path)}>
                   <Download className="mr-2" size={16} />
                   Download
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => handleDelete(file.path)}>
+                  <Trash2 className="mr-2" size={16} />
+                  Delete
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -639,6 +738,10 @@ function FileExplorerContent() {
                       <Download className="mr-2" size={16} />
                       Download
                     </ContextMenuItem>
+                    <ContextMenuItem onClick={() => handleDelete(file.path)}>
+                      <Trash2 className="mr-2" size={16} />
+                      Delete
+                    </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
               )
@@ -649,8 +752,8 @@ function FileExplorerContent() {
 
       {/* Preview Overlay */}
       {preview.isOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" 
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           onClick={handleBackdropClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -664,11 +767,11 @@ function FileExplorerContent() {
               </h3>
             </div>
           )}
-          
-          <div className="absolute top-4 right-4 flex gap-2">
-            <Button 
-              variant="outline" 
-              size="icon" 
+
+          <div className="absolute z-10 top-4 right-4 flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
               className="bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
               onClick={(e) => {
                 e.stopPropagation();
@@ -677,9 +780,9 @@ function FileExplorerContent() {
             >
               <Download size={20} />
             </Button>
-            <Button 
-              variant="outline" 
-              size="icon" 
+            <Button
+              variant="outline"
+              size="icon"
               className="bg-black/50 hover:bg-black/70 border-white/20 text-red-500 hover:text-red-500/80"
               onClick={(e) => {
                 e.stopPropagation();
@@ -689,12 +792,12 @@ function FileExplorerContent() {
               <X size={20} />
             </Button>
           </div>
-          
+
           {(preview.type === 'image' || preview.type === 'video' || preview.type === 'audio' || preview.type === 'code' || preview.type === 'document') && (
             <>
-              <Button 
-                variant="outline" 
-                size="icon" 
+              <Button
+                variant="outline"
+                size="icon"
                 className="absolute z-10 left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -703,10 +806,10 @@ function FileExplorerContent() {
               >
                 <ChevronLeft size={24} />
               </Button>
-              
-              <Button 
-                variant="outline" 
-                size="icon" 
+
+              <Button
+                variant="outline"
+                size="icon"
                 className="absolute z-10 right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -717,7 +820,7 @@ function FileExplorerContent() {
               </Button>
             </>
           )}
-          
+
           {previewLoading ? (
             <div className="flex items-center justify-center">
               <Loading message="Loading preview..." />
@@ -727,30 +830,30 @@ function FileExplorerContent() {
               {preview.type === 'image' && (
                 <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                   <div className="absolute inset-0 z-[-1]">
-                    <img 
+                    <img
                       src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                      alt="Preview" 
+                      alt="Preview"
                       className="w-full h-full object-cover blur-xl opacity-30"
                     />
                   </div>
-                  <img 
+                  <img
                     src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                    alt="Preview" 
+                    alt="Preview"
                     className="max-w-full max-h-[90vh] object-contain shadow-2xl"
                   />
                 </div>
               )}
-              
+
               {preview.type === 'video' && (
                 <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                   <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
                   <div className="flex flex-col items-center">
                     {/* <h3 className="text-white text-xl font-bold mb-4">{preview.path.split('/').pop()}</h3> */}
-                    <video 
-                      controls 
-                      autoPlay 
-                      className="max-w-full max-h-[80vh] shadow-2xl object-contain" 
-                      src={`/api/download?path=${encodeURIComponent(preview.path)}`} 
+                    <video
+                      controls
+                      autoPlay
+                      className="max-w-full max-h-[80vh] shadow-2xl object-contain"
+                      src={`/api/download?path=${encodeURIComponent(preview.path)}`}
                     />
                   </div>
                 </div>
@@ -761,7 +864,7 @@ function FileExplorerContent() {
                   <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
                   <div className="flex flex-col items-center">
                     {/* <h3 className="text-white text-xl font-bold mb-4">{preview.path.split('/').pop()}</h3> */}
-                    <audio 
+                    <audio
                       controls
                       className="max-w-full shadow-2xl"
                       src={`/api/download?path=${encodeURIComponent(preview.path)}`}
@@ -769,7 +872,7 @@ function FileExplorerContent() {
                   </div>
                 </div>
               )}
-              
+
               {(preview.type === 'code' || preview.type === 'document') && (
                 <div className="w-[80vw] h-[80vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
                   <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
@@ -827,6 +930,52 @@ function FileExplorerContent() {
           <img src="github_icon.png" alt="GitHub" className="w-4 h-4" />
         </a>
       </footer>
+
+      {/* Download confirm dialog */}
+      <ConfirmDialog
+        open={downloadComfirmDialogOpen}
+        setOpen={setDownloadComfirmDialogOpen}
+        title="Download"
+        description="This type of file is not supported, do you want to download it?"
+        confirmText="Download"
+        cancelText="Cancel"
+        onConfirm={() => {
+          window.open(`/api/download?path=${encodeURIComponent(fileToDownload)}`, '_blank');
+          setFileToDownload('');
+          setDownloadComfirmDialogOpen(false);
+        }}
+        onCancel={() => {
+          setFileToDownload('');
+          setDownloadComfirmDialogOpen(false);
+        }}
+      />
+
+      {/* Delete confirm dialog */}
+      <ConfirmDialog
+        open={deleteComfirmDialogOpen}
+        setOpen={setDeleteComfirmDialogOpen}
+        title="Delete"
+        description="Are you sure you want to delete this file?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => {
+          fetch(`/api/delete?path=${encodeURIComponent(fileToDelete)}`, {
+            method: 'DELETE',
+          }).then(() => {
+            setFileToDelete('');
+            setDeleteComfirmDialogOpen(false);
+            if (isSearching) {
+              refetchSearch();
+            } else {
+              refetch();
+            }
+          });
+        }}
+        onCancel={() => {
+          setFileToDelete('');
+          setDeleteComfirmDialogOpen(false);
+        }}
+      />
     </main>
   );
 }
