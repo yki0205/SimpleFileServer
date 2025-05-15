@@ -7,7 +7,7 @@ const multer = require('multer')
 const config = require('./config')
 
 const app = express();
-const PORT = process.env.PORT || 11073;
+const PORT = config.port;
 
 app.use(cors());
 app.use(express.json());
@@ -66,6 +66,23 @@ app.get('/api/search', (req, res) => {
     res.status(500).json({ error: error.message })
   }
 });
+
+app.get('/api/images', (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const searchPath = path.join(basePath, dir);
+  
+  if (!searchPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  try {
+    const imageFiles = findAllImages(searchPath, basePath);
+    res.json({ images: imageFiles });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
 
 app.get('/api/download', (req, res) => {
   const { path: filePath } = req.query;
@@ -145,9 +162,9 @@ app.post('/api/upload', (req, res) => {
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-      fileSize: 1024 * 1024 * 100 // 100MB limit
+      fileSize: config.uploadSizeLimit
     }
-  }).array('files', 10); // Accept up to 10 files with field name 'files'
+  }).array('files', config.uploadCountLimit);
   
   upload(req, res, function(err) {
     if (err instanceof multer.MulterError) {
@@ -187,12 +204,30 @@ app.post('/api/mkdir', (req, res) => {
   }
 })
 
+app.post('/api/rmdir', (req, res) => {
+  const { path: dirPath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, dirPath);
+  
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.rmdirSync(fullPath, { recursive: true });
+    res.status(200).json({ message: 'Directory removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
 app.post('/api/rename', (req, res) => {
   const { path: filePath, newName } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, filePath);
-  
-  if (!fullPath.startsWith(basePath)) {
+  const newPath = path.join(basePath, newName);
+
+  if (!fullPath.startsWith(basePath) || !newPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -213,6 +248,10 @@ app.delete('/api/delete', (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  if (fs.statSync(fullPath).isDirectory()) {
+    return res.status(400).json({ error: 'Cannot delete a directory' });
+  }
+
   try {
     fs.unlinkSync(fullPath);
     res.status(200).json({ message: 'File deleted successfully' });
@@ -221,12 +260,73 @@ app.delete('/api/delete', (req, res) => {
   }
 })
 
-app.post('/api/copy_paste', (req, res) => {
-  // TODO: Implement copy
+// TO TEST:
+app.post('/api/clone', (req, res) => {
+  const { source, destination } = req.body;
+  const basePath = path.resolve(config.baseDirectory);
+  const sourcePath = path.join(basePath, source);
+  const destPath = path.join(basePath, destination);
+  
+  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    // Check if source exists
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source file or directory not found' });
+    }
+
+    // Check if destination parent directory exists
+    const destDir = path.dirname(destPath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    const stats = fs.statSync(sourcePath);
+    if (stats.isDirectory()) {
+      // Clone directory recursively
+      copyFolderRecursiveSync(sourcePath, destPath);
+      res.status(200).json({ message: 'Directory cloned successfully' });
+    } else {
+      // Clone file
+      fs.copyFileSync(sourcePath, destPath);
+      res.status(200).json({ message: 'File cloned successfully' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 })
 
+// TO TEST:
 app.post('/api/move', (req, res) => {
-  // TODO: Implement move
+  const { source, destination } = req.body;
+  const basePath = path.resolve(config.baseDirectory);
+  const sourcePath = path.join(basePath, source);
+  const destPath = path.join(basePath, destination);
+  
+  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    // Check if source exists
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source file or directory not found' });
+    }
+
+    // Check if destination parent directory exists
+    const destDir = path.dirname(destPath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    // Move file or directory
+    fs.renameSync(sourcePath, destPath);
+    res.status(200).json({ message: 'File or directory moved successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 })
 
 app.get('/api/content', (req, res) => {
@@ -249,8 +349,7 @@ app.get('/api/content', (req, res) => {
     }
     
     // Check file size to prevent loading very large files
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-    if (stats.size > MAX_SIZE) {
+    if (stats.size > config.contentMaxSize) {
       return res.status(413).json({ error: 'File too large to preview' });
     }
     
@@ -303,6 +402,38 @@ function searchFiles(dir, query, basePath) {
     }
   } catch (error) {
     console.error(`Error searching in ${dir}:`, error);
+  }
+  
+  return results;
+}
+
+function findAllImages(dir, basePath) {
+  let results = [];
+  
+  try {
+    const files = fs.readdirSync(dir);
+    
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+      
+      if (stats.isDirectory()) {
+        results = results.concat(findAllImages(fullPath, basePath));
+      } else {
+        const extension = path.extname(file).toLowerCase();
+        if (getFileType(extension) === 'image') {
+          results.push({
+            name: file,
+            path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+            size: stats.size,
+            mtime: stats.mtime,
+            type: 'image'
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error searching for images in ${dir}:`, error);
   }
   
   return results;
@@ -502,6 +633,35 @@ function getContentType(extension) {
   };
   
   return contentTypes[extension] || 'application/octet-stream';
+}
+
+// TO TEST:
+// Helper function to copy a folder recursively
+function copyFolderRecursiveSync(source, destination) {
+  // Create destination folder if it doesn't exist
+  if (!fs.existsSync(destination)) {
+    fs.mkdirSync(destination, { recursive: true });
+  }
+
+  // Read all files and directories in the source folder
+  const files = fs.readdirSync(source);
+
+  // Process each file/directory
+  for (const file of files) {
+    const sourcePath = path.join(source, file);
+    const destPath = path.join(destination, file);
+    
+    // Get file stats
+    const stats = fs.statSync(sourcePath);
+    
+    if (stats.isDirectory()) {
+      // Recursively copy subdirectories
+      copyFolderRecursiveSync(sourcePath, destPath);
+    } else {
+      // Copy files
+      fs.copyFileSync(sourcePath, destPath);
+    }
+  }
 }
 
 app.listen(PORT, () => {

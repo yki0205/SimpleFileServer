@@ -39,6 +39,10 @@ interface FilesResponse {
   files: FileData[];
 }
 
+interface ImagesResponse {
+  images: FileData[];
+}
+
 interface SearchResponse {
   results: FileData[];
 }
@@ -61,7 +65,7 @@ function FileExplorerContent() {
   const [fileToDelete, setFileToDelete] = useState('');
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [preview, setPreview] = useState<PreviewState>({
@@ -80,15 +84,22 @@ function FileExplorerContent() {
   const touchEndX = useRef<number | null>(null);
   const minSwipeDistance = 50; // Minimum distance required for a swipe
 
-  const { data, isLoading, error, refetch } = useQuery<FilesResponse>({
+  const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
     queryFn: async () => {
-      const response = await axios.get('/api/files', {
-        params: { dir: currentPath }
-      });
+      const response = await axios.get('/api/files', { params: { dir: currentPath } });
       return response.data;
     },
-    enabled: !isSearching
+    enabled: !isSearching && viewMode !== 'imageOnly'
+  });
+
+  const { data: imagesData, isLoading: imagesLoading, error: imagesError, refetch: refetchImages } = useQuery<ImagesResponse>({
+    queryKey: ['images', currentPath],
+    queryFn: async () => {
+      const response = await axios.get('/api/images', { params: { dir: currentPath } });
+      return response.data;
+    },
+    enabled: viewMode === 'imageOnly'
   });
 
   const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useQuery<SearchResponse>({
@@ -99,7 +110,7 @@ function FileExplorerContent() {
       });
       return response.data;
     },
-    enabled: isSearching && searchQuery.length > 0
+    enabled: isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
   });
 
   const { data: previewContent, isLoading: isContentLoading, error: contentError, refetch: refetchPreview } = useQuery({
@@ -127,11 +138,25 @@ function FileExplorerContent() {
     refetchOnWindowFocus: false
   });
 
-  const filesToDisplay = isSearching
-    ? searchData?.results || []
-    : data?.files || [];
+  const filesToDisplay = (() => {
+    if (viewMode === 'imageOnly') {
+      return imagesData?.images || [];
+    } else if (isSearching) {
+      return searchData?.results || [];
+    }
+    return filesData?.files || [];
+  })();
 
   const sortedFiles = [...filesToDisplay].sort((a, b) => {
+
+    if (viewMode === 'imageOnly' && sortBy === 'name') {
+      const pathA = a.path.split('/').concat(a.name);
+      const pathB = b.path.split('/').concat(b.name);
+      return sortOrder === 'asc'
+        ? pathA.join('/').localeCompare(pathB.join('/'))
+        : pathB.join('/').localeCompare(pathA.join('/'));
+    }
+
     if (a.type === 'directory' && b.type !== 'directory') return -1;
     if (a.type !== 'directory' && b.type === 'directory') return 1;
     if (sortBy === 'name') {
@@ -153,6 +178,10 @@ function FileExplorerContent() {
   });
 
   const navigateTo = (path: string, query: string) => {
+    if (viewMode === 'imageOnly') {
+      setViewMode('image');
+    }
+    
     const params = new URLSearchParams();
     if (path) params.set('p', path);
     if (query) params.set('q', query);
@@ -235,7 +264,7 @@ function FileExplorerContent() {
         if (isSearching) {
           refetchSearch();
         } else {
-          refetch();
+          refetchFiles();
         }
 
         console.log('Files uploaded successfully:', response.data);
@@ -283,6 +312,18 @@ function FileExplorerContent() {
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
 
+    if (viewMode === 'imageOnly') {
+      if (!sortedFiles) return;
+      let newIndex;
+      if (direction === 'next') {
+        newIndex = (preview.currentIndex + 1) % sortedFiles.length;
+      } else {
+        newIndex = (preview.currentIndex - 1 + sortedFiles.length) % sortedFiles.length;
+      }
+      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].type);
+      return;
+    }
+
     const sameTypeFiles = sortedFiles.filter(file => file.type === preview.type);
     if (sameTypeFiles.length <= 1) return;
     const currentIndex = sameTypeFiles.findIndex(file => file.path === preview.path);
@@ -329,6 +370,19 @@ function FileExplorerContent() {
     // Reset values
     touchStartX.current = null;
     touchEndX.current = null;
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!preview.isOpen) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.deltaY > 0) {
+      navigatePreview('next');
+    } else if (e.deltaY < 0) {
+      navigatePreview('prev');
+    }
   };
 
   const getFileExtension = (filename: string) => {
@@ -416,6 +470,26 @@ function FileExplorerContent() {
     closePreview();
   }, [currentPath, searchQuery])
 
+  useEffect(() => {
+    // This is a workaround for the issue that the scroll event is still triggered on the background element
+    // even though the handleWheel function is preventing the default behavior. So I choose to disable the scroll of the whole body.
+    const originalStyle = window.getComputedStyle(document.body).overflow;  
+    if (preview.isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, [preview.isOpen]);
+
+  const isLoading = (viewMode === 'imageOnly') ? imagesLoading : 
+    (isSearching) ? searchLoading : isLoadingFiles;
+
+  const isError = (viewMode === 'imageOnly') ? imagesError : 
+    (isSearching) ? searchError : errorFiles;
+
+  const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 : 
+    (isSearching) ? searchData?.results.length === 0 : filesData?.files.length === 0) && !isLoading && !isError;
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -542,7 +616,14 @@ function FileExplorerContent() {
           <Button
             variant={viewMode === 'image' ? 'default' : 'outline'}
             size="icon"
-            onClick={() => setViewMode('image')}
+            onClick={() => {
+              if (viewMode === 'image') {
+                setViewMode('imageOnly');
+              } else {
+                setViewMode('image');
+              }
+            }}
+            className={cn(viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50')}
           >
             <ImageIcon size={18} />
           </Button>
@@ -578,24 +659,30 @@ function FileExplorerContent() {
         )}
       </nav>
 
-      {(isLoading || searchLoading) && (
+      { isLoading && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <Loading message="Loading files..." />
         </div>
       )}
-      {(error || searchError) && (
+      { isError && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <Error message="Error loading files. Please try again." />
         </div>
       )}
-      {(!isLoading && !searchLoading && !error && !searchError && sortedFiles.length === 0) && (
+      { isNotFound && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <NotFound message="No files found." />
         </div>
       )}
 
+      {viewMode === 'imageOnly' && (
+        <div className="flex justify-center text-sm text-muted-foreground mb-1">
+          {imagesData?.images.length} images found in {currentPath}
+        </div>
+      )}
+
       {/* List view */}
-      {(!isLoading && !searchLoading && sortedFiles.length > 0 && viewMode === 'list') && (
+      {(!isLoading && !isError && !isNotFound && viewMode === 'list') && (
         <div className="border rounded-md w-full">
           <div className={cn(
             "border rounded-md p-2",
@@ -650,7 +737,7 @@ function FileExplorerContent() {
           </div>
           <div className="flex flex-col gap-1">
             {sortedFiles.map((file) => (
-              <ContextMenu key={file.path}>
+              <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
                 <ContextMenuTrigger>
                   <FileItemListView
                     {...file}
@@ -676,10 +763,10 @@ function FileExplorerContent() {
       )}
 
       {/* Grid view */}
-      {(!isLoading && !searchLoading && sortedFiles.length > 0 && viewMode === 'grid') && (
+      {(!isLoading && !isError && !isNotFound && viewMode === 'grid') && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
           {sortedFiles.map((file) => (
-            <ContextMenu key={file.path}>
+            <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
               <ContextMenuTrigger>
                 <FileItemGridView
                   {...file}
@@ -703,13 +790,13 @@ function FileExplorerContent() {
       )}
 
       {/* Image view */}
-      {(!isLoading && !searchLoading && sortedFiles.length > 0 && viewMode === 'image') && (
+      {(!isLoading && !isError && !isNotFound && (viewMode === 'image' || viewMode === 'imageOnly')) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
           {sortedFiles.map((file) => {
             if (file.type === 'image') {
               return (
                 <Image
-                  key={file.path}
+                  key={`${file.path}_${sortBy}_${sortOrder}`}
                   {...file}
                   src={`/api/download?path=${encodeURIComponent(file.path)}`}
                   alt={file.name}
@@ -758,12 +845,13 @@ function FileExplorerContent() {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
         >
           {/* Title at top-left corner of the browser window */}
           {(preview.type === 'image' || preview.type === 'video' || preview.type === 'audio') && (
             <div className="fixed top-4 left-4 z-[60] max-w-[50vw]">
               <h3 className="text-white text-xl font-bold px-4 py-2 bg-black/50 rounded-md truncate">
-                {preview.path.split('/').pop()}
+                {viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
               </h3>
             </div>
           )}
@@ -829,13 +917,7 @@ function FileExplorerContent() {
             <>
               {preview.type === 'image' && (
                 <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                  <div className="absolute inset-0 z-[-1]">
-                    <img
-                      src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                      alt="Preview"
-                      className="w-full h-full object-cover blur-xl opacity-30"
-                    />
-                  </div>
+                  <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
                   <img
                     src={`/api/download?path=${encodeURIComponent(preview.path)}`}
                     alt="Preview"
@@ -967,7 +1049,7 @@ function FileExplorerContent() {
             if (isSearching) {
               refetchSearch();
             } else {
-              refetch();
+              refetchFiles();
             }
           });
         }}

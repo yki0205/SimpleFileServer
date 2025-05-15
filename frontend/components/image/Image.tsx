@@ -29,7 +29,8 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
     setError(false);
     
     const separator = src.includes('?') ? '&' : '?';
-    setImgSrc(`${src}${separator}_t=${Date.now()}`);
+    // setImgSrc(`${src}${separator}_t=${Date.now()}`);
+    setImgSrc(src);
   }, [src]);
 
   const handleRetry = (e: React.MouseEvent) => {
