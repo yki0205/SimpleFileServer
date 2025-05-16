@@ -14,9 +14,9 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
-  List, Grid3x3, Image as ImageIcon, Search, ArrowLeft, Home,
+  List, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home,
   Download, Upload, X, ChevronLeft, ChevronRight, FolderPlus,
-  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
+  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal 
 } from "lucide-react";
 
 import { Error } from "@/components/status/Error";
@@ -68,6 +68,11 @@ function FileExplorerContent() {
 
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
   const viewModeRef = useRef(viewMode);
+
+  // EXPERIMENTAL FEATURE
+  const [useMasonry, setUseMasonry] = useState(false);
+  const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -232,6 +237,15 @@ function FileExplorerContent() {
     }
   }
 
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
+
+
+
 
 
 
@@ -326,7 +340,7 @@ function FileExplorerContent() {
 
   const openPreview = async (path: string, type: string) => {
     setPreviewLoading(true);
-
+    setPreviewError(false);
     const currentIndex = sortedFiles.findIndex(file => file.path === path);
 
     setPreview({
@@ -338,6 +352,7 @@ function FileExplorerContent() {
     if (type === 'code' || type === 'document') {
       // The state of code and document is controlled by contentLoading and contentError
       setPreviewLoading(false);
+      setPreviewError(false);
     }
   }
 
@@ -347,6 +362,8 @@ function FileExplorerContent() {
       path: '',
       type: ''
     });
+    setPreviewLoading(false);
+    setPreviewError(false);
   }
 
   const navigatePreview = (direction: 'next' | 'prev') => {
@@ -354,7 +371,7 @@ function FileExplorerContent() {
 
     // Set loading state immediately when navigating
     setPreviewLoading(true);
-
+    setPreviewError(false);
     if (viewMode === 'imageOnly') {
       if (!sortedFiles) return;
       let newIndex;
@@ -493,6 +510,15 @@ function FileExplorerContent() {
 
 
 
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -912,8 +938,8 @@ function FileExplorerContent() {
               ))}
             </div>
           )}
-          {/* Image view & Image Only view */}
-          {(viewMode === 'image' || viewMode === 'imageOnly') && (
+          {/* Image view */}
+          {viewMode === 'image' && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
               {sortedFiles.map((file) => {
                 if (file.type === 'image') {
@@ -957,6 +983,30 @@ function FileExplorerContent() {
                   )
                 }
               })}
+            </div>
+          )}
+          {/* Image Only view */}
+          {viewMode === 'imageOnly' && (
+            <div className={cn(
+              useMasonry ? "columns-2 sm:columns-3 md:columns-4 lg:columns-6 gap-2" : "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2",
+            )}
+            style={{
+              direction: gridDirection
+            }}
+            >
+              {sortedFiles.map((file) => (
+                <div key={`${file.path}_${sortBy}_${sortOrder}`} className={cn(
+                  useMasonry && "break-inside-avoid mb-2"
+                )}>
+                  <Image
+                    {...file}
+                    src={`/api/download?path=${encodeURIComponent(file.path)}`}
+                    alt={file.name}
+                    onClick={() => handleFileClick(file.path, file.type)}
+                    className="w-full h-auto rounded-md"
+                  />
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -1013,7 +1063,11 @@ function FileExplorerContent() {
                 className="absolute z-10 left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigatePreview('prev');
+                  if (viewMode === 'imageOnly' && gridDirection === 'rtl') {
+                    navigatePreview('next');
+                  } else {
+                    navigatePreview('prev');
+                  }
                 }}
               >
                 <ChevronLeft size={24} />
@@ -1025,7 +1079,11 @@ function FileExplorerContent() {
                 className="absolute z-10 right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigatePreview('next');
+                  if (viewMode === 'imageOnly' && gridDirection === 'rtl') {
+                    navigatePreview('prev');
+                  } else {
+                    navigatePreview('next');
+                  }
                 }}
               >
                 <ChevronRight size={24} />
@@ -1036,11 +1094,11 @@ function FileExplorerContent() {
           {/* Image view */}
           {preview.type === 'image' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+              <div className="absolute z-[-1] flex items-center justify-center">
                 {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white" />
+                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
                 ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white" />
+                  <Loading message="Loading preview..." className="text-white w-100" />
                 ) : (
                   <></>
                 )}
@@ -1064,11 +1122,11 @@ function FileExplorerContent() {
           {/* Video view */}
           {preview.type === 'video' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+              <div className="absolute z-[-1] flex items-center justify-center">
                 {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white" />
+                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
                 ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white" />
+                  <Loading message="Loading preview..." className="text-white w-100" />
                 ) : (
                   <></>
                 )}
@@ -1096,11 +1154,11 @@ function FileExplorerContent() {
           {/* Audio view */}
           {preview.type === 'audio' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+              <div className="absolute z-[-1] flex items-center justify-center">
                 {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white" />
+                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
                 ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white" />
+                  <Loading message="Loading preview..." className="text-white w-100" />
                 ) : (
                   <></>
                 )}
@@ -1183,6 +1241,25 @@ function FileExplorerContent() {
           <img src="github_icon.png" alt="GitHub" className="w-4 h-4" />
         </a>
       </footer>
+
+      {/* Scroll to top button */}
+      <button
+        onClick={scrollToTop}
+        className={cn(
+          "fixed bottom-8 right-8",
+          "w-10 h-10 rounded-full",
+          "bg-black/50 hover:bg-black/70",
+          "text-white",
+          "flex items-center justify-center",
+          "transition-all duration-300",
+          "shadow-lg",
+          "focus:outline-none focus:ring-2 focus:ring-white/50",
+          showScrollTop ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
+        )}
+        aria-label="Scroll to top"
+      >
+        <ArrowUp size={24} />
+      </button>
 
       {/* Download confirm dialog */}
       <ConfirmDialog

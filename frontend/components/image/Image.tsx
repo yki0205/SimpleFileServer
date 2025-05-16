@@ -185,7 +185,7 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
             src={imgSrc}
             alt={alt}
             className={cn(
-              "object-cover transition-all duration-300",
+              "w-full object-cover transition-all duration-300",
               isLoading ? "opacity-0" : "opacity-100"
             )}
             loading="lazy"

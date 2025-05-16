@@ -686,8 +686,11 @@ function getFileType(extension) {
     
     // Other languages
     '.go', '.rs', '.swift', '.cs', '.fs', '.vb', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
-    '.f', '.f90', '.f95', '.hs', '.lhs', '.lisp', '.cl', '.nim', '.ml', '.mli', '.d', '.erl', '.hrl'
+    '.f', '.f90', '.f95', '.hs', '.lhs', '.lisp', '.cl', '.nim', '.ml', '.mli', '.d', '.erl', '.hrl',
+    '.lua', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
   ];
+
+  const mangaExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
   
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
@@ -695,6 +698,7 @@ function getFileType(extension) {
   if (documentExtensions.includes(extension)) return 'document';
   if (archiveExtensions.includes(extension)) return 'archive';
   if (codeExtensions.includes(extension)) return 'code';
+  if (mangaExtensions.includes(extension)) return 'manga';
 
   return 'other';
 }
@@ -756,6 +760,10 @@ function getContentType(extension) {
     '.lua': 'text/plain',
     '.sql': 'text/plain',
     '.r': 'text/plain',
+    '.dart': 'text/plain',
+    '.elm': 'text/plain',
+    '.ex': 'text/plain',
+    '.exs': 'text/plain',
     
     // Images
     '.png': 'image/png',
@@ -830,6 +838,18 @@ function getContentType(extension) {
     '.jar': 'application/java-archive',
     '.war': 'application/java-archive',
     '.ear': 'application/java-archive',
+
+    // Manga
+    '.cbz': 'application/x-cbz',
+    '.cbr': 'application/x-cbr',
+    '.cb7': 'application/x-cb7',
+    '.cbt': 'application/x-cbt',
+    '.cbl': 'application/x-cbl',
+    '.cbrz': 'application/x-cbrz',
+    '.cbr7': 'application/x-cbr7',
+    '.cbrt': 'application/x-cbrt',
+    '.cblz': 'application/x-cblz',
+    '.cblt': 'application/x-cblt',
   };
   
   return contentTypes[extension] || 'application/octet-stream';
