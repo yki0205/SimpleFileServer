@@ -14,7 +14,9 @@ interface ImageProps {
 
 export function Image({ src, alt, onClick, className }: ImageProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(true);
+  const [isPreviewError, setIsPreviewError] = useState(false);
   const [imgSrc, setImgSrc] = useState(src);
   const [isHovered, setIsHovered] = useState(false);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -26,16 +28,13 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
 
   useEffect(() => {
     setIsLoading(true);
-    setError(false);
-    
-    const separator = src.includes('?') ? '&' : '?';
-    // setImgSrc(`${src}${separator}_t=${Date.now()}`);
+    setIsError(false);
     setImgSrc(src);
   }, [src]);
 
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setError(false);
+    setIsError(false);
     setIsLoading(true);
     
     const separator = src.includes('?') ? '&' : '?';
@@ -113,6 +112,8 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
     
     const timeout = setTimeout(() => {
       setIsHovered(true);
+      setIsPreviewLoading(true);
+      setIsPreviewError(false);
     }, 200); // 200ms hover delay before showing preview
     setHoverTimeout(timeout);
   }
@@ -123,6 +124,8 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
       setHoverTimeout(null);
     }
     setIsHovered(false);
+    setIsPreviewLoading(false);
+    setIsPreviewError(false);
   }
 
   const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -158,7 +161,7 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {error ? (
+      {isError ? (
         <div className="flex flex-col items-center justify-center p-4 bg-muted rounded-md h-full w-full">
           <ImageOff className="h-8 w-8 text-muted-foreground mb-2" />
           <p className="text-sm text-muted-foreground">Failed to load image</p>
@@ -185,9 +188,10 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
               "object-cover transition-all duration-300",
               isLoading ? "opacity-0" : "opacity-100"
             )}
+            loading="lazy"
             onLoad={handleImageLoad}
             onError={() => {
-              setError(true);
+              setIsError(true);
               setIsLoading(false);
             }}
             onClick={onClick}
@@ -196,11 +200,11 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
           />
           
           {/* Preview image shown on hover */}
-          {isHovered && !isLoading && !error && previewDimensions.width > 0 && (
+          {isHovered && !isLoading && !isError && previewDimensions.width > 0 && (
             <div 
               className={cn(
                 "max-sm:hidden",
-                "absolute z-50 bg-background rounded-lg shadow-xl overflow-hidden border border-border",
+                "absolute z-50 rounded-lg shadow-xl overflow-hidden border border-border",
                 previewPosition === 'right' ? "left-full" : "right-full"
               )}
               style={{
@@ -210,10 +214,25 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
                 transform: 'translateY(-50%)'
               }}
             >
+              {isPreviewLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+                  <RotateCw className="h-6 w-6 animate-spin text-white" />
+                  <p className="text-sm text-white">Loading...</p>
+                </div>
+              )}
+
               <NextImage
                 src={imgSrc}
                 alt={alt}
-                className="object-contain"
+                className={cn(
+                  "object-contain",
+                  isPreviewLoading ? "opacity-0" : "opacity-100"
+                )}
+                onLoad={() => setIsPreviewLoading(false)}
+                onError={() => {
+                  setIsPreviewLoading(false);
+                  setIsPreviewError(true);
+                }}
                 fill
                 sizes={`${previewDimensions.width}px`}
                 priority

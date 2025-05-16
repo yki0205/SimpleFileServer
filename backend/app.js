@@ -1,10 +1,12 @@
 const express = require('express');
+const os = require('os');
 const fs = require('fs')
 const path = require('path')
 const cors = require('cors')
 const AdmZip = require('adm-zip')
 const multer = require('multer')
 const config = require('./config')
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
 const app = express();
 const PORT = config.port;
@@ -60,8 +62,13 @@ app.get('/api/search', (req, res) => {
   }
 
   try {
-    const results = searchFiles(searchPath, query, basePath);
-    res.json({ results });
+    parallelSearch(searchPath, query, basePath)
+      .then(results => {
+        res.json({ results });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
@@ -77,8 +84,13 @@ app.get('/api/images', (req, res) => {
   }
 
   try {
-    const imageFiles = findAllImages(searchPath, basePath);
-    res.json({ images: imageFiles });
+    parallelFindImages(searchPath, basePath)
+      .then(images => {
+        res.json({ images });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -437,6 +449,194 @@ function findAllImages(dir, basePath) {
   }
   
   return results;
+}
+
+async function parallelSearch(dir, query, basePath) {
+  if (isMainThread) {
+    try {
+      const subdirs = getSubdirectories(dir);
+      
+      if (subdirs.length === 0) {
+        return searchFiles(dir, query, basePath);
+      }
+      
+      const numCores = os.cpus().length;
+      const numWorkers = Math.min(subdirs.length, numCores);
+      const tasksPerWorker = Math.ceil(subdirs.length / numWorkers);
+      const workers = [];
+      
+      for (let i = 0; i < numWorkers; i++) {
+        const start = i * tasksPerWorker;
+        const end = Math.min(start + tasksPerWorker, subdirs.length);
+        const workerSubdirs = subdirs.slice(start, end);
+        
+        workers.push(createSearchWorker(workerSubdirs, query, basePath));
+      }
+      
+      const rootResults = searchFilesInDirectory(dir, query, basePath);
+      const workerResults = await Promise.all(workers);
+      
+      return rootResults.concat(...workerResults);
+    } catch (error) {
+      console.error('Error in parallel search:', error);
+      return [];
+    }
+  }
+}
+
+async function parallelFindImages(dir, basePath) {
+  if (isMainThread) {
+    try {
+      const subdirs = getSubdirectories(dir);
+      
+      if (subdirs.length === 0) {
+        return findAllImages(dir, basePath);
+      }
+      
+      const numCores = os.cpus().length;
+      const numWorkers = Math.min(subdirs.length, numCores);
+      const tasksPerWorker = Math.ceil(subdirs.length / numWorkers);
+      const workers = [];
+      
+      for (let i = 0; i < numWorkers; i++) {
+        const start = i * tasksPerWorker;
+        const end = Math.min(start + tasksPerWorker, subdirs.length);
+        const workerSubdirs = subdirs.slice(start, end);
+        
+        workers.push(createImageWorker(workerSubdirs, basePath));
+      }
+      
+      const rootResults = findImagesInDirectory(dir, basePath);
+      const workerResults = await Promise.all(workers);
+      
+      return rootResults.concat(...workerResults);
+    } catch (error) {
+      console.error('Error in parallel image search:', error);
+      return [];
+    }
+  }
+}
+
+function getSubdirectories(dir) {
+  try {
+    return fs.readdirSync(dir)
+      .map(file => path.join(dir, file))
+      .filter(filePath => fs.statSync(filePath).isDirectory());
+  } catch (error) {
+    console.error(`Error getting subdirectories for ${dir}:`, error);
+    return [];
+  }
+}
+
+function searchFilesInDirectory(dir, query, basePath) {
+  let results = [];
+  
+  try {
+    const files = fs.readdirSync(dir);
+    
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+      
+      if (!stats.isDirectory() && file.toLowerCase().includes(query)) {
+        results.push({
+          name: file,
+          path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+          size: stats.size,
+          mtime: stats.mtime,
+          type: getFileType(path.extname(file).toLowerCase())
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error searching in directory ${dir}:`, error);
+  }
+  
+  return results;
+}
+
+function findImagesInDirectory(dir, basePath) {
+  let results = [];
+  
+  try {
+    const files = fs.readdirSync(dir);
+    
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+      
+      if (!stats.isDirectory()) {
+        const extension = path.extname(file).toLowerCase();
+        if (getFileType(extension) === 'image') {
+          results.push({
+            name: file,
+            path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+            size: stats.size,
+            mtime: stats.mtime,
+            type: 'image'
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error finding images in directory ${dir}:`, error);
+  }
+  
+  return results;
+}
+
+function createSearchWorker(directories, query, basePath) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { task: 'search', directories, query, basePath }
+    });
+    
+    worker.on('message', resolve);
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
+}
+
+function createImageWorker(directories, basePath) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { task: 'findImages', directories, basePath }
+    });
+    
+    worker.on('message', resolve);
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
+}
+
+if (!isMainThread) {
+  const { task, directories, query, basePath } = workerData;
+  
+  if (task === 'search') {
+    let results = [];
+    
+    for (const dir of directories) {
+      results = results.concat(searchFiles(dir, query, basePath));
+    }
+    
+    parentPort.postMessage(results);
+  } else if (task === 'findImages') {
+    let results = [];
+    
+    for (const dir of directories) {
+      results = results.concat(findAllImages(dir, basePath));
+    }
+    
+    parentPort.postMessage(results);
+  }
 }
 
 function getFileType(extension) {

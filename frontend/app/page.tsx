@@ -23,6 +23,7 @@ import { Error } from "@/components/status/Error";
 import { Loading } from "@/components/status/Loading";
 import { NotFound } from "@/components/status/NotFound";
 import { Image } from "@/components/image/Image";
+import { Video } from "@/components/video/Video";
 import { FileItemListView } from "@/components/fileItem/FileItemListView";
 import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
 import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
@@ -66,14 +67,18 @@ function FileExplorerContent() {
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
 
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
+  const viewModeRef = useRef(viewMode);
+
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const [preview, setPreview] = useState<PreviewState>({
     isOpen: false,
     path: '',
     type: '',
   });
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
 
   const currentPath = searchParams.get('p') || '';
   const searchQuery = searchParams.get('q') || '';
@@ -83,6 +88,10 @@ function FileExplorerContent() {
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
   const minSwipeDistance = 50; // Minimum distance required for a swipe
+
+
+
+
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
@@ -113,7 +122,7 @@ function FileExplorerContent() {
     enabled: isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
   });
 
-  const { data: previewContent, isLoading: isContentLoading, error: contentError, refetch: refetchPreview } = useQuery({
+  const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreview } = useQuery({
     queryKey: ['fileContent', preview.path],
     queryFn: async () => {
       if (!preview.isOpen || (preview.type !== 'code' && preview.type !== 'document')) {
@@ -147,22 +156,33 @@ function FileExplorerContent() {
     return filesData?.files || [];
   })();
 
+  // TODO: I don't know. Maybe make natural sort an additional option will be better.
+  // I will try to implement it later.
+  const naturalSort = (a: string, b: string): number => {
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    return collator.compare(a, b);
+  };
+
   const sortedFiles = [...filesToDisplay].sort((a, b) => {
 
     if (viewMode === 'imageOnly' && sortBy === 'name') {
       const pathA = a.path.split('/').concat(a.name);
       const pathB = b.path.split('/').concat(b.name);
       return sortOrder === 'asc'
-        ? pathA.join('/').localeCompare(pathB.join('/'))
-        : pathB.join('/').localeCompare(pathA.join('/'));
+        // ? pathA.join('/').localeCompare(pathB.join('/'))
+        // : pathB.join('/').localeCompare(pathA.join('/'));
+        ? naturalSort(pathA.join('/'), pathB.join('/'))
+        : naturalSort(pathB.join('/'), pathA.join('/'));
     }
 
     if (a.type === 'directory' && b.type !== 'directory') return -1;
     if (a.type !== 'directory' && b.type === 'directory') return 1;
     if (sortBy === 'name') {
       return sortOrder === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
+        // ? a.name.localeCompare(b.name)
+        // : b.name.localeCompare(a.name);
+        ? naturalSort(a.name, b.name)
+        : naturalSort(b.name, a.name);
     } else if (sortBy === 'size') {
       return sortOrder === 'asc'
         ? a.size - b.size
@@ -177,11 +197,15 @@ function FileExplorerContent() {
     return 0;
   });
 
+
+
+
+
   const navigateTo = (path: string, query: string) => {
     if (viewMode === 'imageOnly') {
       setViewMode('image');
     }
-    
+
     const params = new URLSearchParams();
     if (path) params.set('p', path);
     if (query) params.set('q', query);
@@ -201,8 +225,16 @@ function FileExplorerContent() {
   }
 
   const goHome = () => {
-    navigateTo('', '');
+    if (currentPath === '') {
+      window.location.reload();
+    } else {
+      navigateTo('', '');
+    }
   }
+
+
+
+
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -287,6 +319,11 @@ function FileExplorerContent() {
     }
   }
 
+
+
+
+
+
   const openPreview = async (path: string, type: string) => {
     setPreviewLoading(true);
 
@@ -298,7 +335,10 @@ function FileExplorerContent() {
       type,
       currentIndex
     });
-    setPreviewLoading(false);
+    if (type === 'code' || type === 'document') {
+      // The state of code and document is controlled by contentLoading and contentError
+      setPreviewLoading(false);
+    }
   }
 
   const closePreview = () => {
@@ -311,6 +351,9 @@ function FileExplorerContent() {
 
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
+
+    // Set loading state immediately when navigating
+    setPreviewLoading(true);
 
     if (viewMode === 'imageOnly') {
       if (!sortedFiles) return;
@@ -338,18 +381,24 @@ function FileExplorerContent() {
     openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
   }
 
+
+
+
+
+
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       closePreview();
     }
   }
 
-  // Touch event handlers for swipe gestures
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (preview.type !== 'image') return;
     touchStartX.current = e.touches[0].clientX;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (preview.type !== 'image') return;
     touchEndX.current = e.touches[0].clientX;
   };
 
@@ -374,16 +423,21 @@ function FileExplorerContent() {
 
   const handleWheel = (e: React.WheelEvent) => {
     if (!preview.isOpen) return;
-    
+    if (preview.type === 'video' || preview.type === 'code' || preview.type === 'document') return;
+
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (e.deltaY > 0) {
       navigatePreview('next');
     } else if (e.deltaY < 0) {
       navigatePreview('prev');
     }
   };
+
+
+
+
 
   const getFileExtension = (filename: string) => {
     return filename.split('.').pop()?.toLowerCase() || '';
@@ -435,45 +489,47 @@ function FileExplorerContent() {
     return langMap[ext] || 'text';
   };
 
+
+
+
+
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!preview.isOpen) return;
-
-      switch (e.key) {
-        case 'ArrowLeft':
-          navigatePreview('prev');
-          break;
-        case 'ArrowRight':
-          navigatePreview('next');
-          break;
-        case 'ArrowUp':
-          // Optional: implement additional navigation
-          break;
-        case 'ArrowDown':
-          // Optional: implement additional navigation
-          break;
-        case 'Escape':
-          closePreview();
-          break;
+      if (preview.type !== 'video') {
+        switch (e.key) {
+          case 'ArrowLeft':
+            navigatePreview('prev');
+            break;
+          case 'ArrowRight':
+            navigatePreview('next');
+            break;
+          case 'ArrowUp':
+            // Optional: implement additional navigation
+            break;
+          case 'ArrowDown':
+            // Optional: implement additional navigation
+            break;
+          case 'Escape':
+            closePreview();
+            break;
+        }
       }
+      // Video keyboard shortcuts are now handled by the Video component
     };
 
     window.addEventListener('keydown', handleKeyDown);
 
-    // Cleanup
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [preview.isOpen, preview.path]);
 
   useEffect(() => {
-    closePreview();
-  }, [currentPath, searchQuery])
-
-  useEffect(() => {
-    // This is a workaround for the issue that the scroll event is still triggered on the background element
+    // TODO: This is a workaround for the issue that the scroll event is still triggered on the background element
     // even though the handleWheel function is preventing the default behavior. So I choose to disable the scroll of the whole body.
-    const originalStyle = window.getComputedStyle(document.body).overflow;  
+    const originalStyle = window.getComputedStyle(document.body).overflow;
     if (preview.isOpen) {
       document.body.style.overflow = 'hidden';
     }
@@ -482,14 +538,82 @@ function FileExplorerContent() {
     };
   }, [preview.isOpen]);
 
-  const isLoading = (viewMode === 'imageOnly') ? imagesLoading : 
-    (isSearching) ? searchLoading : isLoadingFiles;
+  useEffect(() => {
+    closePreview();
+  }, [currentPath, searchQuery])
 
-  const isError = (viewMode === 'imageOnly') ? imagesError : 
+  // Listen for browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      if (viewMode === 'imageOnly') {
+        setViewMode('image');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [viewMode]);
+
+  // Update ref when viewMode changes
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  // Intercept history navigation methods
+  useEffect(() => {
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    // Override pushState method
+    history.pushState = function (data: any, unused: string, url?: string | URL | null) {
+      // Use ref instead of state directly
+      if (viewModeRef.current === 'imageOnly') {
+        // Use setTimeout to move state update to next event loop
+        setTimeout(() => {
+          setViewMode('image');
+        }, 0);
+      }
+      return originalPushState(data, unused, url);
+    };
+
+    // Override replaceState method
+    history.replaceState = function (data: any, unused: string, url?: string | URL | null) {
+      // Use ref instead of state directly
+      if (viewModeRef.current === 'imageOnly') {
+        // Use setTimeout to move state update to next event loop
+        setTimeout(() => {
+          setViewMode('image');
+        }, 0);
+      }
+      return originalReplaceState(data, unused, url);
+    };
+
+    return () => {
+      // Restore original methods
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+    };
+  }, []);
+
+
+
+
+
+  const isError = (viewMode === 'imageOnly') ? imagesError :
     (isSearching) ? searchError : errorFiles;
 
-  const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 : 
+  const isLoading = (viewMode === 'imageOnly') ? imagesLoading :
+    (isSearching) ? searchLoading : isLoadingFiles;
+
+  const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 :
     (isSearching) ? searchData?.results.length === 0 : filesData?.files.length === 0) && !isLoading && !isError;
+
+
+
+
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -501,7 +625,6 @@ function FileExplorerContent() {
             onClick={goBack}
             disabled={!canGoBack}
             className={cn(
-              "max-sm:hidden",
               "text-black",
               "bg-white hover:bg-white/80",
               "transition-colors duration-200"
@@ -533,7 +656,7 @@ function FileExplorerContent() {
           >
             <Upload size={18} />
           </Button>
-          
+
         </div>
 
         <form onSubmit={handleSearch} className="order-3 max-sm:w-full flex gap-1">
@@ -648,7 +771,7 @@ function FileExplorerContent() {
                 <React.Fragment key={index}>
                   <span className="mx-1 text-muted-foreground">/</span>
                   <button onClick={() => navigateTo(pathToSegment, '')}
-                    className="cursor-pointer hover:bg-gray-300 rounded-md p-1"
+                    className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate"
                   >
                     {segment}
                   </button>
@@ -659,20 +782,20 @@ function FileExplorerContent() {
         )}
       </nav>
 
-      { isLoading && (
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <Loading message="Loading files..." />
-        </div>
-      )}
-      { isError && (
+      {isError ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <Error message="Error loading files. Please try again." />
         </div>
-      )}
-      { isNotFound && (
+      ) : isLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <Loading message="Loading files..." />
+        </div>
+      ) : isNotFound ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <NotFound message="No files found." />
         </div>
+      ) : (
+        <></>
       )}
 
       {viewMode === 'imageOnly' && (
@@ -681,138 +804,93 @@ function FileExplorerContent() {
         </div>
       )}
 
-      {/* List view */}
-      {(!isLoading && !isError && !isNotFound && viewMode === 'list') && (
-        <div className="border rounded-md w-full">
-          <div className={cn(
-            "border rounded-md p-2",
-            "bg-white/80 text-black",
-            "flex items-center",
-            "text-sm sm:text-base font-bold font-mono",
-            "select-none"
-          )}>
-            <div className="w-8" />
-            <div className="flex-1">
-              <button className="cursor-pointer" onClick={() => {
-                if (sortBy === "name") {
-                  setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                } else {
-                  setSortBy("name")
-                  setSortOrder("asc")
-                }
-              }}>
-                Name
-                {sortBy === "name" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-              </button>
+      {(!isLoading && !isError && !isNotFound) && (
+        <>
+          {/* List view */}
+          {viewMode === 'list' && (
+            <div className="border rounded-md w-full">
+              <div className={cn(
+                "border rounded-md p-2",
+                "bg-white/80 text-black",
+                "flex items-center",
+                "text-sm sm:text-base font-bold font-mono",
+                "select-none"
+              )}>
+                <div className="w-8" />
+                <div className="flex-1">
+                  <button className="cursor-pointer" onClick={() => {
+                    if (sortBy === "name") {
+                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSortBy("name")
+                      setSortOrder("asc")
+                    }
+                  }}>
+                    Name
+                    {sortBy === "name" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
+                  </button>
+                </div>
+                {isSearching && (
+                  <div className="w-80 text-right">Path</div>
+                )}
+                <div className="hidden md:block w-24 text-right">
+                  <button className="cursor-pointer" onClick={() => {
+                    if (sortBy === "size") {
+                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSortBy("size")
+                      setSortOrder("asc")
+                    }
+                  }}>
+                    Size
+                    {sortBy === "size" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
+                  </button>
+                </div>
+                <div className="hidden md:block w-32 text-right">
+                  <button className="cursor-pointer" onClick={() => {
+                    if (sortBy === "date") {
+                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSortBy("date")
+                      setSortOrder("asc")
+                    }
+                  }}>
+                    Modified
+                    {sortBy === "date" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                {sortedFiles.map((file) => (
+                  <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
+                    <ContextMenuTrigger>
+                      <FileItemListView
+                        {...file}
+                        isSearching={isSearching}
+                        onClick={() => handleFileClick(file.path, file.type)}
+                        className="text-white hover:text-black hover:bg-accent"
+                      />
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={() => handleDownload(file.path)}>
+                        <Download className="mr-2" size={16} />
+                        Download
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={() => handleDelete(file.path)}>
+                        <Trash2 className="mr-2" size={16} />
+                        Delete
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                ))}
+              </div>
             </div>
-            {isSearching && (
-              <div className="w-80 text-right">Path</div>
-            )}
-            <div className="hidden md:block w-24 text-right">
-              <button className="cursor-pointer" onClick={() => {
-                if (sortBy === "size") {
-                  setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                } else {
-                  setSortBy("size")
-                  setSortOrder("asc")
-                }
-              }}>
-                Size
-                {sortBy === "size" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-              </button>
-            </div>
-            <div className="hidden md:block w-32 text-right">
-              <button className="cursor-pointer" onClick={() => {
-                if (sortBy === "date") {
-                  setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                } else {
-                  setSortBy("date")
-                  setSortOrder("asc")
-                }
-              }}>
-                Modified
-                {sortBy === "date" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            {sortedFiles.map((file) => (
-              <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
-                <ContextMenuTrigger>
-                  <FileItemListView
-                    {...file}
-                    isSearching={isSearching}
-                    onClick={() => handleFileClick(file.path, file.type)}
-                    className="text-white hover:text-black hover:bg-accent"
-                  />
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={() => handleDownload(file.path)}>
-                    <Download className="mr-2" size={16} />
-                    Download
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={() => handleDelete(file.path)}>
-                    <Trash2 className="mr-2" size={16} />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Grid view */}
-      {(!isLoading && !isError && !isNotFound && viewMode === 'grid') && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          {sortedFiles.map((file) => (
-            <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
-              <ContextMenuTrigger>
-                <FileItemGridView
-                  {...file}
-                  onClick={() => handleFileClick(file.path, file.type)}
-                  className="text-black hover:text-gray-600 hover:bg-accent"
-                />
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => handleDownload(file.path)}>
-                  <Download className="mr-2" size={16} />
-                  Download
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleDelete(file.path)}>
-                  <Trash2 className="mr-2" size={16} />
-                  Delete
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          ))}
-        </div>
-      )}
-
-      {/* Image view */}
-      {(!isLoading && !isError && !isNotFound && (viewMode === 'image' || viewMode === 'imageOnly')) && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          {sortedFiles.map((file) => {
-            if (file.type === 'image') {
-              return (
-                <Image
-                  key={`${file.path}_${sortBy}_${sortOrder}`}
-                  {...file}
-                  src={`/api/download?path=${encodeURIComponent(file.path)}`}
-                  alt={file.name}
-                  onClick={() => handleFileClick(file.path, file.type)}
-                  className={cn(
-                    "w-full h-full",
-                    "min-w-[150px]",
-                    "max-w-[250px]",
-                    "object-cover",
-                    "cursor-pointer",
-                  )}
-                />
-              )
-            } else {
-              return (
-                <ContextMenu key={file.path}>
+          )}
+          {/* Grid view */}
+          {viewMode === 'grid' && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {sortedFiles.map((file) => (
+                <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
                   <ContextMenuTrigger>
                     <FileItemGridView
                       {...file}
@@ -831,10 +909,57 @@ function FileExplorerContent() {
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
-              )
-            }
-          })}
-        </div>
+              ))}
+            </div>
+          )}
+          {/* Image view & Image Only view */}
+          {(viewMode === 'image' || viewMode === 'imageOnly') && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {sortedFiles.map((file) => {
+                if (file.type === 'image') {
+                  return (
+                    <Image
+                      key={`${file.path}_${sortBy}_${sortOrder}`}
+                      {...file}
+                      src={`/api/download?path=${encodeURIComponent(file.path)}`}
+                      alt={file.name}
+                      onClick={() => handleFileClick(file.path, file.type)}
+                      className={cn(
+                        "w-full h-full",
+                        "min-w-[150px]",
+                        "max-w-[250px]",
+                        "object-cover",
+                        "cursor-pointer",
+                      )}
+                    />
+                  )
+                } else {
+                  return (
+                    <ContextMenu key={file.path}>
+                      <ContextMenuTrigger>
+                        <FileItemGridView
+                          {...file}
+                          onClick={() => handleFileClick(file.path, file.type)}
+                          className="text-black hover:text-gray-600 hover:bg-accent"
+                        />
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onClick={() => handleDownload(file.path)}>
+                          <Download className="mr-2" size={16} />
+                          Download
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => handleDelete(file.path)}>
+                          <Trash2 className="mr-2" size={16} />
+                          Delete
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  )
+                }
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Preview Overlay */}
@@ -847,7 +972,6 @@ function FileExplorerContent() {
           onTouchEnd={handleTouchEnd}
           onWheel={handleWheel}
         >
-          {/* Title at top-left corner of the browser window */}
           {(preview.type === 'image' || preview.type === 'video' || preview.type === 'audio') && (
             <div className="fixed top-4 left-4 z-[60] max-w-[50vw]">
               <h3 className="text-white text-xl font-bold px-4 py-2 bg-black/50 rounded-md truncate">
@@ -909,95 +1033,142 @@ function FileExplorerContent() {
             </>
           )}
 
-          {previewLoading ? (
-            <div className="flex items-center justify-center">
-              <Loading message="Loading preview..." />
+          {/* Image view */}
+          {preview.type === 'image' && (
+            <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+                {previewError ? (
+                  <Error message="Error loading preview. Please try again." className="text-white" />
+                ) : previewLoading ? (
+                  <Loading message="Loading preview..." className="text-white" />
+                ) : (
+                  <></>
+                )}
+              </div>
+              <img
+                src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+                alt="Preview"
+                className={cn(
+                  (previewLoading || previewError) && "opacity-0",
+                  "max-w-full max-h-[90vh] object-contain shadow-2xl"
+                )}
+                onLoad={() => setPreviewLoading(false)}
+                onError={() => {
+                  setPreviewLoading(false);
+                  setPreviewError(true);
+                }}
+              />
             </div>
-          ) : (
-            <>
-              {preview.type === 'image' && (
-                <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                  <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
-                  <img
-                    src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                    alt="Preview"
-                    className="max-w-full max-h-[90vh] object-contain shadow-2xl"
-                  />
-                </div>
-              )}
+          )}
 
-              {preview.type === 'video' && (
-                <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                  <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
-                  <div className="flex flex-col items-center">
-                    {/* <h3 className="text-white text-xl font-bold mb-4">{preview.path.split('/').pop()}</h3> */}
-                    <video
-                      controls
-                      autoPlay
-                      className="max-w-full max-h-[80vh] shadow-2xl object-contain"
-                      src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                    />
+          {/* Video view */}
+          {preview.type === 'video' && (
+            <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+                {previewError ? (
+                  <Error message="Error loading preview. Please try again." className="text-white" />
+                ) : previewLoading ? (
+                  <Loading message="Loading preview..." className="text-white" />
+                ) : (
+                  <></>
+                )}
+              </div>
+              <div className="flex flex-col items-center w-full">
+                {/* TODO */}
+                <Video
+                  src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+                  autoPlay={true}
+                  className={cn(
+                    (previewLoading || previewError) && "opacity-0",
+                    "max-w-full max-h-[80vh] shadow-2xl"
+                  )}
+                  onLoad={() => setPreviewLoading(false)}
+                  onError={() => {
+                    setPreviewLoading(false);
+                    setPreviewError(true);
+                  }}
+                  onClose={closePreview}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Audio view */}
+          {preview.type === 'audio' && (
+            <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70 flex items-center justify-center">
+                {previewError ? (
+                  <Error message="Error loading preview. Please try again." className="text-white" />
+                ) : previewLoading ? (
+                  <Loading message="Loading preview..." className="text-white" />
+                ) : (
+                  <></>
+                )}
+              </div>
+              <div className="flex flex-col items-center">
+                <audio
+                  controls
+                  className={cn(
+                    "max-w-full shadow-2xl",
+                    (previewLoading || previewError) && "opacity-0"
+                  )}
+                  src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+                  onLoadedData={() => setPreviewLoading(false)}
+                  onError={() => {
+                    setPreviewLoading(false);
+                    setPreviewError(true);
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Code view & Document view */}
+          {(preview.type === 'code' || preview.type === 'document') && (
+            <div className="w-[80vw] h-[80vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-mono text-sm truncate max-w-[50vw]">
+                    {preview.path.split('/').pop()}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded-full">
+                    {getFileExtension(preview.path)}
+                  </span>
+                </div>
+              </div>
+              <div className="overflow-auto flex-1 p-1">
+                {contentError ? (
+                  <div className="p-4 text-red-400 font-mono">
+                    {previewContent}
                   </div>
-                </div>
-              )}
-
-              {preview.type === 'audio' && (
-                <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                  <div className="absolute inset-0 z-[-1] bg-gradient-to-b from-gray-900 to-black opacity-70"></div>
-                  <div className="flex flex-col items-center">
-                    {/* <h3 className="text-white text-xl font-bold mb-4">{preview.path.split('/').pop()}</h3> */}
-                    <audio
-                      controls
-                      className="max-w-full shadow-2xl"
-                      src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {(preview.type === 'code' || preview.type === 'document') && (
-                <div className="w-[80vw] h-[80vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-                  <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-mono text-sm truncate max-w-[50vw]">
-                        {preview.path.split('/').pop()}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded-full">
-                        {getFileExtension(preview.path)}
-                      </span>
+                ) : contentLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-pulse flex flex-col items-center">
+                      <div className="h-4 w-32 bg-gray-700 rounded-md mb-2"></div>
+                      <div className="h-4 w-48 bg-gray-700 rounded-md"></div>
                     </div>
                   </div>
-                  <div className="overflow-auto flex-1 p-1">
-                    {isContentLoading ? (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="animate-pulse flex flex-col items-center">
-                          <div className="h-4 w-32 bg-gray-700 rounded-md mb-2"></div>
-                          <div className="h-4 w-48 bg-gray-700 rounded-md"></div>
-                        </div>
-                      </div>
-                    ) : previewContent && previewContent.startsWith('Error loading file:') ? (
-                      <div className="p-4 text-red-400 font-mono">
-                        {previewContent}
-                      </div>
-                    ) : previewContent ? (
-                      <SyntaxHighlighter
-                        language={getLanguage(getFileExtension(preview.path))}
-                        style={vscDarkPlus}
-                        showLineNumbers
-                        customStyle={{ margin: 0, height: '100%', background: 'transparent' }}
-                        codeTagProps={{ style: { fontFamily: 'monospace' } }}
-                      >
-                        {previewContent}
-                      </SyntaxHighlighter>
-                    ) : (
-                      <div className="p-4 text-red-400 font-mono">
-                        No content available
-                      </div>
-                    )}
+                ) : previewContent && previewContent.startsWith('Error loading file:') ? (
+                  <div className="p-4 text-red-400 font-mono">
+                    {previewContent}
                   </div>
-                </div>
-              )}
-            </>
+                ) : previewContent ? (
+                  <SyntaxHighlighter
+                    language={getLanguage(getFileExtension(preview.path))}
+                    style={vscDarkPlus}
+                    showLineNumbers
+                    customStyle={{ margin: 0, height: '100%', background: 'transparent' }}
+                    codeTagProps={{ style: { fontFamily: 'monospace' } }}
+                  >
+                    {previewContent}
+                  </SyntaxHighlighter>
+                ) : (
+                  <div className="p-4 text-red-400 font-mono">
+                    No content available
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
