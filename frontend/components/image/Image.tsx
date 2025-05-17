@@ -10,12 +10,13 @@ interface ImageProps {
   src: string,
   alt: string,
   fit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
+  loading?: 'lazy' | 'eager',
   onClick?: () => void,
   className?: string,
   disablePreview?: boolean
 }
 
-export function Image({ src, alt, onClick, className, disablePreview = false, fit = 'contain' }: ImageProps) {
+export function Image({ src, alt, onClick, className, disablePreview = false, fit = 'contain', loading = 'lazy' }: ImageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
@@ -281,7 +282,7 @@ export function Image({ src, alt, onClick, className, disablePreview = false, fi
               "transition-all duration-300",
               isLoading ? "opacity-0" : "opacity-100"
             )}
-            loading="lazy"
+            loading={loading}
             onLoad={handleImageLoad}
             onError={() => {
               setIsError(true);

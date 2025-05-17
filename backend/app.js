@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const cors = require('cors')
 const AdmZip = require('adm-zip')
+const unrar = require('node-unrar-js');
 const multer = require('multer')
 const config = require('./config')
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
@@ -388,6 +389,146 @@ app.get('/api/content', (req, res) => {
   }
 });
 
+// TODO
+// API endpoint to extract comic book files
+app.get('/api/extract-comic', async (req, res) => {
+  try {
+    const filePath = req.query.path;
+    if (!filePath) {
+      return res.status(400).json({ error: 'No file path provided' });
+    }
+
+    const fullPath = path.join(basePath, filePath);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const extension = path.extname(fullPath).toLowerCase();
+    const pages = [];
+
+    if (extension === '.cbz') {
+      // Handle CBZ files (ZIP format)
+      try {
+        const zip = new AdmZip(fullPath);
+        const entries = zip.getEntries();
+        
+        // Filter image files
+        const imageEntries = entries.filter(entry => {
+          const ext = path.extname(entry.entryName).toLowerCase();
+          return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+        });
+        
+        // Sort by filename
+        imageEntries.sort((a, b) => {
+          // Extract numbers from filenames for natural sorting
+          const aMatch = a.entryName.match(/(\d+)/g);
+          const bMatch = b.entryName.match(/(\d+)/g);
+          
+          if (aMatch && bMatch) {
+            const aNum = parseInt(aMatch[aMatch.length - 1]);
+            const bNum = parseInt(bMatch[bMatch.length - 1]);
+            return aNum - bNum;
+          }
+          
+          return a.entryName.localeCompare(b.entryName);
+        });
+        
+        // Create a temporary directory for extracted images
+        const tempDir = path.join(os.tmpdir(), 'comic-extract-' + Date.now());
+        fs.mkdirSync(tempDir, { recursive: true });
+        
+        // Extract and create URLs for each image
+        for (let i = 0; i < imageEntries.length; i++) {
+          const entry = imageEntries[i];
+          const entryPath = path.join(tempDir, entry.entryName);
+          
+          // Create directory structure if needed
+          const entryDir = path.dirname(entryPath);
+          fs.mkdirSync(entryDir, { recursive: true });
+          
+          // Extract the file
+          zip.extractEntryTo(entry, entryDir, false, true);
+          
+          // Add to pages (relative path for URL)
+          const relPath = path.relative(basePath, entryPath).replace(/\\/g, '/');
+          pages.push(`/api/download?path=${encodeURIComponent(relPath)}`);
+        }
+      } catch (error) {
+        console.error('Error extracting CBZ file:', error);
+        return res.status(500).json({ error: 'Failed to extract CBZ file' });
+      }
+    } else if (extension === '.cbr') {
+      // Handle CBR files (RAR format)
+      try {
+        // Read RAR file
+        const rarData = fs.readFileSync(fullPath);
+        
+        // Create extractor
+        const extractor = await unrar.createExtractorFromData({ data: rarData });
+        const list = extractor.getFileList();
+        
+        if (!list.success) {
+          throw new Error('Failed to read CBR file list');
+        }
+        
+        // Filter image files
+        const imageEntries = list.fileHeaders.filter(header => {
+          const ext = path.extname(header.name).toLowerCase();
+          return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+        });
+        
+        // Sort by filename
+        imageEntries.sort((a, b) => {
+          // Extract numbers from filenames for natural sorting
+          const aMatch = a.name.match(/(\d+)/g);
+          const bMatch = b.name.match(/(\d+)/g);
+          
+          if (aMatch && bMatch) {
+            const aNum = parseInt(aMatch[aMatch.length - 1]);
+            const bNum = parseInt(bMatch[bMatch.length - 1]);
+            return aNum - bNum;
+          }
+          
+          return a.name.localeCompare(b.name);
+        });
+        
+        // Create a temporary directory for extracted images
+        const tempDir = path.join(os.tmpdir(), 'comic-extract-' + Date.now());
+        fs.mkdirSync(tempDir, { recursive: true });
+        
+        // Extract files
+        const extraction = extractor.extractAll({
+          targetPath: tempDir,
+          overwrite: true
+        });
+        
+        if (!extraction.success) {
+          throw new Error('Failed to extract CBR file');
+        }
+        
+        // Create URLs for each image
+        for (const entry of imageEntries) {
+          const entryPath = path.join(tempDir, entry.name);
+          
+          // Add to pages (relative path for URL)
+          const relPath = path.relative(basePath, entryPath).replace(/\\/g, '/');
+          pages.push(`/api/download?path=${encodeURIComponent(relPath)}`);
+        }
+      } catch (error) {
+        console.error('Error extracting CBR file:', error);
+        return res.status(500).json({ error: 'Failed to extract CBR file' });
+      }
+    } else {
+      return res.status(400).json({ error: 'Unsupported file format' });
+    }
+
+    return res.json({ pages });
+  } catch (error) {
+    console.error('Error in extract-comic endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 function searchFiles(dir, query, basePath) {
   let results = [];
   
@@ -690,7 +831,7 @@ function getFileType(extension) {
     '.lua', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
   ];
 
-  const mangaExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
+  const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
   
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
@@ -698,7 +839,7 @@ function getFileType(extension) {
   if (documentExtensions.includes(extension)) return 'document';
   if (archiveExtensions.includes(extension)) return 'archive';
   if (codeExtensions.includes(extension)) return 'code';
-  if (mangaExtensions.includes(extension)) return 'manga';
+  if (comicExtensions.includes(extension)) return 'comic';
 
   return 'other';
 }
@@ -839,7 +980,7 @@ function getContentType(extension) {
     '.war': 'application/java-archive',
     '.ear': 'application/java-archive',
 
-    // Manga
+    // Comic
     '.cbz': 'application/x-cbz',
     '.cbr': 'application/x-cbr',
     '.cb7': 'application/x-cb7',

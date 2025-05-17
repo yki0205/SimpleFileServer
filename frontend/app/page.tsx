@@ -30,6 +30,7 @@ import { Video } from "@/components/video/Video";
 import { FileItemListView } from "@/components/fileItem/FileItemListView";
 import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
 import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
+import { ComicReader } from "@/components/reader/ComicReader";
 
 
 interface FileData {
@@ -76,7 +77,7 @@ interface FileRowProps {
   };
 }
 
-const FileRow = ({ index, style, data }: FileRowProps) => {
+const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
   const { files, isSearching, onFileClick, onDownload, onDelete } = data;
   const file = files[index];
 
@@ -104,7 +105,7 @@ const FileRow = ({ index, style, data }: FileRowProps) => {
       </ContextMenu>
     </div>
   );
-};
+});
 
 interface FileCellProps {
   columnIndex: number;
@@ -119,7 +120,7 @@ interface FileCellProps {
   };
 }
 
-const FileCell = ({ columnIndex, rowIndex, style, data }: FileCellProps) => {
+const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
   const { files, columnCount, onFileClick, onDownload, onDelete } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
@@ -149,7 +150,7 @@ const FileCell = ({ columnIndex, rowIndex, style, data }: FileCellProps) => {
       </ContextMenu>
     </div>
   )
-}
+});
 
 interface ImageCellProps {
   columnIndex: number;
@@ -164,7 +165,7 @@ interface ImageCellProps {
   };
 }
 
-const ImageCell = ({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
+const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
   const { files, columnCount, onFileClick, onDownload, onDelete } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
@@ -179,6 +180,7 @@ const ImageCell = ({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
           alt={file.name}
           onClick={() => onFileClick(file.path, file.type)}
           className="w-full h-full object-cover rounded-md cursor-pointer"
+          loading="eager"
         />
       </div>
     );
@@ -207,7 +209,7 @@ const ImageCell = ({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
       </div>
     );
   }
-};
+});
 
 interface MasonryCellProps {
   index: number; 
@@ -223,7 +225,7 @@ interface MasonryCellProps {
   };
 }
 
-const MasonryCell = ({ index, style, data }: MasonryCellProps) => {
+const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
   const { files, columnCount, columnWidth, direction, onFileClick } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
@@ -252,12 +254,14 @@ const MasonryCell = ({ index, style, data }: MasonryCellProps) => {
             alt={file.name}
             onClick={() => onFileClick(file.path, file.type)}
             className="w-full h-auto rounded-md"
+            loading="lazy"
           />
         </div>
       ))}
     </div>
   );
-};
+});
+
 
 
 
@@ -276,10 +280,18 @@ function FileExplorerContent() {
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
   const viewModeRef = useRef(viewMode);
 
-  // EXPERIMENTAL FEATURE
+  // EXPERIMENTAL FEATURE FOR IMAGE ONLY VIEW
   const [useMasonry, setUseMasonry] = useState(false);
   const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  
+  // Create refs for the virtualized lists/grids
+  const listRef = useRef<List>(null);
+  const gridRef = useRef<Grid>(null);
+  const imageGridRef = useRef<Grid>(null);
+  const masonryRef = useRef<HTMLDivElement>(null);
+  const activeScrollRef = useRef<any>(null);
+  const scrollPosition = useRef(0);
 
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -427,10 +439,48 @@ function FileExplorerContent() {
   }
 
   const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
+    console.log("Scrolling to top", { viewMode, useMasonry });
+    console.log("Refs:", { 
+      list: listRef.current, 
+      grid: gridRef.current, 
+      imageGrid: imageGridRef.current, 
+      masonry: masonryRef.current 
     });
+    
+    if (viewMode === 'list') {
+      if (listRef.current) {
+        console.log("Scrolling list to top");
+        // For Lists, scrollToItem is the most reliable method
+        listRef.current.scrollToItem(0, "start");
+      }
+    } else if (viewMode === 'grid') {
+      if (gridRef.current) {
+        console.log("Scrolling grid to top");
+        // For Grids, scrollToItem with columnIndex and rowIndex
+        gridRef.current.scrollToItem({
+          columnIndex: 0,
+          rowIndex: 0,
+          align: "start"
+        });
+      }
+    } else if (viewMode === 'image' || (viewMode === 'imageOnly' && !useMasonry)) {
+      if (imageGridRef.current) {
+        console.log("Scrolling image grid to top");
+        // For Image Grids, same as regular grids
+        imageGridRef.current.scrollToItem({
+          columnIndex: 0,
+          rowIndex: 0,
+          align: "start"
+        });
+      }
+    } else if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
+      console.log("Scrolling masonry to top");
+      masonryRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // Reset scroll position
+    scrollPosition.current = 0;
+    setShowScrollTop(false);
   };
 
 
@@ -512,7 +562,7 @@ function FileExplorerContent() {
   const handleFileClick = useCallback((path: string, type: string) => {
     if (type === 'directory') {
       navigateTo(path, '');
-    } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'code' || type === 'document') {
+    } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'code' || type === 'document' || type === 'comic') {
       openPreview(path, type);
     } else {
       setFileToDownload(path);
@@ -691,19 +741,57 @@ function FileExplorerContent() {
     return 8; // 2xl and above
   }, []);
 
+  // Detect scrolling in the virtualized lists
+  const handleVirtualizedScroll = ({ scrollOffset, scrollTop }: any) => {
+    // Grid uses scrollTop, List uses scrollOffset
+    const currentScroll = scrollTop ?? scrollOffset ?? 0;
+    scrollPosition.current = currentScroll;
+    setShowScrollTop(currentScroll > 100);
+  };
 
 
 
 
 
   useEffect(() => {
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 100);
-    };
+    switch (viewMode) {
+      case 'list':
+        activeScrollRef.current = listRef.current;
+        break;
+      case 'grid':
+        activeScrollRef.current = gridRef.current;
+        break;
+      case 'image':
+        activeScrollRef.current = imageGridRef.current;
+        break;
+      case 'imageOnly':
+        if (useMasonry) {
+          activeScrollRef.current = masonryRef.current;
+        } else {
+          activeScrollRef.current = imageGridRef.current;
+        }
+        break;
+      default:
+        activeScrollRef.current = null;
+    }
+  }, [viewMode, useMasonry]);
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  useEffect(() => {
+    // For masonry view, we need to add a manual scroll listener since it doesn't use react-window
+    if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
+      const masonryElement = masonryRef.current;
+      
+      const handleMasonryScroll = () => {
+        scrollPosition.current = masonryElement.scrollTop;
+        setShowScrollTop(masonryElement.scrollTop > 100);
+      };
+      
+      masonryElement.addEventListener('scroll', handleMasonryScroll);
+      return () => {
+        masonryElement.removeEventListener('scroll', handleMasonryScroll);
+      };
+    }
+  }, [viewMode, useMasonry, masonryRef.current]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -810,6 +898,10 @@ function FileExplorerContent() {
     };
   }, []);
 
+
+
+
+
   const isError = (viewMode === 'imageOnly') ? imagesError :
     (isSearching) ? searchError : errorFiles;
 
@@ -819,16 +911,124 @@ function FileExplorerContent() {
   const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 :
     (isSearching) ? searchData?.results.length === 0 : filesData?.files.length === 0) && !isLoading && !isError;
 
-  const outerElementType = useMemo(() => {
-    // Create custom outer element with unique class
-    return React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
-      <div
-        ref={ref}
-        {...props}
-        className={`${props.className || ''} custom-scrollbar`}
-      />
-    ));
-  }, []);
+
+
+
+
+
+  const renderList = useCallback(({ height, width }: { height: number; width: number }) => (
+    <List
+      ref={listRef}
+      height={height}
+      width={width+10}
+      itemCount={sortedFiles.length}
+      itemSize={48}
+      itemData={{
+        files: sortedFiles,
+        isSearching,
+        onFileClick: handleFileClick,
+        onDownload: handleDownload,
+        onDelete: handleDelete
+      }}
+      className="custom-scrollbar"
+      onScroll={handleVirtualizedScroll}
+    >
+      {FileRow}
+    </List>
+  ), [sortedFiles, isSearching, handleFileClick, handleDownload, handleDelete]);
+
+  const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
+    const columnCount = getColumnCount(width);
+    const rowCount = Math.ceil(sortedFiles.length / columnCount);
+    const cellWidth = width / columnCount;
+    const cellHeight = cellWidth;
+
+    return (
+      <Grid
+        ref={gridRef}
+        height={height}
+        width={width+10}
+        columnCount={columnCount}
+        rowCount={rowCount}
+        columnWidth={cellWidth}
+        rowHeight={cellHeight}
+        itemData={{
+          files: sortedFiles,
+          columnCount,
+          onFileClick: handleFileClick,
+          onDownload: handleDownload,
+          onDelete: handleDelete
+        }}
+        className="custom-scrollbar"
+        onScroll={handleVirtualizedScroll}
+      >
+        {FileCell}
+      </Grid>
+    );
+  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+
+  const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
+    const columnCount = getColumnCount(width);
+    const rowCount = Math.ceil(sortedFiles.length / columnCount);
+    const cellWidth = width / columnCount;
+    const cellHeight = cellWidth;
+
+    return (
+      <Grid
+        ref={imageGridRef}
+        height={height}
+        width={width+10}
+        columnCount={columnCount}
+        rowCount={rowCount}
+        columnWidth={cellWidth}
+        rowHeight={cellHeight}
+        itemData={{
+          files: sortedFiles,
+          columnCount,
+          onFileClick: handleFileClick,
+          onDownload: handleDownload,
+          onDelete: handleDelete
+        }}
+        className="custom-scrollbar"
+        onScroll={handleVirtualizedScroll}
+      >
+        {ImageCell}
+      </Grid>
+    );
+  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+
+  const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
+    const columnCount = getColumnCount(width);
+    const columnWidth = width / columnCount;
+    
+    // Array of column indices
+    const columns = Array.from({ length: columnCount }, (_, i) => i);
+    
+    return (
+      <div 
+        ref={masonryRef}
+        style={{ height, width, position: 'relative', overflowY: 'auto' }}
+        className="custom-scrollbar"
+      >
+        {columns.map(index => (
+          <MasonryCell
+            key={index}
+            index={index}
+            style={{}}
+            data={{
+              files: sortedFiles,
+              columnCount,
+              columnWidth,
+              direction: gridDirection,
+              onFileClick: handleFileClick,
+              onDownload: handleDownload,
+              onDelete: handleDelete
+            }}
+          />
+        ))}
+      </div>
+    );
+  }, [sortedFiles, getColumnCount, gridDirection, handleFileClick, handleDownload, handleDelete]);
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -1020,119 +1220,17 @@ function FileExplorerContent() {
         <>
           {/* List view */}
           {viewMode === 'list' && (
-            <div className="border rounded-md w-full">
-              <div className={cn(
-                "border rounded-md p-2",
-                "bg-white/80 text-black",
-                "flex items-center",
-                "text-sm sm:text-base font-bold font-mono",
-                "select-none"
-              )}>
-                <div className="w-8" />
-                <div className="flex-1">
-                  <button className="cursor-pointer" onClick={() => {
-                    if (sortBy === "name") {
-                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                    } else {
-                      setSortBy("name")
-                      setSortOrder("asc")
-                    }
-                  }}>
-                    Name
-                    {sortBy === "name" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-                  </button>
-                </div>
-                {isSearching && (
-                  <div className="w-80 text-right">Path</div>
-                )}
-                <div className="hidden md:block w-24 text-right">
-                  <button className="cursor-pointer" onClick={() => {
-                    if (sortBy === "size") {
-                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                    } else {
-                      setSortBy("size")
-                      setSortOrder("asc")
-                    }
-                  }}>
-                    Size
-                    {sortBy === "size" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-                  </button>
-                </div>
-                <div className="hidden md:block w-32 text-right">
-                  <button className="cursor-pointer" onClick={() => {
-                    if (sortBy === "date") {
-                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                    } else {
-                      setSortBy("date")
-                      setSortOrder("asc")
-                    }
-                  }}>
-                    Modified
-                    {sortBy === "date" && <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>}
-                  </button>
-                </div>
-              </div>
-              <div className="w-full h-[calc(100vh-250px)]">
-                <AutoSizer>
-                  {({ height, width }) => (
-                    <List
-                      height={height}
-                      width={width + 12}
-                      itemCount={sortedFiles.length}
-                      itemSize={48}
-                      itemData={
-                        {
-                          files: sortedFiles,
-                          isSearching,
-                          onFileClick: handleFileClick,
-                          onDownload: handleDownload,
-                          onDelete: handleDelete
-                        }
-                      }
-                      outerElementType={outerElementType}
-                      className="custom-scrollbar"
-                    >
-                      {FileRow}
-                    </List>
-                  )}
-                </AutoSizer>
-              </div>
+            <div className="w-full h-[calc(100vh-250px)]">
+              <AutoSizer>
+                {renderList}
+              </AutoSizer>
             </div>
           )}
           {/* Grid view */}
           {viewMode === 'grid' && (
             <div className="w-full h-[calc(100vh-250px)]">
               <AutoSizer>
-                {({ height, width }) => {
-                  const columnCount = getColumnCount(width);
-                  const rowCount = Math.ceil(sortedFiles.length / columnCount);
-                  const cellWidth = width / columnCount;
-                  const cellHeight = cellWidth;
-
-                  return (
-                    <Grid
-                      height={height}
-                      width={width + 12}
-                      columnCount={columnCount}
-                      rowCount={rowCount}
-                      columnWidth={cellWidth}
-                      rowHeight={cellHeight}
-                      itemData={
-                        {
-                          files: sortedFiles,
-                          columnCount,
-                          onFileClick: handleFileClick,
-                          onDownload: handleDownload,
-                          onDelete: handleDelete
-                        }
-                      }
-                      outerElementType={outerElementType}
-                      className="custom-scrollbar"
-                    >
-                      {FileCell}
-                    </Grid>
-                  );
-                }}
+                {renderGrid}
               </AutoSizer>
             </div>
           )}
@@ -1140,115 +1238,25 @@ function FileExplorerContent() {
           {viewMode === 'image' && (
             <div className="w-full h-[calc(100vh-250px)]">
               <AutoSizer>
-                {({ height, width }) => {
-                  const columnCount = getColumnCount(width);
-                  const rowCount = Math.ceil(sortedFiles.length / columnCount);
-                  const cellWidth = width / columnCount;
-                  const cellHeight = cellWidth;
-
-                  return (
-                    <Grid
-                      height={height}
-                      width={width + 12}
-                      columnCount={columnCount}
-                      rowCount={rowCount}
-                      columnWidth={cellWidth}
-                      rowHeight={cellHeight}
-                      itemData={
-                        {
-                          files: sortedFiles,
-                          columnCount,
-                          onFileClick: handleFileClick,
-                          onDownload: handleDownload,
-                          onDelete: handleDelete
-                        }
-                      }
-                      outerElementType={outerElementType}
-                      className="custom-scrollbar"
-                    >
-                      {ImageCell}
-                    </Grid>
-                  );
-                }}
+                {renderImageGrid}
               </AutoSizer>
             </div>
           )}
           {/* Image Only view */}
-          {viewMode === 'imageOnly' && (
-            <>
-              {useMasonry ? (
-                <div className="w-full h-[calc(100vh-250px)] relative">
-                  <AutoSizer>
-                    {({ height, width }) => {
-                      const columnCount = getColumnCount(width);
-                      const columnWidth = width / columnCount;
-                      
-                      // Array of column indices
-                      const columns = Array.from({ length: columnCount }, (_, i) => i);
-                      
-                      return (
-                        <div 
-                          style={{ height, width, position: 'relative', overflowY: 'auto' }}
-                          className="custom-scrollbar"
-                        >
-                          {columns.map(index => (
-                            <MasonryCell
-                              key={index}
-                              index={index}
-                              style={{}}
-                              data={{
-                                files: sortedFiles,
-                                columnCount,
-                                columnWidth,
-                                direction: gridDirection,
-                                onFileClick: handleFileClick,
-                                onDownload: handleDownload,
-                                onDelete: handleDelete
-                              }}
-                            />
-                          ))}
-                        </div>
-                      );
-                    }}
-                  </AutoSizer>
-                </div>
-              ) : (
-                <div className="w-full h-[calc(100vh-250px)]">
-                  <AutoSizer>
-                    {({ height, width }) => {
-                      const columnCount = getColumnCount(width);
-                      const rowCount = Math.ceil(sortedFiles.length / columnCount);
-                      const cellWidth = width / columnCount;
-                      const cellHeight = cellWidth;
-
-                      return (
-                        <Grid
-                          height={height}
-                          width={width + 12}
-                          columnCount={columnCount}
-                          rowCount={rowCount}
-                          columnWidth={cellWidth}
-                          rowHeight={cellHeight}
-                          itemData={
-                            {
-                              files: sortedFiles,
-                              columnCount,
-                              onFileClick: handleFileClick,
-                              onDownload: handleDownload,
-                              onDelete: handleDelete
-                            }
-                          }
-                          outerElementType={outerElementType}
-                          className="custom-scrollbar"
-                        >
-                          {ImageCell}
-                        </Grid>
-                      );
-                    }}
-                  </AutoSizer>
-                </div>
-              )}
-            </>
+          {viewMode === 'imageOnly' && !useMasonry && (
+            <div className="w-full h-[calc(100vh-250px)]">
+              <AutoSizer>
+                {renderImageGrid}
+              </AutoSizer>
+            </div>
+          )}
+          {/* Masonry view */}
+          {viewMode === 'imageOnly' && useMasonry && (
+            <div className="w-full h-[calc(100vh-250px)]">
+              <AutoSizer>
+                {renderMasonry}
+              </AutoSizer>
+            </div>
           )}
         </>
       )}
@@ -1332,7 +1340,7 @@ function FileExplorerContent() {
             </>
           )}
 
-          {/* Image view */}
+          {/* Image preview */}
           {preview.type === 'image' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
               <div className="absolute z-[-1] flex items-center justify-center">
@@ -1360,7 +1368,7 @@ function FileExplorerContent() {
             </div>
           )}
 
-          {/* Video view */}
+          {/* Video preview */}
           {preview.type === 'video' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
               <div className="absolute z-[-1] flex items-center justify-center">
@@ -1392,7 +1400,7 @@ function FileExplorerContent() {
             </div>
           )}
 
-          {/* Audio view */}
+          {/* Audio preview */}
           {preview.type === 'audio' && (
             <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
               <div className="absolute z-[-1] flex items-center justify-center">
@@ -1422,7 +1430,7 @@ function FileExplorerContent() {
             </div>
           )}
 
-          {/* Code view & Document view */}
+          {/* Code preview & Document preview */}
           {(preview.type === 'code' || preview.type === 'document') && (
             <div className="w-[80vw] h-[80vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
@@ -1467,6 +1475,16 @@ function FileExplorerContent() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Comic preview */}
+          {preview.type === 'comic' && (
+            <div className="w-[90vw] h-[90vh] overflow-hidden bg-black rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <ComicReader 
+                src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+                onClose={closePreview}
+              />
             </div>
           )}
         </div>
