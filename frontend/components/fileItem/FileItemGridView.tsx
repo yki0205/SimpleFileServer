@@ -37,8 +37,8 @@ export function FileItemGridView(
     <Card
       className={cn(
         "w-full h-full",
-        "min-w-[150px] min-h-[150px]",
-        "max-w-[250px] max-h-[250px]",
+        // "min-w-[150px] min-h-[150px]",
+        // "max-w-[250px] max-h-[250px]",
         "flex flex-col items-center justify-center",
         "p-3 cursor-pointer hover:bg-accent transition-colors",
         className

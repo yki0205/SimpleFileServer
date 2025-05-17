@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import NextImage from "next/image";
 import { cn } from "@/lib/utils";
 import { ImageOff, RotateCw, RefreshCw, Download, X } from "lucide-react";
@@ -8,11 +9,13 @@ import { ImageOff, RotateCw, RefreshCw, Download, X } from "lucide-react";
 interface ImageProps {
   src: string,
   alt: string,
+  fit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
   onClick?: () => void,
-  className?: string
+  className?: string,
+  disablePreview?: boolean
 }
 
-export function Image({ src, alt, onClick, className }: ImageProps) {
+export function Image({ src, alt, onClick, className, disablePreview = false, fit = 'contain' }: ImageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
@@ -21,10 +24,15 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
-  const [previewPosition, setPreviewPosition] = useState<'left' | 'right'>('right');
   const [previewDimensions, setPreviewDimensions] = useState({ width: 0, height: 0 });
-  const [verticalOffset, setVerticalOffset] = useState(0);
+  const [previewCoordinates, setPreviewCoordinates] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isBrowser, setIsBrowser] = useState(false);
+
+  // Set browser state on mount
+  useEffect(() => {
+    setIsBrowser(true);
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -52,7 +60,7 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
   }
 
   const calculatePreviewDimensions = () => {
-    if (!containerRef.current || imageNaturalSize.width === 0 || imageNaturalSize.height === 0) return;
+    if (!containerRef.current || imageNaturalSize.width === 0 || imageNaturalSize.height === 0) return false;
 
     const rect = containerRef.current.getBoundingClientRect();
     const windowWidth = window.innerWidth;
@@ -62,7 +70,6 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
     
     // Determine which side has more space
     const position = spaceOnRight > spaceOnLeft ? 'right' : 'left';
-    setPreviewPosition(position);
     
     // Calculate available space
     const availableWidth = position === 'right' ? spaceOnRight : spaceOnLeft;
@@ -74,7 +81,7 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
     let width, height;
     
     // First try to fit by width
-    width = availableWidth;
+    width = Math.min(availableWidth, 1000); // Cap max width
     height = width / aspectRatio;
     
     // If height exceeds available height, fit by height instead
@@ -83,32 +90,38 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
       width = height * aspectRatio;
     }
     
+    // Set dimensions (must be at least 100px to be visible)
+    if (width < 100 || height < 100) return false;
+    
     setPreviewDimensions({
       width,
       height
     });
 
-    // Calculate vertical position to keep preview within screen bounds
-    const previewHalfHeight = height / 2;
-    const containerCenterY = rect.top + rect.height / 2;
+    // Calculate position for portal
+    const centerY = rect.top + rect.height / 2;
+    let yPos = centerY - height / 2;
     
-    let offset = 0;
+    // Ensure preview stays within screen bounds
+    if (yPos < 0) yPos = 0;
+    if (yPos + height > windowHeight) yPos = windowHeight - height;
     
-    // Check if preview would go above the screen
-    if (containerCenterY - previewHalfHeight < 0) {
-      offset = previewHalfHeight - containerCenterY;
-    }
+    // Calculate X position based on available space
+    const xPos = position === 'right' ? rect.right : rect.left - width;
     
-    // Check if preview would go below the screen
-    else if (containerCenterY + previewHalfHeight > windowHeight) {
-      offset = windowHeight - (containerCenterY + previewHalfHeight);
-    }
+    setPreviewCoordinates({
+      x: xPos,
+      y: yPos
+    });
     
-    setVerticalOffset(offset);
+    return true;
   };
 
   const handleMouseEnter = () => {
-    calculatePreviewDimensions();
+    if (disablePreview) return;
+    
+    const dimensionsValid = calculatePreviewDimensions();
+    if (!dimensionsValid) return;
     
     const timeout = setTimeout(() => {
       setIsHovered(true);
@@ -119,6 +132,8 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
   }
 
   const handleMouseLeave = () => {
+    if (disablePreview) return;
+    
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
       setHoverTimeout(null);
@@ -150,6 +165,78 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
       window.removeEventListener('resize', handleResize);
     };
   }, [isHovered]);
+
+  // Render preview in portal
+  const renderPreview = () => {
+    if (!isBrowser || !isHovered || isLoading || isError || previewDimensions.width <= 0) return null;
+    
+    // Get or create portal container
+    let portalContainer = document.getElementById('image-preview-portal');
+    if (!portalContainer) {
+      portalContainer = document.createElement('div');
+      portalContainer.id = 'image-preview-portal';
+      portalContainer.style.position = 'fixed';
+      portalContainer.style.top = '0';
+      portalContainer.style.left = '0';
+      portalContainer.style.zIndex = '9999';
+      portalContainer.style.pointerEvents = 'none';
+      document.body.appendChild(portalContainer);
+    }
+    
+    return createPortal(
+      <div 
+        className={cn(
+          "max-sm:hidden",
+          "rounded-lg shadow-xl overflow-hidden border border-border",
+          "pointer-events-auto" // Enable interactions with this element
+        )}
+        style={{
+          position: 'fixed',
+          left: `${previewCoordinates.x}px`,
+          top: `${previewCoordinates.y}px`,
+          width: `${previewDimensions.width}px`,
+          height: `${previewDimensions.height}px`,
+        }}
+      >
+        {isPreviewLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+            <RotateCw className="h-6 w-6 animate-spin text-white" />
+            <p className="text-sm text-white">Loading...</p>
+          </div>
+        )}
+
+        <NextImage
+          src={imgSrc}
+          alt={alt}
+          className={cn(
+            "object-contain",
+            isPreviewLoading ? "opacity-0" : "opacity-100"
+          )}
+          onLoad={() => setIsPreviewLoading(false)}
+          onError={() => {
+            setIsPreviewLoading(false);
+            setIsPreviewError(true);
+          }}
+          fill
+          sizes={`${previewDimensions.width}px`}
+          priority
+        />
+        <button
+          onClick={handleDownload}
+          className="absolute top-2 right-11 bg-black/50 hover:bg-black/70 text-white px-2 py-1 rounded-md"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+        <button
+          onClick={handleClose}
+          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-red-500 px-2 py-1 rounded-md"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>,
+      portalContainer
+    );
+  };
 
   return (
     <div 
@@ -185,7 +272,13 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
             src={imgSrc}
             alt={alt}
             className={cn(
-              "w-full object-cover transition-all duration-300",
+              "w-full h-full",
+              fit === 'contain' && "object-contain",
+              fit === 'cover' && "object-cover",
+              fit === 'fill' && "object-fill",
+              fit === 'none' && "object-none",
+              fit === 'scale-down' && "object-scale-down",
+              "transition-all duration-300",
               isLoading ? "opacity-0" : "opacity-100"
             )}
             loading="lazy"
@@ -199,58 +292,8 @@ export function Image({ src, alt, onClick, className }: ImageProps) {
             height={200}
           />
           
-          {/* Preview image shown on hover */}
-          {isHovered && !isLoading && !isError && previewDimensions.width > 0 && (
-            <div 
-              className={cn(
-                "max-sm:hidden",
-                "absolute z-50 rounded-lg shadow-xl overflow-hidden border border-border",
-                previewPosition === 'right' ? "left-full" : "right-full"
-              )}
-              style={{
-                width: `${previewDimensions.width}px`,
-                height: `${previewDimensions.height}px`,
-                top: `calc(50% + ${verticalOffset}px)`,
-                transform: 'translateY(-50%)'
-              }}
-            >
-              {isPreviewLoading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
-                  <RotateCw className="h-6 w-6 animate-spin text-white" />
-                  <p className="text-sm text-white">Loading...</p>
-                </div>
-              )}
-
-              <NextImage
-                src={imgSrc}
-                alt={alt}
-                className={cn(
-                  "object-contain",
-                  isPreviewLoading ? "opacity-0" : "opacity-100"
-                )}
-                onLoad={() => setIsPreviewLoading(false)}
-                onError={() => {
-                  setIsPreviewLoading(false);
-                  setIsPreviewError(true);
-                }}
-                fill
-                sizes={`${previewDimensions.width}px`}
-                priority
-              />
-              <button
-                onClick={handleDownload}
-                className="absolute top-2 right-11 bg-black/50 hover:bg-black/70 text-white px-2 py-1 rounded-md"
-              >
-                <Download className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleClose}
-                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-red-500 px-2 py-1 rounded-md"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          {/* Preview image is now rendered through portal */}
+          {renderPreview()}
         </>
       )}
     </div>

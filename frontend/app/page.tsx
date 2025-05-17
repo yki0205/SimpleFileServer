@@ -1,12 +1,15 @@
 "use client";
 
+import "./scrollbar.css";
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import React, { Suspense, useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { FixedSizeList as List, FixedSizeGrid as Grid } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,9 +17,9 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
-  List, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home,
+  List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home,
   Download, Upload, X, ChevronLeft, ChevronRight, FolderPlus,
-  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal 
+  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
 } from "lucide-react";
 
 import { Error } from "@/components/status/Error";
@@ -27,6 +30,7 @@ import { Video } from "@/components/video/Video";
 import { FileItemListView } from "@/components/fileItem/FileItemListView";
 import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
 import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
+
 
 interface FileData {
   name: string;
@@ -55,6 +59,209 @@ interface PreviewState {
   content?: string;
   currentIndex?: number;
 }
+
+
+
+
+
+interface FileRowProps {
+  index: number;
+  style: React.CSSProperties;
+  data: {
+    files: FileData[];
+    isSearching: boolean;
+    onFileClick: (path: string, type: string) => void;
+    onDownload: (path: string) => void;
+    onDelete: (path: string) => void;
+  };
+}
+
+const FileRow = ({ index, style, data }: FileRowProps) => {
+  const { files, isSearching, onFileClick, onDownload, onDelete } = data;
+  const file = files[index];
+
+  return (
+    <div style={style}>
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <FileItemListView
+            {...file}
+            isSearching={isSearching}
+            onClick={() => onFileClick(file.path, file.type)}
+            className="text-white hover:text-black hover:bg-accent"
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onDownload(file.path)}>
+            <Download className="mr-2" size={16} />
+            Download
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onDelete(file.path)}>
+            <Trash2 className="mr-2" size={16} />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </div>
+  );
+};
+
+interface FileCellProps {
+  columnIndex: number;
+  rowIndex: number;
+  style: React.CSSProperties;
+  data: {
+    files: FileData[];
+    columnCount: number;
+    onFileClick: (path: string, type: string) => void;
+    onDownload: (path: string) => void;
+    onDelete: (path: string) => void;
+  };
+}
+
+const FileCell = ({ columnIndex, rowIndex, style, data }: FileCellProps) => {
+  const { files, columnCount, onFileClick, onDownload, onDelete } = data;
+  const index = rowIndex * columnCount + columnIndex;
+  if (index >= files.length) return null;
+
+  const file = files[index];
+
+  return (
+    <div style={style} className="p-1">
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <FileItemGridView
+            {...file}
+            onClick={() => onFileClick(file.path, file.type)}
+            className="text-black hover:text-gray-600 hover:bg-accent"
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onDownload(file.path)}>
+            <Download className="mr-2" size={16} />
+            Download
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onDelete(file.path)}>
+            <Trash2 className="mr-2" size={16} />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </div>
+  )
+}
+
+interface ImageCellProps {
+  columnIndex: number;
+  rowIndex: number;
+  style: React.CSSProperties;
+  data: {
+    files: FileData[];
+    columnCount: number;
+    onFileClick: (path: string, type: string) => void;
+    onDownload: (path: string) => void;
+    onDelete: (path: string) => void;
+  };
+}
+
+const ImageCell = ({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
+  const { files, columnCount, onFileClick, onDownload, onDelete } = data;
+  const index = rowIndex * columnCount + columnIndex;
+  if (index >= files.length) return null;
+
+  const file = files[index];
+
+  if (file.type === 'image') {
+    return (
+      <div style={style} className="p-1">
+        <Image
+          src={`/api/download?path=${encodeURIComponent(file.path)}`}
+          alt={file.name}
+          onClick={() => onFileClick(file.path, file.type)}
+          className="w-full h-full object-cover rounded-md cursor-pointer"
+        />
+      </div>
+    );
+  } else {
+    return (
+      <div style={style} className="p-1">
+        <ContextMenu>
+          <ContextMenuTrigger>
+            <FileItemGridView
+              {...file}
+              onClick={() => onFileClick(file.path, file.type)}
+              className="text-black hover:text-gray-600 hover:bg-accent"
+            />
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => onDownload(file.path)}>
+              <Download className="mr-2" size={16} />
+              Download
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDelete(file.path)}>
+              <Trash2 className="mr-2" size={16} />
+              Delete
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </div>
+    );
+  }
+};
+
+interface MasonryCellProps {
+  index: number; 
+  style: React.CSSProperties;
+  data: {
+    files: FileData[];
+    columnCount: number;
+    columnWidth: number;
+    direction: 'ltr' | 'rtl';
+    onFileClick: (path: string, type: string) => void;
+    onDownload: (path: string) => void;
+    onDelete: (path: string) => void;
+  };
+}
+
+const MasonryCell = ({ index, style, data }: MasonryCellProps) => {
+  const { files, columnCount, columnWidth, direction, onFileClick } = data;
+  // Each index represents a column of images
+  if (index >= columnCount) return null;
+  
+  // Get files for this column using distribution algorithm
+  const columnFiles = files.filter((_, fileIndex) => fileIndex % columnCount === index);
+  
+  return (
+    <div 
+      style={{
+        ...style,
+        width: columnWidth,
+        position: 'absolute',
+        left: index * columnWidth,
+        top: 0,
+        height: 'auto',
+        direction
+      }} 
+      className="flex flex-col gap-2 px-1"
+    >
+      {columnFiles.map((file) => (
+        <div key={file.path} className="break-inside-avoid mb-2 w-full">
+          <Image
+            {...file}
+            src={`/api/download?path=${encodeURIComponent(file.path)}`}
+            alt={file.name}
+            onClick={() => onFileClick(file.path, file.type)}
+            className="w-full h-auto rounded-md"
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+
+
+
 
 function FileExplorerContent() {
   const router = useRouter();
@@ -93,9 +300,6 @@ function FileExplorerContent() {
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
   const minSwipeDistance = 50; // Minimum distance required for a swipe
-
-
-
 
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
@@ -152,55 +356,40 @@ function FileExplorerContent() {
     refetchOnWindowFocus: false
   });
 
-  const filesToDisplay = (() => {
+  const sortedFiles = useMemo(() => {
+    let files: FileData[] = [];
+
     if (viewMode === 'imageOnly') {
-      return imagesData?.images || [];
+      files = imagesData?.images || [];
     } else if (isSearching) {
-      return searchData?.results || [];
-    }
-    return filesData?.files || [];
-  })();
-
-  // TODO: I don't know. Maybe make natural sort an additional option will be better.
-  // I will try to implement it later.
-  const naturalSort = (a: string, b: string): number => {
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    return collator.compare(a, b);
-  };
-
-  const sortedFiles = [...filesToDisplay].sort((a, b) => {
-
-    if (viewMode === 'imageOnly' && sortBy === 'name') {
-      const pathA = a.path.split('/').concat(a.name);
-      const pathB = b.path.split('/').concat(b.name);
-      return sortOrder === 'asc'
-        // ? pathA.join('/').localeCompare(pathB.join('/'))
-        // : pathB.join('/').localeCompare(pathA.join('/'));
-        ? naturalSort(pathA.join('/'), pathB.join('/'))
-        : naturalSort(pathB.join('/'), pathA.join('/'));
+      files = searchData?.results || [];
+    } else {
+      files = filesData?.files || [];
     }
 
-    if (a.type === 'directory' && b.type !== 'directory') return -1;
-    if (a.type !== 'directory' && b.type === 'directory') return 1;
-    if (sortBy === 'name') {
-      return sortOrder === 'asc'
-        // ? a.name.localeCompare(b.name)
-        // : b.name.localeCompare(a.name);
-        ? naturalSort(a.name, b.name)
-        : naturalSort(b.name, a.name);
-    } else if (sortBy === 'size') {
-      return sortOrder === 'asc'
-        ? a.size - b.size
-        : b.size - a.size;
-    } else if (sortBy === 'date') {
-      const dateA = new Date(a.mtime).getTime();
-      const dateB = new Date(b.mtime).getTime();
-      return sortOrder === 'asc'
-        ? dateA - dateB
-        : dateB - dateA;
-    }
-    return 0;
-  });
+    return [...files].sort((a, b) => {
+      if (a.type === 'directory' && b.type !== 'directory') return -1;
+      if (a.type !== 'directory' && b.type === 'directory') return 1;
+      if (sortBy === 'name') {
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        return sortOrder === 'asc'
+          ? collator.compare(a.name, b.name)
+          : collator.compare(b.name, a.name);
+      } else if (sortBy === 'size') {
+        return sortOrder === 'asc'
+          ? a.size - b.size
+          : b.size - a.size;
+      } else if (sortBy === 'date') {
+        const dateA = new Date(a.mtime).getTime();
+        const dateB = new Date(b.mtime).getTime();
+        return sortOrder === 'asc'
+          ? dateA - dateB
+          : dateB - dateA;
+      }
+      return 0;
+    });
+  }, [filesData?.files, searchData?.results, imagesData?.images, sortBy, sortOrder, viewMode, isSearching]);
+
 
 
 
@@ -248,43 +437,12 @@ function FileExplorerContent() {
 
 
 
-
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const query = formData.get('searchQuery') as string;
     navigateTo(currentPath, query);
   }
-
-  const handleMkdir = (path: string) => {
-    // TODO: Implement mkdir
-  }
-
-  const handleRename = (path: string, newName: string) => {
-    // TODO: Implement rename
-  }
-
-  const handleDelete = (path: string) => {
-    setFileToDelete(path);
-    setDeleteComfirmDialogOpen(true);
-  }
-
-  const handleCopy = (path: string) => {
-    // TODO: Implement copy
-  }
-
-  const handlePaste = (path: string) => {
-    // TODO: Implement paste
-  }
-
-  const handleMove = (path: string) => {
-    // TODO: Implement move
-  }
-
-  const handleDownload = (path: string) => {
-    window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
-  };
 
   const handleUpload = async () => {
     const fileInput = document.createElement('input');
@@ -322,7 +480,36 @@ function FileExplorerContent() {
     fileInput.click();
   }
 
-  const handleFileClick = (path: string, type: string) => {
+  const handleMkdir = useCallback((path: string) => {
+    // TODO: Implement mkdir
+  }, []);
+
+  const handleRename = useCallback((path: string, newName: string) => {
+    // TODO: Implement rename
+  }, []);
+
+  const handleDelete = useCallback((path: string) => {
+    setFileToDelete(path);
+    setDeleteComfirmDialogOpen(true);
+  }, []);
+
+  const handleCopy = useCallback((path: string) => {
+    // TODO: Implement copy
+  }, []);
+
+  const handlePaste = useCallback((path: string) => {
+    // TODO: Implement paste
+  }, []);
+
+  const handleMove = useCallback((path: string) => {
+    // TODO: Implement move
+  }, []);
+
+  const handleDownload = useCallback((path: string) => {
+    window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
+  }, []);
+
+  const handleFileClick = useCallback((path: string, type: string) => {
     if (type === 'directory') {
       navigateTo(path, '');
     } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'code' || type === 'document') {
@@ -331,14 +518,9 @@ function FileExplorerContent() {
       setFileToDownload(path);
       setDownloadComfirmDialogOpen(true);
     }
-  }
+  }, []);
 
-
-
-
-
-
-  const openPreview = async (path: string, type: string) => {
+  const openPreview = useCallback(async (path: string, type: string) => {
     setPreviewLoading(true);
     setPreviewError(false);
     const currentIndex = sortedFiles.findIndex(file => file.path === path);
@@ -354,9 +536,9 @@ function FileExplorerContent() {
       setPreviewLoading(false);
       setPreviewError(false);
     }
-  }
+  }, [sortedFiles]);
 
-  const closePreview = () => {
+  const closePreview = useCallback(() => {
     setPreview({
       isOpen: false,
       path: '',
@@ -364,7 +546,7 @@ function FileExplorerContent() {
     });
     setPreviewLoading(false);
     setPreviewError(false);
-  }
+  }, []);
 
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
@@ -397,11 +579,6 @@ function FileExplorerContent() {
 
     openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
   }
-
-
-
-
-
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -506,6 +683,14 @@ function FileExplorerContent() {
     return langMap[ext] || 'text';
   };
 
+  const getColumnCount = useCallback((width: number) => {
+    if (width < 640) return 2; // sm
+    if (width < 768) return 3; // md
+    if (width < 1024) return 4; // lg
+    if (width < 1280) return 6; // xl
+    return 8; // 2xl and above
+  }, []);
+
 
 
 
@@ -555,6 +740,7 @@ function FileExplorerContent() {
   useEffect(() => {
     // TODO: This is a workaround for the issue that the scroll event is still triggered on the background element
     // even though the handleWheel function is preventing the default behavior. So I choose to disable the scroll of the whole body.
+    if (viewMode === 'list' || viewMode === 'image') return;
     const originalStyle = window.getComputedStyle(document.body).overflow;
     if (preview.isOpen) {
       document.body.style.overflow = 'hidden';
@@ -624,10 +810,6 @@ function FileExplorerContent() {
     };
   }, []);
 
-
-
-
-
   const isError = (viewMode === 'imageOnly') ? imagesError :
     (isSearching) ? searchError : errorFiles;
 
@@ -637,9 +819,16 @@ function FileExplorerContent() {
   const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 :
     (isSearching) ? searchData?.results.length === 0 : filesData?.files.length === 0) && !isLoading && !isError;
 
-
-
-
+  const outerElementType = useMemo(() => {
+    // Create custom outer element with unique class
+    return React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
+      <div
+        ref={ref}
+        {...props}
+        className={`${props.className || ''} custom-scrollbar`}
+      />
+    ));
+  }, []);
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -682,7 +871,6 @@ function FileExplorerContent() {
           >
             <Upload size={18} />
           </Button>
-
         </div>
 
         <form onSubmit={handleSearch} className="order-3 max-sm:w-full flex gap-1">
@@ -753,7 +941,7 @@ function FileExplorerContent() {
             size="icon"
             onClick={() => setViewMode('list')}
           >
-            <List size={18} />
+            <ListIcon size={18} />
           </Button>
           <Button
             variant={viewMode === 'grid' ? 'default' : 'outline'}
@@ -820,9 +1008,7 @@ function FileExplorerContent() {
         <div className="flex-1 flex flex-col items-center justify-center">
           <NotFound message="No files found." />
         </div>
-      ) : (
-        <></>
-      )}
+      ) : null}
 
       {viewMode === 'imageOnly' && (
         <div className="flex justify-center text-sm text-muted-foreground mb-1">
@@ -886,128 +1072,183 @@ function FileExplorerContent() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-1">
-                {sortedFiles.map((file) => (
-                  <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
-                    <ContextMenuTrigger>
-                      <FileItemListView
-                        {...file}
-                        isSearching={isSearching}
-                        onClick={() => handleFileClick(file.path, file.type)}
-                        className="text-white hover:text-black hover:bg-accent"
-                      />
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      <ContextMenuItem onClick={() => handleDownload(file.path)}>
-                        <Download className="mr-2" size={16} />
-                        Download
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => handleDelete(file.path)}>
-                        <Trash2 className="mr-2" size={16} />
-                        Delete
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                ))}
+              <div className="w-full h-[calc(100vh-250px)]">
+                <AutoSizer>
+                  {({ height, width }) => (
+                    <List
+                      height={height}
+                      width={width + 12}
+                      itemCount={sortedFiles.length}
+                      itemSize={48}
+                      itemData={
+                        {
+                          files: sortedFiles,
+                          isSearching,
+                          onFileClick: handleFileClick,
+                          onDownload: handleDownload,
+                          onDelete: handleDelete
+                        }
+                      }
+                      outerElementType={outerElementType}
+                      className="custom-scrollbar"
+                    >
+                      {FileRow}
+                    </List>
+                  )}
+                </AutoSizer>
               </div>
             </div>
           )}
           {/* Grid view */}
           {viewMode === 'grid' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              {sortedFiles.map((file) => (
-                <ContextMenu key={`${file.path}_${sortBy}_${sortOrder}`}>
-                  <ContextMenuTrigger>
-                    <FileItemGridView
-                      {...file}
-                      onClick={() => handleFileClick(file.path, file.type)}
-                      className="text-black hover:text-gray-600 hover:bg-accent"
-                    />
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleDownload(file.path)}>
-                      <Download className="mr-2" size={16} />
-                      Download
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleDelete(file.path)}>
-                      <Trash2 className="mr-2" size={16} />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              ))}
+            <div className="w-full h-[calc(100vh-250px)]">
+              <AutoSizer>
+                {({ height, width }) => {
+                  const columnCount = getColumnCount(width);
+                  const rowCount = Math.ceil(sortedFiles.length / columnCount);
+                  const cellWidth = width / columnCount;
+                  const cellHeight = cellWidth;
+
+                  return (
+                    <Grid
+                      height={height}
+                      width={width + 12}
+                      columnCount={columnCount}
+                      rowCount={rowCount}
+                      columnWidth={cellWidth}
+                      rowHeight={cellHeight}
+                      itemData={
+                        {
+                          files: sortedFiles,
+                          columnCount,
+                          onFileClick: handleFileClick,
+                          onDownload: handleDownload,
+                          onDelete: handleDelete
+                        }
+                      }
+                      outerElementType={outerElementType}
+                      className="custom-scrollbar"
+                    >
+                      {FileCell}
+                    </Grid>
+                  );
+                }}
+              </AutoSizer>
             </div>
           )}
           {/* Image view */}
           {viewMode === 'image' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              {sortedFiles.map((file) => {
-                if (file.type === 'image') {
+            <div className="w-full h-[calc(100vh-250px)]">
+              <AutoSizer>
+                {({ height, width }) => {
+                  const columnCount = getColumnCount(width);
+                  const rowCount = Math.ceil(sortedFiles.length / columnCount);
+                  const cellWidth = width / columnCount;
+                  const cellHeight = cellWidth;
+
                   return (
-                    <Image
-                      key={`${file.path}_${sortBy}_${sortOrder}`}
-                      {...file}
-                      src={`/api/download?path=${encodeURIComponent(file.path)}`}
-                      alt={file.name}
-                      onClick={() => handleFileClick(file.path, file.type)}
-                      className={cn(
-                        "w-full h-full",
-                        "min-w-[150px]",
-                        "max-w-[250px]",
-                        "object-cover",
-                        "cursor-pointer",
-                      )}
-                    />
-                  )
-                } else {
-                  return (
-                    <ContextMenu key={file.path}>
-                      <ContextMenuTrigger>
-                        <FileItemGridView
-                          {...file}
-                          onClick={() => handleFileClick(file.path, file.type)}
-                          className="text-black hover:text-gray-600 hover:bg-accent"
-                        />
-                      </ContextMenuTrigger>
-                      <ContextMenuContent>
-                        <ContextMenuItem onClick={() => handleDownload(file.path)}>
-                          <Download className="mr-2" size={16} />
-                          Download
-                        </ContextMenuItem>
-                        <ContextMenuItem onClick={() => handleDelete(file.path)}>
-                          <Trash2 className="mr-2" size={16} />
-                          Delete
-                        </ContextMenuItem>
-                      </ContextMenuContent>
-                    </ContextMenu>
-                  )
-                }
-              })}
+                    <Grid
+                      height={height}
+                      width={width + 12}
+                      columnCount={columnCount}
+                      rowCount={rowCount}
+                      columnWidth={cellWidth}
+                      rowHeight={cellHeight}
+                      itemData={
+                        {
+                          files: sortedFiles,
+                          columnCount,
+                          onFileClick: handleFileClick,
+                          onDownload: handleDownload,
+                          onDelete: handleDelete
+                        }
+                      }
+                      outerElementType={outerElementType}
+                      className="custom-scrollbar"
+                    >
+                      {ImageCell}
+                    </Grid>
+                  );
+                }}
+              </AutoSizer>
             </div>
           )}
           {/* Image Only view */}
           {viewMode === 'imageOnly' && (
-            <div className={cn(
-              useMasonry ? "columns-2 sm:columns-3 md:columns-4 lg:columns-6 gap-2" : "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2",
-            )}
-            style={{
-              direction: gridDirection
-            }}
-            >
-              {sortedFiles.map((file) => (
-                <div key={`${file.path}_${sortBy}_${sortOrder}`} className={cn(
-                  useMasonry && "break-inside-avoid mb-2"
-                )}>
-                  <Image
-                    {...file}
-                    src={`/api/download?path=${encodeURIComponent(file.path)}`}
-                    alt={file.name}
-                    onClick={() => handleFileClick(file.path, file.type)}
-                    className="w-full h-auto rounded-md"
-                  />
+            <>
+              {useMasonry ? (
+                <div className="w-full h-[calc(100vh-250px)] relative">
+                  <AutoSizer>
+                    {({ height, width }) => {
+                      const columnCount = getColumnCount(width);
+                      const columnWidth = width / columnCount;
+                      
+                      // Array of column indices
+                      const columns = Array.from({ length: columnCount }, (_, i) => i);
+                      
+                      return (
+                        <div 
+                          style={{ height, width, position: 'relative', overflowY: 'auto' }}
+                          className="custom-scrollbar"
+                        >
+                          {columns.map(index => (
+                            <MasonryCell
+                              key={index}
+                              index={index}
+                              style={{}}
+                              data={{
+                                files: sortedFiles,
+                                columnCount,
+                                columnWidth,
+                                direction: gridDirection,
+                                onFileClick: handleFileClick,
+                                onDownload: handleDownload,
+                                onDelete: handleDelete
+                              }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    }}
+                  </AutoSizer>
                 </div>
-              ))}
-            </div>
+              ) : (
+                <div className="w-full h-[calc(100vh-250px)]">
+                  <AutoSizer>
+                    {({ height, width }) => {
+                      const columnCount = getColumnCount(width);
+                      const rowCount = Math.ceil(sortedFiles.length / columnCount);
+                      const cellWidth = width / columnCount;
+                      const cellHeight = cellWidth;
+
+                      return (
+                        <Grid
+                          height={height}
+                          width={width + 12}
+                          columnCount={columnCount}
+                          rowCount={rowCount}
+                          columnWidth={cellWidth}
+                          rowHeight={cellHeight}
+                          itemData={
+                            {
+                              files: sortedFiles,
+                              columnCount,
+                              onFileClick: handleFileClick,
+                              onDownload: handleDownload,
+                              onDelete: handleDelete
+                            }
+                          }
+                          outerElementType={outerElementType}
+                          className="custom-scrollbar"
+                        >
+                          {ImageCell}
+                        </Grid>
+                      );
+                    }}
+                  </AutoSizer>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
