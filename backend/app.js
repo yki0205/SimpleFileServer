@@ -40,7 +40,7 @@ app.get('/api/files', (req, res) => {
 
       return {
         name: file,
-        path: path.join(dir, file).replace(/\\/g, '/'),
+        path: normalizePath(path.join(dir, file)),
         size: fileStats.size,
         mtime: fileStats.mtime,
         type: isDirectory ? 'directory' : getFileType(extension)
@@ -79,7 +79,7 @@ app.get('/api/images', (req, res) => {
   const { dir = '' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
-  
+
   if (!searchPath.startsWith(basePath)) {
     return res.status(403).json({ error: "Access denied" });
   }
@@ -98,11 +98,33 @@ app.get('/api/images', (req, res) => {
 })
 
 app.get('/api/download', (req, res) => {
-  const { path: filePath } = req.query;
+  const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, filePath);
   
-  if (!fullPath.startsWith(basePath)) {
+  // Get normalized temp directory prefix (for Windows path consistency)
+  let tempDirBase = os.tmpdir();
+  // On Windows, make sure we consistently use forward slashes
+  if (process.platform === 'win32') {
+    tempDirBase = tempDirBase.replace(/\\/g, '/');
+  }
+  
+  // Detect if this is an absolute path (temp file) or relative path
+  let fullPath;
+  const tempDirPrefix = 'comic-extract-';
+  
+  // Check if it's a temp comic file path
+  const isTempComicFile = requestedPath.includes(tempDirPrefix);
+  
+  if (isTempComicFile) {
+    // For temp files, use the path directly
+    fullPath = requestedPath;
+  } else {
+    // Regular case - relative path from base directory
+    fullPath = path.join(basePath, requestedPath);
+  }
+
+  // Only prevent access to non-temp files outside the base directory
+  if (!fullPath.startsWith(basePath) && !isTempComicFile) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -124,12 +146,13 @@ app.get('/api/download', (req, res) => {
     } else {
       const fileName = path.basename(fullPath);
       const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
-      
+
       const extension = path.extname(fullPath).toLowerCase();
       const contentType = getContentType(extension);
-      
+
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+      // res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
+      res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
       res.sendFile(fullPath);
     }
   } catch (error) {
@@ -141,11 +164,11 @@ app.post('/api/upload', (req, res) => {
   const { dir = '' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const uploadPath = path.join(basePath, dir);
-  
+
   if (!uploadPath.startsWith(basePath)) {
     return res.status(403).json({ error: "Access denied" });
   }
-  
+
   if (!fs.existsSync(uploadPath)) {
     try {
       fs.mkdirSync(uploadPath, { recursive: true });
@@ -153,49 +176,49 @@ app.post('/api/upload', (req, res) => {
       return res.status(500).json({ error: `Failed to create directory: ${error.message}` });
     }
   }
-  
+
   // Configure multer storage
   const storage = multer.diskStorage({
-    destination: function(req, file, cb) {
+    destination: function (req, file, cb) {
       cb(null, uploadPath);
     },
-    filename: function(req, file, cb) {
+    filename: function (req, file, cb) {
       // Keep original filename
       cb(null, file.originalname);
     }
   });
-  
+
   // File filter to reject unwanted files
   const fileFilter = (req, file, cb) => {
     // You can add file type restrictions here if needed
     cb(null, true);
   };
-  
-  const upload = multer({ 
+
+  const upload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
       fileSize: config.uploadSizeLimit
     }
   }).array('files', config.uploadCountLimit);
-  
-  upload(req, res, function(err) {
+
+  upload(req, res, function (err) {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ error: `Upload error: ${err.message}` });
     } else if (err) {
       return res.status(500).json({ error: `Server error: ${err.message}` });
     }
-    
+
     const uploadedFiles = req.files.map(file => ({
       name: file.originalname,
       path: path.join(dir, file.originalname).replace(/\\/g, '/'),
       size: file.size,
       mimetype: file.mimetype
     }));
-    
-    res.status(200).json({ 
-      message: 'Files uploaded successfully', 
-      files: uploadedFiles 
+
+    res.status(200).json({
+      message: 'Files uploaded successfully',
+      files: uploadedFiles
     });
   });
 })
@@ -204,7 +227,7 @@ app.post('/api/mkdir', (req, res) => {
   const { path: dirPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, dirPath);
-  
+
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -221,7 +244,7 @@ app.post('/api/rmdir', (req, res) => {
   const { path: dirPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, dirPath);
-  
+
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -256,7 +279,7 @@ app.delete('/api/delete', (req, res) => {
   const { path: filePath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, filePath);
-  
+
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -279,7 +302,7 @@ app.post('/api/clone', (req, res) => {
   const basePath = path.resolve(config.baseDirectory);
   const sourcePath = path.join(basePath, source);
   const destPath = path.join(basePath, destination);
-  
+
   if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -317,7 +340,7 @@ app.post('/api/move', (req, res) => {
   const basePath = path.resolve(config.baseDirectory);
   const sourcePath = path.join(basePath, source);
   const destPath = path.join(basePath, destination);
-  
+
   if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -346,32 +369,32 @@ app.get('/api/content', (req, res) => {
   const { path: filePath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, filePath);
-  
+
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
   }
-  
+
   try {
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     const stats = fs.statSync(fullPath);
     if (stats.isDirectory()) {
       return res.status(400).json({ error: 'Cannot read content of a directory' });
     }
-    
+
     // Check file size to prevent loading very large files
     if (stats.size > config.contentMaxSize) {
       return res.status(413).json({ error: 'File too large to preview' });
     }
-    
+
     // Set appropriate content type for text files
     const extension = path.extname(fullPath).toLowerCase();
     const contentType = getContentType(extension);
     const fileName = path.basename(fullPath);
     const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
-    
+
     // res.setHeader('Content-Type', contentType);
     // Always set content type as text/plain to ensure content is treated as string
     res.setHeader('Content-Type', 'text/plain');
@@ -389,15 +412,14 @@ app.get('/api/content', (req, res) => {
   }
 });
 
-// TODO
-// API endpoint to extract comic book files
-app.get('/api/extract-comic', async (req, res) => {
+app.get('/api/comic', async (req, res) => {
   try {
     const filePath = req.query.path;
     if (!filePath) {
       return res.status(400).json({ error: 'No file path provided' });
     }
 
+    const basePath = path.resolve(config.baseDirectory);
     const fullPath = path.join(basePath, filePath);
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ error: 'File not found' });
@@ -406,55 +428,69 @@ app.get('/api/extract-comic', async (req, res) => {
     const extension = path.extname(fullPath).toLowerCase();
     const pages = [];
 
+    // Get normalized temp directory prefix (for Windows path consistency)
+    let tempDirBase = os.tmpdir();
+    // On Windows, make sure we consistently use forward slashes
+    if (process.platform === 'win32') {
+      tempDirBase = tempDirBase.replace(/\\/g, '/');
+    }
+    
+    // Create extraction directory name
+    const extractionId = Date.now();
+    const tempDirName = `comic-extract-${extractionId}`;
+    
     if (extension === '.cbz') {
       // Handle CBZ files (ZIP format)
       try {
         const zip = new AdmZip(fullPath);
         const entries = zip.getEntries();
-        
+
         // Filter image files
         const imageEntries = entries.filter(entry => {
           const ext = path.extname(entry.entryName).toLowerCase();
           return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
         });
-        
+
         // Sort by filename
         imageEntries.sort((a, b) => {
           // Extract numbers from filenames for natural sorting
           const aMatch = a.entryName.match(/(\d+)/g);
           const bMatch = b.entryName.match(/(\d+)/g);
-          
+
           if (aMatch && bMatch) {
             const aNum = parseInt(aMatch[aMatch.length - 1]);
             const bNum = parseInt(bMatch[bMatch.length - 1]);
             return aNum - bNum;
           }
-          
+
           return a.entryName.localeCompare(b.entryName);
         });
-        
+
         // Create a temporary directory for extracted images
-        const tempDir = path.join(os.tmpdir(), 'comic-extract-' + Date.now());
+        const tempDir = path.join(tempDirBase, tempDirName);
         fs.mkdirSync(tempDir, { recursive: true });
-        
+
         // Extract and create URLs for each image
         for (let i = 0; i < imageEntries.length; i++) {
           const entry = imageEntries[i];
           const entryPath = path.join(tempDir, entry.entryName);
-          
+
           // Create directory structure if needed
           const entryDir = path.dirname(entryPath);
           fs.mkdirSync(entryDir, { recursive: true });
-          
+
           // Extract the file
           zip.extractEntryTo(entry, entryDir, false, true);
-          
-          // Add to pages (relative path for URL)
-          const relPath = path.relative(basePath, entryPath).replace(/\\/g, '/');
-          pages.push(`/api/download?path=${encodeURIComponent(relPath)}`);
+
+          // Check if file exists after extraction
+          if (!fs.existsSync(entryPath)) {
+            continue;
+          }
+
+          // Create a direct download URL for the image - don't use relative path since it's a temp file
+          pages.push(`/api/download?path=${encodeURIComponent(entryPath)}`);
         }
       } catch (error) {
-        console.error('Error extracting CBZ file:', error);
         return res.status(500).json({ error: 'Failed to extract CBZ file' });
       }
     } else if (extension === '.cbr') {
@@ -462,60 +498,63 @@ app.get('/api/extract-comic', async (req, res) => {
       try {
         // Read RAR file
         const rarData = fs.readFileSync(fullPath);
-        
+
         // Create extractor
         const extractor = await unrar.createExtractorFromData({ data: rarData });
         const list = extractor.getFileList();
-        
+
         if (!list.success) {
           throw new Error('Failed to read CBR file list');
         }
-        
+
         // Filter image files
         const imageEntries = list.fileHeaders.filter(header => {
           const ext = path.extname(header.name).toLowerCase();
           return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
         });
-        
+
         // Sort by filename
         imageEntries.sort((a, b) => {
           // Extract numbers from filenames for natural sorting
           const aMatch = a.name.match(/(\d+)/g);
           const bMatch = b.name.match(/(\d+)/g);
-          
+
           if (aMatch && bMatch) {
             const aNum = parseInt(aMatch[aMatch.length - 1]);
             const bNum = parseInt(bMatch[bMatch.length - 1]);
             return aNum - bNum;
           }
-          
+
           return a.name.localeCompare(b.name);
         });
-        
+
         // Create a temporary directory for extracted images
-        const tempDir = path.join(os.tmpdir(), 'comic-extract-' + Date.now());
+        const tempDir = path.join(tempDirBase, tempDirName);
         fs.mkdirSync(tempDir, { recursive: true });
-        
+
         // Extract files
         const extraction = extractor.extractAll({
           targetPath: tempDir,
           overwrite: true
         });
-        
+
         if (!extraction.success) {
           throw new Error('Failed to extract CBR file');
         }
-        
+
         // Create URLs for each image
         for (const entry of imageEntries) {
           const entryPath = path.join(tempDir, entry.name);
-          
-          // Add to pages (relative path for URL)
-          const relPath = path.relative(basePath, entryPath).replace(/\\/g, '/');
-          pages.push(`/api/download?path=${encodeURIComponent(relPath)}`);
+
+          // Check if file exists after extraction
+          if (!fs.existsSync(entryPath)) {
+            continue;
+          }
+
+          // Create a direct download URL for the image - don't use relative path since it's a temp file
+          pages.push(`/api/download?path=${encodeURIComponent(entryPath)}`);
         }
       } catch (error) {
-        console.error('Error extracting CBR file:', error);
         return res.status(500).json({ error: 'Failed to extract CBR file' });
       }
     } else {
@@ -524,52 +563,51 @@ app.get('/api/extract-comic', async (req, res) => {
 
     return res.json({ pages });
   } catch (error) {
-    console.error('Error in extract-comic endpoint:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
 
 function searchFiles(dir, query, basePath) {
   let results = [];
-  
+
   try {
     const files = fs.readdirSync(dir);
-    
+
     for (const file of files) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
-      
+
       if (file.toLowerCase().includes(query)) {
         results.push({
           name: file,
-          path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+          path: normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
           type: stats.isDirectory() ? 'directory' : getFileType(path.extname(file).toLowerCase())
         });
       }
-      
+
       if (stats.isDirectory()) {
         results = results.concat(searchFiles(fullPath, query, basePath));
       }
     }
   } catch (error) {
-    console.error(`Error searching in ${dir}:`, error);
+    return res.status(500).json({ error: 'Server error' });
   }
-  
+
   return results;
 }
 
 function findAllImages(dir, basePath) {
   let results = [];
-  
+
   try {
     const files = fs.readdirSync(dir);
-    
+
     for (const file of files) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
-      
+
       if (stats.isDirectory()) {
         results = results.concat(findAllImages(fullPath, basePath));
       } else {
@@ -577,7 +615,7 @@ function findAllImages(dir, basePath) {
         if (getFileType(extension) === 'image') {
           results.push({
             name: file,
-            path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+            path: normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
             type: 'image'
@@ -586,9 +624,9 @@ function findAllImages(dir, basePath) {
       }
     }
   } catch (error) {
-    console.error(`Error searching for images in ${dir}:`, error);
+    return res.status(500).json({ error: 'Server error' });
   }
-  
+
   return results;
 }
 
@@ -596,30 +634,30 @@ async function parallelSearch(dir, query, basePath) {
   if (isMainThread) {
     try {
       const subdirs = getSubdirectories(dir);
-      
+
       if (subdirs.length === 0) {
         return searchFiles(dir, query, basePath);
       }
-      
+
       const numCores = os.cpus().length;
       const numWorkers = Math.min(subdirs.length, numCores);
       const tasksPerWorker = Math.ceil(subdirs.length / numWorkers);
       const workers = [];
-      
+
       for (let i = 0; i < numWorkers; i++) {
         const start = i * tasksPerWorker;
         const end = Math.min(start + tasksPerWorker, subdirs.length);
         const workerSubdirs = subdirs.slice(start, end);
-        
+
         workers.push(createSearchWorker(workerSubdirs, query, basePath));
       }
-      
+
       const rootResults = searchFilesInDirectory(dir, query, basePath);
       const workerResults = await Promise.all(workers);
-      
+
       return rootResults.concat(...workerResults);
     } catch (error) {
-      console.error('Error in parallel search:', error);
+      return res.status(500).json({ error: 'Server error' });
       return [];
     }
   }
@@ -629,31 +667,30 @@ async function parallelFindImages(dir, basePath) {
   if (isMainThread) {
     try {
       const subdirs = getSubdirectories(dir);
-      
+
       if (subdirs.length === 0) {
         return findAllImages(dir, basePath);
       }
-      
+
       const numCores = os.cpus().length;
       const numWorkers = Math.min(subdirs.length, numCores);
       const tasksPerWorker = Math.ceil(subdirs.length / numWorkers);
       const workers = [];
-      
+
       for (let i = 0; i < numWorkers; i++) {
         const start = i * tasksPerWorker;
         const end = Math.min(start + tasksPerWorker, subdirs.length);
         const workerSubdirs = subdirs.slice(start, end);
-        
+
         workers.push(createImageWorker(workerSubdirs, basePath));
       }
-      
+
       const rootResults = findImagesInDirectory(dir, basePath);
       const workerResults = await Promise.all(workers);
-      
+
       return rootResults.concat(...workerResults);
     } catch (error) {
-      console.error('Error in parallel image search:', error);
-      return [];
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 }
@@ -664,25 +701,24 @@ function getSubdirectories(dir) {
       .map(file => path.join(dir, file))
       .filter(filePath => fs.statSync(filePath).isDirectory());
   } catch (error) {
-    console.error(`Error getting subdirectories for ${dir}:`, error);
-    return [];
+    return res.status(500).json({ error: 'Server error' });
   }
 }
 
 function searchFilesInDirectory(dir, query, basePath) {
   let results = [];
-  
+
   try {
     const files = fs.readdirSync(dir);
-    
+
     for (const file of files) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
-      
+
       if (!stats.isDirectory() && file.toLowerCase().includes(query)) {
         results.push({
           name: file,
-          path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+          path: normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
           type: getFileType(path.extname(file).toLowerCase())
@@ -690,28 +726,28 @@ function searchFilesInDirectory(dir, query, basePath) {
       }
     }
   } catch (error) {
-    console.error(`Error searching in directory ${dir}:`, error);
+    return res.status(500).json({ error: 'Server error' });
   }
-  
+
   return results;
 }
 
 function findImagesInDirectory(dir, basePath) {
   let results = [];
-  
+
   try {
     const files = fs.readdirSync(dir);
-    
+
     for (const file of files) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
-      
+
       if (!stats.isDirectory()) {
         const extension = path.extname(file).toLowerCase();
         if (getFileType(extension) === 'image') {
           results.push({
             name: file,
-            path: path.relative(basePath, fullPath).replace(/\\/g, '/'),
+            path: normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
             type: 'image'
@@ -720,9 +756,9 @@ function findImagesInDirectory(dir, basePath) {
       }
     }
   } catch (error) {
-    console.error(`Error finding images in directory ${dir}:`, error);
+    return res.status(500).json({ error: 'Server error' });
   }
-  
+
   return results;
 }
 
@@ -731,7 +767,7 @@ function createSearchWorker(directories, query, basePath) {
     const worker = new Worker(__filename, {
       workerData: { task: 'search', directories, query, basePath }
     });
-    
+
     worker.on('message', resolve);
     worker.on('error', reject);
     worker.on('exit', (code) => {
@@ -747,7 +783,7 @@ function createImageWorker(directories, basePath) {
     const worker = new Worker(__filename, {
       workerData: { task: 'findImages', directories, basePath }
     });
-    
+
     worker.on('message', resolve);
     worker.on('error', reject);
     worker.on('exit', (code) => {
@@ -760,71 +796,75 @@ function createImageWorker(directories, basePath) {
 
 if (!isMainThread) {
   const { task, directories, query, basePath } = workerData;
-  
+
   if (task === 'search') {
     let results = [];
-    
+
     for (const dir of directories) {
       results = results.concat(searchFiles(dir, query, basePath));
     }
-    
+
     parentPort.postMessage(results);
   } else if (task === 'findImages') {
     let results = [];
-    
+
     for (const dir of directories) {
       results = results.concat(findAllImages(dir, basePath));
     }
-    
+
     parentPort.postMessage(results);
   }
+}
+
+function normalizePath(filepath) {
+  return filepath.replace(/\\/g, '/');
 }
 
 function getFileType(extension) {
   // Image file extensions
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico', '.raw', '.psd'];
-  
+
   // Video file extensions
   const videoExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.mpg', '.mpeg', '.3gp', '.ts'];
-  
+
   // Audio file extensions
   const audioExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.alac', '.mid', '.midi'];
-  
+
   // Document file extensions
   const documentExtensions = [
     // '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
     '.txt', '.md', '.rtf', '.odt', '.ods', '.odp', '.csv', '.log', '.tex'];
-  
+
   // Archive and executable file extensions
-  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app', 
+  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app',
     '.apk', '.xz', '.tgz', '.jar', '.war', '.ear'];
-  
+
   // Code and programming file extensions
   const codeExtensions = [
     // C/C++ family
     '.c', '.cpp', '.h', '.hpp', '.cc', '.cxx', '.hxx', '.cu', '.cuh',
-    
+
     // Web development
     '.jsx', '.tsx', '.js', '.ts', '.html', '.css', '.scss', '.sass', '.less', '.vue', '.svelte',
-    
+
     // Scripting languages
     '.py', '.rb', '.php', '.lua', '.pl', '.pm', '.perl', '.tcl', '.awk',
-    
+
     // JVM languages
     '.java', '.kt', '.groovy', '.scala', '.clj', '.gradle',
-    
+
     // Data formats
     '.json', '.xml', '.yaml', '.yml', '.toml', '.proto', '.graphql', '.gql',
-    
+
     // Configuration files
     '.ini', '.conf', '.properties', '.env', '.config',
-    
+
     // Shell scripts
     '.sh', '.bash', '.zsh', '.fish', '.ksh',
-    
+
     // PowerShell
     '.powershell', '.ps1', '.psm1', '.psd1', '.ps1xml',
-    
+
     // Other languages
     '.go', '.rs', '.swift', '.cs', '.fs', '.vb', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
     '.f', '.f90', '.f95', '.hs', '.lhs', '.lisp', '.cl', '.nim', '.ml', '.mli', '.d', '.erl', '.hrl',
@@ -832,7 +872,7 @@ function getFileType(extension) {
   ];
 
   const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
-  
+
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
   if (audioExtensions.includes(extension)) return 'audio';
@@ -853,7 +893,7 @@ function getContentType(extension) {
     '.conf': 'text/plain',
     '.log': 'text/plain',
     '.env': 'text/plain',
-    
+
     // Markup and styling
     '.html': 'text/html',
     '.css': 'text/css',
@@ -861,7 +901,7 @@ function getContentType(extension) {
     '.xml': 'application/xml',
     '.svg': 'image/svg+xml',
     '.rtf': 'application/rtf',
-    
+
     // Data formats
     '.json': 'application/json',
     '.csv': 'text/csv',
@@ -871,7 +911,7 @@ function getContentType(extension) {
     '.proto': 'text/plain',
     '.graphql': 'text/plain',
     '.gql': 'text/plain',
-    
+
     // Programming languages
     '.js': 'text/javascript',
     '.jsx': 'text/javascript',
@@ -905,7 +945,7 @@ function getContentType(extension) {
     '.elm': 'text/plain',
     '.ex': 'text/plain',
     '.exs': 'text/plain',
-    
+
     // Images
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
@@ -917,7 +957,7 @@ function getContentType(extension) {
     '.ico': 'image/x-icon',
     '.raw': 'image/x-raw',
     '.psd': 'image/vnd.adobe.photoshop',
-    
+
     // Videos
     '.mp4': 'video/mp4',
     '.webm': 'video/webm',
@@ -931,7 +971,7 @@ function getContentType(extension) {
     '.mpeg': 'video/mpeg',
     '.3gp': 'video/3gpp',
     '.ts': 'video/mp2t',
-    
+
     // Audio
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
@@ -944,7 +984,7 @@ function getContentType(extension) {
     '.alac': 'audio/alac',
     '.mid': 'audio/midi',
     '.midi': 'audio/midi',
-    
+
     // Documents
     '.pdf': 'application/pdf',
     '.doc': 'application/msword',
@@ -992,7 +1032,7 @@ function getContentType(extension) {
     '.cblz': 'application/x-cblz',
     '.cblt': 'application/x-cblt',
   };
-  
+
   return contentTypes[extension] || 'application/octet-stream';
 }
 
@@ -1011,10 +1051,10 @@ function copyFolderRecursiveSync(source, destination) {
   for (const file of files) {
     const sourcePath = path.join(source, file);
     const destPath = path.join(destination, file);
-    
+
     // Get file stats
     const stats = fs.statSync(sourcePath);
-    
+
     if (stats.isDirectory()) {
       // Recursively copy subdirectories
       copyFolderRecursiveSync(sourcePath, destPath);

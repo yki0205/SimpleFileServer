@@ -6,8 +6,6 @@ import axios from "axios";
 import React, { Suspense, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FixedSizeList as List, FixedSizeGrid as Grid } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
@@ -18,19 +16,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home,
-  Download, Upload, X, ChevronLeft, ChevronRight, FolderPlus,
-  Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
+  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
 } from "lucide-react";
 
 import { Error } from "@/components/status/Error";
 import { Loading } from "@/components/status/Loading";
 import { NotFound } from "@/components/status/NotFound";
 import { Image } from "@/components/image/Image";
-import { Video } from "@/components/video/Video";
 import { FileItemListView } from "@/components/fileItem/FileItemListView";
 import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
 import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
-import { ComicReader } from "@/components/reader/ComicReader";
+
+import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview } from "@/components/preview";
 
 
 interface FileData {
@@ -60,8 +57,6 @@ interface PreviewState {
   content?: string;
   currentIndex?: number;
 }
-
-
 
 
 
@@ -212,7 +207,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
 });
 
 interface MasonryCellProps {
-  index: number; 
+  index: number;
   style: React.CSSProperties;
   data: {
     files: FileData[];
@@ -229,12 +224,12 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
   const { files, columnCount, columnWidth, direction, onFileClick } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
-  
+
   // Get files for this column using distribution algorithm
   const columnFiles = files.filter((_, fileIndex) => fileIndex % columnCount === index);
-  
+
   return (
-    <div 
+    <div
       style={{
         ...style,
         width: columnWidth,
@@ -243,7 +238,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
         top: 0,
         height: 'auto',
         direction
-      }} 
+      }}
       className="flex flex-col gap-2 px-1"
     >
       {columnFiles.map((file) => (
@@ -264,6 +259,26 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
 
 
 
+function getFileExtension(filename: string) {
+  return filename.split('.').pop()?.toLowerCase() || '';
+}
+
+function getColumnCount(width: number) {
+  if (width < 768) return 3; // md
+  if (width < 1024) return 4; // lg
+  if (width < 1280) return 6; // xl
+  return 8; // 2xl and above
+}
+
+
+const previewSupported: Record<string, boolean> = {
+  'image': true,
+  'video': true,
+  'audio': true,
+  'code': true,
+  'document': true,
+  'comic': true
+}
 
 
 
@@ -284,7 +299,7 @@ function FileExplorerContent() {
   const [useMasonry, setUseMasonry] = useState(false);
   const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
   const [showScrollTop, setShowScrollTop] = useState(false);
-  
+
   // Create refs for the virtualized lists/grids
   const listRef = useRef<List>(null);
   const gridRef = useRef<Grid>(null);
@@ -301,17 +316,11 @@ function FileExplorerContent() {
     path: '',
     type: '',
   });
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(false);
 
   const currentPath = searchParams.get('p') || '';
   const searchQuery = searchParams.get('q') || '';
   const isSearching = !!searchQuery;
   const canGoBack = currentPath !== '' || isSearching;
-
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
-  const minSwipeDistance = 50; // Minimum distance required for a swipe
 
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
@@ -329,7 +338,7 @@ function FileExplorerContent() {
       const response = await axios.get('/api/images', { params: { dir: currentPath } });
       return response.data;
     },
-    enabled: viewMode === 'imageOnly'
+    enabled: viewMode === 'imageOnly' && !isSearching
   });
 
   const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useQuery<SearchResponse>({
@@ -379,6 +388,16 @@ function FileExplorerContent() {
       files = filesData?.files || [];
     }
 
+    if (viewMode === 'imageOnly' && sortBy === 'name') {
+      return [...files].sort((a, b) => {
+        const pathA = a.path.split('/').concat(a.name).join('/');
+        const pathB = b.path.split('/').concat(b.name).join('/');
+        return sortOrder === 'asc'
+          ? pathA.localeCompare(pathB)
+          : pathB.localeCompare(pathA);
+      });
+    }
+
     return [...files].sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
@@ -401,9 +420,6 @@ function FileExplorerContent() {
       return 0;
     });
   }, [filesData?.files, searchData?.results, imagesData?.images, sortBy, sortOrder, viewMode, isSearching]);
-
-
-
 
 
 
@@ -440,13 +456,13 @@ function FileExplorerContent() {
 
   const scrollToTop = () => {
     console.log("Scrolling to top", { viewMode, useMasonry });
-    console.log("Refs:", { 
-      list: listRef.current, 
-      grid: gridRef.current, 
-      imageGrid: imageGridRef.current, 
-      masonry: masonryRef.current 
+    console.log("Refs:", {
+      list: listRef.current,
+      grid: gridRef.current,
+      imageGrid: imageGridRef.current,
+      masonry: masonryRef.current
     });
-    
+
     if (viewMode === 'list') {
       if (listRef.current) {
         console.log("Scrolling list to top");
@@ -477,7 +493,7 @@ function FileExplorerContent() {
       console.log("Scrolling masonry to top");
       masonryRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    
+
     // Reset scroll position
     scrollPosition.current = 0;
     setShowScrollTop(false);
@@ -485,10 +501,65 @@ function FileExplorerContent() {
 
 
 
+  const openPreview = useCallback((path: string, type: string) => {
+    const currentIndex = sortedFiles.findIndex(file => file.path === path);
+    if (currentIndex === -1) {
+      console.error('File not found in sortedFiles:', path);
+      return;
+    }
+
+    setPreview({
+      isOpen: true,
+      path,
+      type,
+      currentIndex
+    });
+  }, [sortedFiles]);
+
+  const closePreview = useCallback(() => {
+    setPreview({
+      isOpen: false,
+      path: '',
+      type: ''
+    });
+  }, []);
+
+  const navigatePreview = (direction: 'next' | 'prev') => {
+    if (preview.currentIndex === undefined) return;
+    
+    if (viewMode === 'imageOnly') {
+      if (!sortedFiles) return;
+      let newIndex;
+      if (direction === 'next') {
+        newIndex = (preview.currentIndex + 1) % sortedFiles.length;
+      } else {
+        newIndex = (preview.currentIndex - 1 + sortedFiles.length) % sortedFiles.length;
+      }
+      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].type);
+      return;
+    }
+
+    const sameTypeFiles = sortedFiles.filter(file => file.type === preview.type);
+    if (sameTypeFiles.length <= 1) return;
+    const currentIndex = sameTypeFiles.findIndex(file => file.path === preview.path);
+
+    let newIndex;
+    if (direction === 'next') {
+      newIndex = (currentIndex + 1) % sameTypeFiles.length;
+    } else {
+      newIndex = (currentIndex - 1 + sameTypeFiles.length) % sameTypeFiles.length;
+    }
+
+    openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
+  }
+
 
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (viewMode === 'imageOnly') {
+      setViewMode('image');
+    }
     const formData = new FormData(e.target as HTMLFormElement);
     const query = formData.get('searchQuery') as string;
     navigateTo(currentPath, query);
@@ -562,188 +633,15 @@ function FileExplorerContent() {
   const handleFileClick = useCallback((path: string, type: string) => {
     if (type === 'directory') {
       navigateTo(path, '');
-    } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'code' || type === 'document' || type === 'comic') {
+    } else if (previewSupported[type as keyof typeof previewSupported]) {
       openPreview(path, type);
     } else {
       setFileToDownload(path);
       setDownloadComfirmDialogOpen(true);
     }
-  }, []);
+  }, [openPreview]);
 
-  const openPreview = useCallback(async (path: string, type: string) => {
-    setPreviewLoading(true);
-    setPreviewError(false);
-    const currentIndex = sortedFiles.findIndex(file => file.path === path);
-
-    setPreview({
-      isOpen: true,
-      path,
-      type,
-      currentIndex
-    });
-    if (type === 'code' || type === 'document') {
-      // The state of code and document is controlled by contentLoading and contentError
-      setPreviewLoading(false);
-      setPreviewError(false);
-    }
-  }, [sortedFiles]);
-
-  const closePreview = useCallback(() => {
-    setPreview({
-      isOpen: false,
-      path: '',
-      type: ''
-    });
-    setPreviewLoading(false);
-    setPreviewError(false);
-  }, []);
-
-  const navigatePreview = (direction: 'next' | 'prev') => {
-    if (preview.currentIndex === undefined) return;
-
-    // Set loading state immediately when navigating
-    setPreviewLoading(true);
-    setPreviewError(false);
-    if (viewMode === 'imageOnly') {
-      if (!sortedFiles) return;
-      let newIndex;
-      if (direction === 'next') {
-        newIndex = (preview.currentIndex + 1) % sortedFiles.length;
-      } else {
-        newIndex = (preview.currentIndex - 1 + sortedFiles.length) % sortedFiles.length;
-      }
-      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].type);
-      return;
-    }
-
-    const sameTypeFiles = sortedFiles.filter(file => file.type === preview.type);
-    if (sameTypeFiles.length <= 1) return;
-    const currentIndex = sameTypeFiles.findIndex(file => file.path === preview.path);
-
-    let newIndex;
-    if (direction === 'next') {
-      newIndex = (currentIndex + 1) % sameTypeFiles.length;
-    } else {
-      newIndex = (currentIndex - 1 + sameTypeFiles.length) % sameTypeFiles.length;
-    }
-
-    openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
-  }
-
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      closePreview();
-    }
-  }
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (preview.type !== 'image') return;
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (preview.type !== 'image') return;
-    touchEndX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
-    if (preview.type !== 'image') return;
-
-    const distance = touchStartX.current - touchEndX.current;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe) {
-      navigatePreview('next');
-    } else if (isRightSwipe) {
-      navigatePreview('prev');
-    }
-
-    // Reset values
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!preview.isOpen) return;
-    if (preview.type === 'video' || preview.type === 'code' || preview.type === 'document') return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (e.deltaY > 0) {
-      navigatePreview('next');
-    } else if (e.deltaY < 0) {
-      navigatePreview('prev');
-    }
-  };
-
-
-
-
-
-  const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toLowerCase() || '';
-  }
-
-  const getLanguage = (ext: string) => {
-    const langMap: Record<string, string> = {
-      // Plain text
-      'txt': 'text',
-      'ini': 'text',
-      'cfg': 'text',
-      'conf': 'text',
-
-      // Markup and styling
-      'html': 'html',
-      'css': 'css',
-      'md': 'markdown',
-      'xml': 'xml',
-
-      // Data formats
-      'json': 'text',
-      'csv': 'csv',
-      'yaml': 'yaml',
-      'yml': 'yaml',
-      'toml': 'toml',
-
-      // Programming languages
-      'js': 'javascript',
-      'jsx': 'javascript',
-      'ts': 'typescript',
-      'tsx': 'typescript',
-      'py': 'python',
-      'java': 'java',
-      'c': 'c',
-      'cpp': 'cpp',
-      'cs': 'csharp',
-      'go': 'go',
-      'rb': 'ruby',
-      'php': 'php',
-      'sh': 'bash',
-      'bash': 'bash',
-      'zsh': 'bash',
-      'fish': 'bash',
-      'powershell': 'bash',
-      'ps1': 'bash',
-      'psm1': 'bash',
-    };
-
-    return langMap[ext] || 'text';
-  };
-
-  const getColumnCount = useCallback((width: number) => {
-    if (width < 640) return 2; // sm
-    if (width < 768) return 3; // md
-    if (width < 1024) return 4; // lg
-    if (width < 1280) return 6; // xl
-    return 8; // 2xl and above
-  }, []);
-
-  // Detect scrolling in the virtualized lists
   const handleVirtualizedScroll = ({ scrollOffset, scrollTop }: any) => {
-    // Grid uses scrollTop, List uses scrollOffset
     const currentScroll = scrollTop ?? scrollOffset ?? 0;
     scrollPosition.current = currentScroll;
     setShowScrollTop(currentScroll > 100);
@@ -751,118 +649,7 @@ function FileExplorerContent() {
 
 
 
-
-
-  useEffect(() => {
-    switch (viewMode) {
-      case 'list':
-        activeScrollRef.current = listRef.current;
-        break;
-      case 'grid':
-        activeScrollRef.current = gridRef.current;
-        break;
-      case 'image':
-        activeScrollRef.current = imageGridRef.current;
-        break;
-      case 'imageOnly':
-        if (useMasonry) {
-          activeScrollRef.current = masonryRef.current;
-        } else {
-          activeScrollRef.current = imageGridRef.current;
-        }
-        break;
-      default:
-        activeScrollRef.current = null;
-    }
-  }, [viewMode, useMasonry]);
-
-  useEffect(() => {
-    // For masonry view, we need to add a manual scroll listener since it doesn't use react-window
-    if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
-      const masonryElement = masonryRef.current;
-      
-      const handleMasonryScroll = () => {
-        scrollPosition.current = masonryElement.scrollTop;
-        setShowScrollTop(masonryElement.scrollTop > 100);
-      };
-      
-      masonryElement.addEventListener('scroll', handleMasonryScroll);
-      return () => {
-        masonryElement.removeEventListener('scroll', handleMasonryScroll);
-      };
-    }
-  }, [viewMode, useMasonry, masonryRef.current]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!preview.isOpen) return;
-      if (preview.type !== 'video') {
-        switch (e.key) {
-          case 'ArrowLeft':
-            navigatePreview('prev');
-            break;
-          case 'ArrowRight':
-            navigatePreview('next');
-            break;
-          case 'ArrowUp':
-            // Optional: implement additional navigation
-            break;
-          case 'ArrowDown':
-            // Optional: implement additional navigation
-            break;
-          case 'Escape':
-            closePreview();
-            break;
-        }
-      }
-      // Video keyboard shortcuts are now handled by the Video component
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [preview.isOpen, preview.path]);
-
-  useEffect(() => {
-    // TODO: This is a workaround for the issue that the scroll event is still triggered on the background element
-    // even though the handleWheel function is preventing the default behavior. So I choose to disable the scroll of the whole body.
-    if (viewMode === 'list' || viewMode === 'image') return;
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    if (preview.isOpen) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = originalStyle;
-    };
-  }, [preview.isOpen]);
-
-  useEffect(() => {
-    closePreview();
-  }, [currentPath, searchQuery])
-
-  // Listen for browser back/forward buttons
-  useEffect(() => {
-    const handlePopState = () => {
-      if (viewMode === 'imageOnly') {
-        setViewMode('image');
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [viewMode]);
-
-  // Update ref when viewMode changes
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-  }, [viewMode]);
-
-  // Intercept history navigation methods
+  // intercept history navigation methods
   useEffect(() => {
     const originalPushState = history.pushState.bind(history);
     const originalReplaceState = history.replaceState.bind(history);
@@ -889,7 +676,7 @@ function FileExplorerContent() {
         }, 0);
       }
       return originalReplaceState(data, unused, url);
-    };
+  };
 
     return () => {
       // Restore original methods
@@ -898,7 +685,71 @@ function FileExplorerContent() {
     };
   }, []);
 
+  // update viewModeRef when viewMode changes
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
 
+  // listen for browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      if (viewMode === 'imageOnly') {
+        setViewMode('image');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [viewMode]);
+
+  // update activeScrollRef when viewMode changes
+  useEffect(() => {
+    switch (viewMode) {
+      case 'list':
+        activeScrollRef.current = listRef.current;
+        break;
+      case 'grid':
+        activeScrollRef.current = gridRef.current;
+        break;
+      case 'image':
+        activeScrollRef.current = imageGridRef.current;
+        break;
+      case 'imageOnly':
+        if (useMasonry) {
+          activeScrollRef.current = masonryRef.current;
+        } else {
+          activeScrollRef.current = imageGridRef.current;
+        }
+        break;
+      default:
+        activeScrollRef.current = null;
+    }
+  }, [viewMode, useMasonry]);
+
+  // add a manual scroll listener for masonry view, since it doesn't use react-window
+  useEffect(() => {
+    if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
+      const masonryElement = masonryRef.current;
+
+      const handleMasonryScroll = () => {
+        scrollPosition.current = masonryElement.scrollTop;
+        setShowScrollTop(masonryElement.scrollTop > 100);
+      };
+
+      masonryElement.addEventListener('scroll', handleMasonryScroll);
+      return () => {
+        masonryElement.removeEventListener('scroll', handleMasonryScroll);
+      };
+    }
+  }, [viewMode, useMasonry, masonryRef.current]);
+
+  // close preview when currentPath or searchQuery changes
+  useEffect(() => {
+    closePreview();
+  }, [currentPath, searchQuery])
 
 
 
@@ -913,16 +764,14 @@ function FileExplorerContent() {
 
 
 
-
-
-
   const renderList = useCallback(({ height, width }: { height: number; width: number }) => (
     <List
       ref={listRef}
       height={height}
-      width={width+10}
+      width={width + 10}
       itemCount={sortedFiles.length}
       itemSize={48}
+      overscanCount={20}
       itemData={{
         files: sortedFiles,
         isSearching,
@@ -947,11 +796,13 @@ function FileExplorerContent() {
       <Grid
         ref={gridRef}
         height={height}
-        width={width+10}
+        width={width + 10}
         columnCount={columnCount}
         rowCount={rowCount}
         columnWidth={cellWidth}
         rowHeight={cellHeight}
+        overscanRowCount={10}
+        overscanColumnCount={5}
         itemData={{
           files: sortedFiles,
           columnCount,
@@ -977,11 +828,13 @@ function FileExplorerContent() {
       <Grid
         ref={imageGridRef}
         height={height}
-        width={width+10}
+        width={width + 10}
         columnCount={columnCount}
         rowCount={rowCount}
         columnWidth={cellWidth}
         rowHeight={cellHeight}
+        overscanRowCount={10}
+        overscanColumnCount={5}
         itemData={{
           files: sortedFiles,
           columnCount,
@@ -1000,12 +853,12 @@ function FileExplorerContent() {
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
     const columnWidth = width / columnCount;
-    
+
     // Array of column indices
     const columns = Array.from({ length: columnCount }, (_, i) => i);
-    
+
     return (
-      <div 
+      <div
         ref={masonryRef}
         style={{ height, width, position: 'relative', overflowY: 'auto' }}
         className="custom-scrollbar"
@@ -1028,7 +881,9 @@ function FileExplorerContent() {
         ))}
       </div>
     );
-  }, [sortedFiles, getColumnCount, gridDirection, handleFileClick, handleDownload, handleDelete]);
+  }, [useMasonry, gridDirection, sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+
+
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -1173,25 +1028,73 @@ function FileExplorerContent() {
             Searching: "{searchQuery}" in {currentPath || 'root'}
           </div>
         ) : (
-          <div className="bg-muted px-1 py-1 rounded-md text-sm flex flex-wrap items-center">
+          <div className="bg-muted px-1 py-1 rounded-md text-sm flex flex-wrap items-center overflow-x-auto whitespace-nowrap">
             <button onClick={goHome}
-              className="cursor-pointer hover:bg-gray-300 rounded-md p-1"
+              className="cursor-pointer hover:bg-gray-300 rounded-md p-1 flex-shrink-0"
             >
               <Home size={18} />
             </button>
-            {currentPath.split('/').filter(Boolean).map((segment, index, array) => {
-              const pathToSegment = array.slice(0, index + 1).join('/');
-              return (
-                <React.Fragment key={index}>
-                  <span className="mx-1 text-muted-foreground">/</span>
-                  <button onClick={() => navigateTo(pathToSegment, '')}
-                    className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate"
-                  >
-                    {segment}
-                  </button>
-                </React.Fragment>
-              );
-            })}
+
+            {currentPath.split('/').filter(Boolean).length > 3 && currentPath.split('/').filter(Boolean).length > 0 ? (
+              <>
+                <span className="mx-1 text-muted-foreground">/</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="cursor-pointer hover:bg-gray-300 rounded-md p-1 flex-shrink-0">
+                      ...
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-2">
+                    <div className="flex flex-col gap-1">
+                      {currentPath.split('/').filter(Boolean).slice(0, -2).map((segment, index, array) => {
+                        const pathToSegment = array.slice(0, index + 1).join('/');
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => navigateTo(pathToSegment, '')}
+                            className="text-left hover:bg-gray-100 p-1 rounded"
+                          >
+                            {segment}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Show only the last 2 segments */}
+                {currentPath.split('/').filter(Boolean).slice(-2).map((segment, index, array) => {
+                  const fullArray = currentPath.split('/').filter(Boolean);
+                  const pathToSegment = fullArray.slice(0, fullArray.length - 2 + index + 1).join('/');
+                  return (
+                    <React.Fragment key={index}>
+                      <span className="mx-1 text-muted-foreground">/</span>
+                      <button onClick={() => navigateTo(pathToSegment, '')}
+                        className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate max-w-[150px]"
+                      >
+                        {segment}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+              </>
+            ) : (
+              // If path is short enough, show all segments
+              currentPath.split('/').filter(Boolean).map((segment, index, array) => {
+                const pathToSegment = array.slice(0, index + 1).join('/');
+                return (
+                  <React.Fragment key={index}>
+                    <span className="mx-1 text-muted-foreground">/</span>
+                    <button onClick={() => navigateTo(pathToSegment, '')}
+                      className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate max-w-[150px]"
+                      title={segment} // Add tooltip for truncated text
+                    >
+                      {segment}
+                    </button>
+                  </React.Fragment>
+                );
+              })
+            )}
           </div>
         )}
       </nav>
@@ -1263,231 +1166,72 @@ function FileExplorerContent() {
 
       {/* Preview Overlay */}
       {preview.isOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          onClick={handleBackdropClick}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onWheel={handleWheel}
-        >
-          {(preview.type === 'image' || preview.type === 'video' || preview.type === 'audio') && (
-            <div className="fixed top-4 left-4 z-[60] max-w-[50vw]">
-              <h3 className="text-white text-xl font-bold px-4 py-2 bg-black/50 rounded-md truncate">
-                {viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
-              </h3>
-            </div>
-          )}
-
-          <div className="absolute z-10 top-4 right-4 flex gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              className="bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank');
-              }}
-            >
-              <Download size={20} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="bg-black/50 hover:bg-black/70 border-white/20 text-red-500 hover:text-red-500/80"
-              onClick={(e) => {
-                e.stopPropagation();
-                closePreview();
-              }}
-            >
-              <X size={20} />
-            </Button>
-          </div>
-
-          {(preview.type === 'image' || preview.type === 'video' || preview.type === 'audio' || preview.type === 'code' || preview.type === 'document') && (
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                className="absolute z-10 left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (viewMode === 'imageOnly' && gridDirection === 'rtl') {
-                    navigatePreview('next');
-                  } else {
-                    navigatePreview('prev');
-                  }
-                }}
-              >
-                <ChevronLeft size={24} />
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
-                className="absolute z-10 right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (viewMode === 'imageOnly' && gridDirection === 'rtl') {
-                    navigatePreview('prev');
-                  } else {
-                    navigatePreview('next');
-                  }
-                }}
-              >
-                <ChevronRight size={24} />
-              </Button>
-            </>
-          )}
-
+        <>
           {/* Image preview */}
           {preview.type === 'image' && (
-            <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute z-[-1] flex items-center justify-center">
-                {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
-                ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white w-100" />
-                ) : (
-                  <></>
-                )}
-              </div>
-              <img
+            <ImagePreview
+              isOpen={preview.isOpen}
+              title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
                 src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                alt="Preview"
-                className={cn(
-                  (previewLoading || previewError) && "opacity-0",
-                  "max-w-full max-h-[90vh] object-contain shadow-2xl"
-                )}
-                onLoad={() => setPreviewLoading(false)}
-                onError={() => {
-                  setPreviewLoading(false);
-                  setPreviewError(true);
-                }}
+              onClose={closePreview}
+              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+              onNext={() => navigatePreview('next')}
+              onPrev={() => navigatePreview('prev')}
+              direction={viewMode === 'imageOnly' && gridDirection === 'rtl' ? 'rtl' : 'ltr'}
               />
-            </div>
           )}
 
           {/* Video preview */}
           {preview.type === 'video' && (
-            <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute z-[-1] flex items-center justify-center">
-                {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
-                ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white w-100" />
-                ) : (
-                  <></>
-                )}
-              </div>
-              <div className="flex flex-col items-center w-full">
-                {/* TODO */}
-                <Video
+            <VideoPreview
+              isOpen={preview.isOpen}
+              title={preview.path.split('/').pop()}
                   src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                  autoPlay={true}
-                  className={cn(
-                    (previewLoading || previewError) && "opacity-0",
-                    "max-w-full max-h-[80vh] shadow-2xl"
-                  )}
-                  onLoad={() => setPreviewLoading(false)}
-                  onError={() => {
-                    setPreviewLoading(false);
-                    setPreviewError(true);
-                  }}
                   onClose={closePreview}
+              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+              onNext={() => navigatePreview('next')}
+              onPrev={() => navigatePreview('prev')}
                 />
-              </div>
-            </div>
           )}
 
           {/* Audio preview */}
           {preview.type === 'audio' && (
-            <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute z-[-1] flex items-center justify-center">
-                {previewError ? (
-                  <Error message="Error loading preview. Please try again." className="text-white w-100" />
-                ) : previewLoading ? (
-                  <Loading message="Loading preview..." className="text-white w-100" />
-                ) : (
-                  <></>
-                )}
-              </div>
-              <div className="flex flex-col items-center">
-                <audio
-                  controls
-                  className={cn(
-                    "max-w-full shadow-2xl",
-                    (previewLoading || previewError) && "opacity-0"
-                  )}
+            <AudioPreview
+              isOpen={preview.isOpen}
+              title={preview.path.split('/').pop()}
                   src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                  onLoadedData={() => setPreviewLoading(false)}
-                  onError={() => {
-                    setPreviewLoading(false);
-                    setPreviewError(true);
-                  }}
+              onClose={closePreview}
+              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+              onNext={() => navigatePreview('next')}
+              onPrev={() => navigatePreview('prev')}
                 />
-              </div>
-            </div>
           )}
 
           {/* Code preview & Document preview */}
           {(preview.type === 'code' || preview.type === 'document') && (
-            <div className="w-[80vw] h-[80vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-mono text-sm truncate max-w-[50vw]">
-                    {preview.path.split('/').pop()}
-                  </span>
-                  <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded-full">
-                    {getFileExtension(preview.path)}
-                  </span>
-                </div>
-              </div>
-              <div className="overflow-auto flex-1 p-1">
-                {contentError ? (
-                  <div className="p-4 text-red-400 font-mono">
-                    {previewContent}
-                  </div>
-                ) : contentLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="animate-pulse flex flex-col items-center">
-                      <div className="h-4 w-32 bg-gray-700 rounded-md mb-2"></div>
-                      <div className="h-4 w-48 bg-gray-700 rounded-md"></div>
-                    </div>
-                  </div>
-                ) : previewContent && previewContent.startsWith('Error loading file:') ? (
-                  <div className="p-4 text-red-400 font-mono">
-                    {previewContent}
-                  </div>
-                ) : previewContent ? (
-                  <SyntaxHighlighter
-                    language={getLanguage(getFileExtension(preview.path))}
-                    style={vscDarkPlus}
-                    showLineNumbers
-                    customStyle={{ margin: 0, height: '100%', background: 'transparent' }}
-                    codeTagProps={{ style: { fontFamily: 'monospace' } }}
-                  >
-                    {previewContent}
-                  </SyntaxHighlighter>
-                ) : (
-                  <div className="p-4 text-red-400 font-mono">
-                    No content available
-                  </div>
-                )}
-              </div>
-            </div>
+            <CodePreview
+              isOpen={preview.isOpen}
+              fileName={preview.path.split('/').pop()}
+              fileExtension={getFileExtension(preview.path)}
+              content={previewContent}
+              isLoading={contentLoading}
+              hasError={!!contentError}
+              onClose={closePreview}
+              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+            />
           )}
 
           {/* Comic preview */}
           {preview.type === 'comic' && (
-            <div className="w-[90vw] h-[90vh] overflow-hidden bg-black rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <ComicReader 
+            <ComicPreview
+              isOpen={preview.isOpen}
+              title={preview.path.split('/').pop()}
                 src={`/api/download?path=${encodeURIComponent(preview.path)}`}
                 onClose={closePreview}
+              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
               />
-            </div>
           )}
-        </div>
+        </>
       )}
 
       <Separator className="my-4" />
