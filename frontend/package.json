@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack --port 2711",
+    "dev": "next dev --turbopack --port 2712",
     "build": "next build",
     "start": "next start --port 2711",
     "lint": "next lint"
@@ -14,6 +14,8 @@
     "@radix-ui/react-popover": "^1.1.13",
     "@radix-ui/react-separator": "^1.1.6",
     "@radix-ui/react-slot": "^1.2.2",
+    "@radix-ui/react-toggle": "^1.1.8",
+    "@radix-ui/react-tooltip": "^1.2.6",
     "@tanstack/react-query": "^5.76.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/react-window": "^1.8.8",

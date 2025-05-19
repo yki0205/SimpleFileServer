@@ -28,6 +28,7 @@ import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
 import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
 
 import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview } from "@/components/preview";
+import BreadcrumbNav from "@/components/nav/BreadcrumbNav";
 
 
 interface FileData {
@@ -264,7 +265,7 @@ function getFileExtension(filename: string) {
 }
 
 function getColumnCount(width: number) {
-  if (width < 768) return 3; // md
+  if (width < 768) return 2; // md
   if (width < 1024) return 4; // lg
   if (width < 1280) return 6; // xl
   return 8; // 2xl and above
@@ -277,7 +278,8 @@ const previewSupported: Record<string, boolean> = {
   'audio': true,
   'code': true,
   'document': true,
-  'comic': true
+  'comic': true,
+  'pdf': false
 }
 
 
@@ -307,6 +309,8 @@ function FileExplorerContent() {
   const masonryRef = useRef<HTMLDivElement>(null);
   const activeScrollRef = useRef<any>(null);
   const scrollPosition = useRef(0);
+  const navRef = useRef<HTMLDivElement>(null);
+  const [navWidth, setNavWidth] = useState(0);
 
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -423,7 +427,7 @@ function FileExplorerContent() {
 
 
 
-  const navigateTo = (path: string, query: string) => {
+  const navigateTo = (path: string, query: string = '') => {
     if (viewMode === 'imageOnly') {
       setViewMode('image');
     }
@@ -526,7 +530,7 @@ function FileExplorerContent() {
 
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
-    
+
     if (viewMode === 'imageOnly') {
       if (!sortedFiles) return;
       let newIndex;
@@ -676,7 +680,7 @@ function FileExplorerContent() {
         }, 0);
       }
       return originalReplaceState(data, unused, url);
-  };
+    };
 
     return () => {
       // Restore original methods
@@ -751,6 +755,11 @@ function FileExplorerContent() {
     closePreview();
   }, [currentPath, searchQuery])
 
+  useEffect(() => {
+    if (navRef.current) {
+      setNavWidth(navRef.current.offsetWidth);
+    }
+  }, [navRef.current]);
 
 
   const isError = (viewMode === 'imageOnly') ? imagesError :
@@ -1022,79 +1031,20 @@ function FileExplorerContent() {
         </div>
       </header>
 
-      <nav className="mb-2">
+      <nav ref={navRef} className="mb-2">
         {isSearching ? (
           <div className="bg-muted px-1 py-1 rounded-md text-sm">
             Searching: "{searchQuery}" in {currentPath || 'root'}
           </div>
         ) : (
           <div className="bg-muted px-1 py-1 rounded-md text-sm flex flex-wrap items-center overflow-x-auto whitespace-nowrap">
-            <button onClick={goHome}
-              className="cursor-pointer hover:bg-gray-300 rounded-md p-1 flex-shrink-0"
-            >
-              <Home size={18} />
-            </button>
-
-            {currentPath.split('/').filter(Boolean).length > 3 && currentPath.split('/').filter(Boolean).length > 0 ? (
-              <>
-                <span className="mx-1 text-muted-foreground">/</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="cursor-pointer hover:bg-gray-300 rounded-md p-1 flex-shrink-0">
-                      ...
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-2">
-                    <div className="flex flex-col gap-1">
-                      {currentPath.split('/').filter(Boolean).slice(0, -2).map((segment, index, array) => {
-                        const pathToSegment = array.slice(0, index + 1).join('/');
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => navigateTo(pathToSegment, '')}
-                            className="text-left hover:bg-gray-100 p-1 rounded"
-                          >
-                            {segment}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Show only the last 2 segments */}
-                {currentPath.split('/').filter(Boolean).slice(-2).map((segment, index, array) => {
-                  const fullArray = currentPath.split('/').filter(Boolean);
-                  const pathToSegment = fullArray.slice(0, fullArray.length - 2 + index + 1).join('/');
-                  return (
-                    <React.Fragment key={index}>
-                      <span className="mx-1 text-muted-foreground">/</span>
-                      <button onClick={() => navigateTo(pathToSegment, '')}
-                        className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate max-w-[150px]"
-                      >
-                        {segment}
-                      </button>
-                    </React.Fragment>
-                  );
-                })}
-              </>
-            ) : (
-              // If path is short enough, show all segments
-              currentPath.split('/').filter(Boolean).map((segment, index, array) => {
-                const pathToSegment = array.slice(0, index + 1).join('/');
-                return (
-                  <React.Fragment key={index}>
-                    <span className="mx-1 text-muted-foreground">/</span>
-                    <button onClick={() => navigateTo(pathToSegment, '')}
-                      className="cursor-pointer hover:bg-gray-300 rounded-md p-1 truncate max-w-[150px]"
-                      title={segment} // Add tooltip for truncated text
-                    >
-                      {segment}
-                    </button>
-                  </React.Fragment>
-                );
-              })
-            )}
+            <BreadcrumbNav 
+              navWidth={navWidth}
+              currentPath={currentPath} 
+              onNavigate={navigateTo} 
+              showRootIcon
+              onRootClick={goHome}
+            />
           </div>
         )}
       </nav>
@@ -1172,13 +1122,13 @@ function FileExplorerContent() {
             <ImagePreview
               isOpen={preview.isOpen}
               title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
-                src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
               onClose={closePreview}
               onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
               onNext={() => navigatePreview('next')}
               onPrev={() => navigatePreview('prev')}
               direction={viewMode === 'imageOnly' && gridDirection === 'rtl' ? 'rtl' : 'ltr'}
-              />
+            />
           )}
 
           {/* Video preview */}
@@ -1186,12 +1136,12 @@ function FileExplorerContent() {
             <VideoPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-                  src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                  onClose={closePreview}
+              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              onClose={closePreview}
               onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
               onNext={() => navigatePreview('next')}
               onPrev={() => navigatePreview('prev')}
-                />
+            />
           )}
 
           {/* Audio preview */}
@@ -1199,12 +1149,12 @@ function FileExplorerContent() {
             <AudioPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-                  src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
               onClose={closePreview}
               onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
               onNext={() => navigatePreview('next')}
               onPrev={() => navigatePreview('prev')}
-                />
+            />
           )}
 
           {/* Code preview & Document preview */}
@@ -1225,11 +1175,11 @@ function FileExplorerContent() {
           {preview.type === 'comic' && (
             <ComicPreview
               isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-                src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-                onClose={closePreview}
+              // title={preview.path.split('/').pop()}
+              src={`/api/comic?path=${encodeURIComponent(preview.path)}`}
+              onClose={closePreview}
               onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
-              />
+            />
           )}
         </>
       )}

@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 import { Video } from "@/components/video/Video";
 
-interface VideoPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError'> {
+interface VideoPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError' | 'onFullScreen' | 'onToggleDirection'> {
   /** Video source URL */
   src: string;
   /** Whether to autoplay the video */
@@ -15,29 +15,80 @@ interface VideoPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoadi
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
   src,
   autoPlay = true,
+  direction,
   onClose,
   controls,
   ...restProps
 }) => {
-  // Internal loading and error states
+  const currentSrcRef = useRef(src);
+  const cachedVideosRef = useRef<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  useEffect(() => {
-    setIsLoading(true);
-    setHasError(false);
+  const handleLoad = useCallback(() => {
+    cachedVideosRef.current.add(src);
+    setIsLoading(false);
   }, [src]);
 
-  // Handle video load event
-  const handleLoad = useCallback(() => {
-    setIsLoading(false);
-  }, []);
-
-  // Handle video error event
   const handleError = useCallback(() => {
     setIsLoading(false);
     setHasError(true);
   }, []);
+
+  useEffect(() => {
+    currentSrcRef.current = src;
+
+    const checkIfCached = () => {
+      if (cachedVideosRef.current.has(src)) {
+        setIsLoading(false);
+        return;
+      }
+
+      const video = document.createElement('video');
+
+      video.onloadedmetadata = () => {
+        cachedVideosRef.current.add(src);
+        setIsLoading(false);
+      };
+
+      video.oncanplay = () => {
+        cachedVideosRef.current.add(src);
+        setIsLoading(false);
+      };
+
+      video.onerror = () => {
+        setIsLoading(false);
+        setHasError(true);
+      };
+
+      video.src = src;
+      video.preload = "metadata";
+      video.muted = true;
+
+      if (video.readyState >= 2) {
+        cachedVideosRef.current.add(src);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+    };
+
+    checkIfCached();
+    setHasError(false);
+  }, [src]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        console.log('Video load timeout, forcing state update');
+        setIsLoading(false);
+      }
+    }, 60000); // 60 second timeout
+
+    return () => clearTimeout(timeoutId);
+  }, [src, isLoading]);
 
   return (
     <PreviewBase
@@ -45,11 +96,12 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       hasError={hasError}
       onClose={onClose}
       controls={{
+        showDirectionToggle: true,
         ...controls
       }}
       {...restProps}
     >
-      <div className="flex flex-col items-center w-full">
+      <div ref={containerRef} className="flex flex-col items-center w-full">
         <Video
           src={src}
           autoPlay={autoPlay}

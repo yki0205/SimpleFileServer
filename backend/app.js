@@ -832,7 +832,8 @@ function getFileType(extension) {
 
   // Document file extensions
   const documentExtensions = [
-    // '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
+    // '.pdf', // pdf now supported, read the code below
+    // '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
     '.txt', '.md', '.rtf', '.odt', '.ods', '.odp', '.csv', '.log', '.tex'];
 
   // Archive and executable file extensions
@@ -873,6 +874,8 @@ function getFileType(extension) {
 
   const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
 
+  const pdfExtensions = ['.pdf'];
+
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
   if (audioExtensions.includes(extension)) return 'audio';
@@ -880,7 +883,7 @@ function getFileType(extension) {
   if (archiveExtensions.includes(extension)) return 'archive';
   if (codeExtensions.includes(extension)) return 'code';
   if (comicExtensions.includes(extension)) return 'comic';
-
+  if (pdfExtensions.includes(extension)) return 'pdf';
   return 'other';
 }
 

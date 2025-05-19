@@ -89,7 +89,8 @@ export const CodePreview: React.FC<CodePreviewProps> = ({
       hasError={hasError || isContentError}
       errorMessage={isContentError ? contentToDisplay : undefined}
       controls={{
-        ...controls
+        enableBaseHandleKeyboard: true,
+        ...controls,
       }}
       {...restProps}
     >

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Folder, File, FileText, FileArchive, Image, Music, Video, FileCode } from "lucide-react";
 
 interface FileItemProps {
@@ -42,12 +43,21 @@ export function FileItemListView(
         <Icon size={24} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm sm:text-base truncate font-medium">{name}</div>
+        <div className="text-sm sm:text-base font-medium">{name}</div>
       </div>
       {isSearching && (
-        <div className="text-xs sm:text-sm text-muted-foreground w-80 text-right">
-          {path}
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="text-xs sm:text-sm text-muted-foreground w-80 text-right truncate">
+                {path}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{path}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       <div className="hidden md:block text-xs sm:text-sm text-muted-foreground w-24 text-right">
         {type !== 'directory' && formatFileSize(size)}

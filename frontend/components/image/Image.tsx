@@ -128,7 +128,7 @@ export function Image({ src, alt, onClick, className, disablePreview = false, fi
       setIsHovered(true);
       setIsPreviewLoading(true);
       setIsPreviewError(false);
-    }, 200); // 200ms hover delay before showing preview
+    }, 500); // 500ms hover delay before showing preview
     setHoverTimeout(timeout);
   }
 

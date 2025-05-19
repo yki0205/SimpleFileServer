@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 
@@ -14,25 +14,74 @@ export const AudioPreview: React.FC<AudioPreviewProps> = ({
   controls,
   ...restProps
 }) => {
-  // Internal loading and error states
+
+  const currentSrcRef = useRef(src);
+  const cachedAudioRef = useRef<Set<string>>(new Set());
+
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  useEffect(() => {
-    setIsLoading(true);
-    setHasError(false);
+  const handleLoad = useCallback(() => {
+    cachedAudioRef.current.add(src);
+    setIsLoading(false);
   }, [src]);
 
-  // Handle audio load event
-  const handleLoad = useCallback(() => {
-    setIsLoading(false);
-  }, []);
-
-  // Handle audio error event
   const handleError = useCallback(() => {
     setIsLoading(false);
     setHasError(true);
   }, []);
+
+  useEffect(() => {
+    currentSrcRef.current = src;
+    
+    const checkIfCached = () => {
+      if (cachedAudioRef.current.has(src)) {
+        setIsLoading(false);
+        return;
+      }
+      
+      const audio = new Audio();
+      
+      audio.onloadedmetadata = () => {
+        cachedAudioRef.current.add(src);
+        setIsLoading(false);
+      };
+      
+      audio.oncanplaythrough = () => {
+        cachedAudioRef.current.add(src);
+        setIsLoading(false);
+      };
+      
+      audio.onerror = () => {
+        setIsLoading(false);
+        setHasError(true);
+      };
+      
+      audio.src = src;
+      audio.preload = "metadata";
+      
+      if (audio.readyState >= 2) {
+        cachedAudioRef.current.add(src);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+    };
+    
+    checkIfCached();
+    setHasError(false);
+  }, [src]);
+  
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        console.log('Audio load timeout, forcing state update');
+        setIsLoading(false);
+      }
+    }, 60000); // 60 second timeout
+    
+    return () => clearTimeout(timeoutId);
+  }, [src, isLoading]);
 
   return (
     <PreviewBase
@@ -52,6 +101,8 @@ export const AudioPreview: React.FC<AudioPreviewProps> = ({
           )}
           src={src}
           onLoadedData={handleLoad}
+          onCanPlay={handleLoad}
+          onLoadedMetadata={handleLoad}
           onError={handleError}
         />
       </div>
