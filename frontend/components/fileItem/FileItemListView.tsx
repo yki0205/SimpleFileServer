@@ -43,7 +43,16 @@ export function FileItemListView(
         <Icon size={24} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm sm:text-base font-medium">{name}</div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="text-sm sm:text-base font-medium truncate">{name}</div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{name}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       {isSearching && (
         <TooltipProvider>

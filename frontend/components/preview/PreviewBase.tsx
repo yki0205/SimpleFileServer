@@ -494,8 +494,8 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
       {/* Title */}
       {title && (
-        <div className={`fixed top-4 left-4 z-[200] max-w-[50vw] transition-opacity duration-300 ${isFullScreen && !showControls ? 'opacity-0' : 'opacity-100'}`}>
-          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono truncate select-none"> 
+        <div className={`fixed bottom-4 sm:top-4 left-4 z-[200] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && !showControls ? 'opacity-0' : 'opacity-100'}`}>
+          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate select-none"> 
             {title}
           </h3>
         </div>

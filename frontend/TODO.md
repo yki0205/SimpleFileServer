@@ -1,6 +1,6 @@
 - ImageOnly 与 Search 的互斥
-- 提取nav组件
 - 优化Video组件
 - 完成Audio组件
 - 优化pdf组件
-- search path display
+- nav验证
+- row以及grid组件的标题显示不全问题

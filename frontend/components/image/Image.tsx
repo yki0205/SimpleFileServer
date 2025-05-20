@@ -9,6 +9,7 @@ import { ImageOff, RotateCw, RefreshCw, Download, X } from "lucide-react";
 interface ImageProps {
   src: string,
   alt: string,
+  thumbnail?: string,
   fit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
   loading?: 'lazy' | 'eager',
   onClick?: () => void,
@@ -16,12 +17,13 @@ interface ImageProps {
   disablePreview?: boolean
 }
 
-export function Image({ src, alt, onClick, className, disablePreview = false, fit = 'contain', loading = 'lazy' }: ImageProps) {
+export function Image({ src, alt, thumbnail, onClick, className, disablePreview = false, fit = 'contain', loading = 'lazy' }: ImageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
   const [isPreviewError, setIsPreviewError] = useState(false);
   const [imgSrc, setImgSrc] = useState(src);
+  const [thumbSrc, setThumbSrc] = useState(thumbnail || src);
   const [isHovered, setIsHovered] = useState(false);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
@@ -39,15 +41,22 @@ export function Image({ src, alt, onClick, className, disablePreview = false, fi
     setIsLoading(true);
     setIsError(false);
     setImgSrc(src);
-  }, [src]);
+    setThumbSrc(thumbnail || src);
+  }, [src, thumbnail]);
 
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsError(false);
     setIsLoading(true);
     
-    const separator = src.includes('?') ? '&' : '?';
-    setImgSrc(`${src}${separator}_t=${Date.now()}`);
+    const timestamp = Date.now();
+    const addQueryParam = (url: string) => {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}_t=${timestamp}`;
+    };
+    
+    setImgSrc(addQueryParam(src));
+    setThumbSrc(addQueryParam(thumbnail || src));
   }
 
   const handleDownload = (e: React.MouseEvent) => {
@@ -270,7 +279,7 @@ export function Image({ src, alt, onClick, className, disablePreview = false, fi
           
           {/* Thumbnail image (shown by default) */}
           <NextImage
-            src={imgSrc}
+            src={thumbSrc}
             alt={alt}
             className={cn(
               "w-full h-full",

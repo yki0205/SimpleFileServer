@@ -19,16 +19,13 @@ import {
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
 } from "lucide-react";
 
-import { Error } from "@/components/status/Error";
-import { Loading } from "@/components/status/Loading";
-import { NotFound } from "@/components/status/NotFound";
-import { Image } from "@/components/image/Image";
-import { FileItemListView } from "@/components/fileItem/FileItemListView";
-import { FileItemGridView } from "@/components/fileItem/FileItemGridView";
-import { ConfirmDialog } from "@/components/dialog/ComfirmDialog";
+import { BreadcrumbNav } from "@/components/nav";
+import { Error, Loading, NotFound } from "@/components/status";
+import { Image } from "@/components/image";
+import { FileItemListView, FileItemGridView } from "@/components/fileItem";
+import { ConfirmDialog } from "@/components/dialog";
 
 import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview } from "@/components/preview";
-import BreadcrumbNav from "@/components/nav/BreadcrumbNav";
 
 
 interface FileData {
@@ -37,6 +34,7 @@ interface FileData {
   size: number;
   mtime: string;
   type: string;
+  cover?: string;
 }
 
 interface FilesResponse {
@@ -173,6 +171,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
       <div style={style} className="p-1">
         <Image
           src={`/api/download?path=${encodeURIComponent(file.path)}`}
+          thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
           alt={file.name}
           onClick={() => onFileClick(file.path, file.type)}
           className="w-full h-full object-cover rounded-md cursor-pointer"
@@ -247,6 +246,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
           <Image
             {...file}
             src={`/api/download?path=${encodeURIComponent(file.path)}`}
+            thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
             alt={file.name}
             onClick={() => onFileClick(file.path, file.type)}
             className="w-full h-auto rounded-md"
@@ -302,6 +302,9 @@ function FileExplorerContent() {
   const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // EXPERIMENTAL FEATURE FOR IMAGE VIEW
+  const [showDirectoryCovers, setShowDirectoryCovers] = useState(true);
+
   // Create refs for the virtualized lists/grids
   const listRef = useRef<List>(null);
   const gridRef = useRef<Grid>(null);
@@ -310,7 +313,6 @@ function FileExplorerContent() {
   const activeScrollRef = useRef<any>(null);
   const scrollPosition = useRef(0);
   const navRef = useRef<HTMLDivElement>(null);
-  const [navWidth, setNavWidth] = useState(0);
 
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -330,7 +332,7 @@ function FileExplorerContent() {
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
     queryFn: async () => {
-      const response = await axios.get('/api/files', { params: { dir: currentPath } });
+      const response = await axios.get('/api/files', { params: { dir: currentPath, cover: showDirectoryCovers ? 'true' : 'false' } });
       return response.data;
     },
     enabled: !isSearching && viewMode !== 'imageOnly'
@@ -755,13 +757,6 @@ function FileExplorerContent() {
     closePreview();
   }, [currentPath, searchQuery])
 
-  useEffect(() => {
-    if (navRef.current) {
-      setNavWidth(navRef.current.offsetWidth);
-    }
-  }, [navRef.current]);
-
-
   const isError = (viewMode === 'imageOnly') ? imagesError :
     (isSearching) ? searchError : errorFiles;
 
@@ -1039,7 +1034,6 @@ function FileExplorerContent() {
         ) : (
           <div className="bg-muted px-1 py-1 rounded-md text-sm flex flex-wrap items-center overflow-x-auto whitespace-nowrap">
             <BreadcrumbNav 
-              navWidth={navWidth}
               currentPath={currentPath} 
               onNavigate={navigateTo} 
               showRootIcon

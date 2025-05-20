@@ -1,5 +1,8 @@
 // Configuration for the file server
 // You can customize the base directory to serve files from
+const path = require('path');
+const os = require('os');
+
 module.exports = {
 
   port: process.env.PORT || 11073,
@@ -11,4 +14,6 @@ module.exports = {
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB
 
   contentMaxSize: process.env.CONTENT_MAX_SIZE || 5 * 1024 * 1024, // 5MB
+
+  thumbnailCacheDir: process.env.THUMBNAIL_CACHE_DIR || path.join(os.tmpdir(), 'simple-file-server-thumbnails'),
 }

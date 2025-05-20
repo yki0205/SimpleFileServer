@@ -16,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/api/files', (req, res) => {
-  const { dir = '' } = req.query;
+  const { dir = '', cover = 'false' } = req.query;
   const basePath = path.resolve(config.baseDirectory)
   const fullPath = path.join(basePath, dir)
 
@@ -38,13 +38,35 @@ app.get('/api/files', (req, res) => {
       const isDirectory = fileStats.isDirectory();
       const extension = path.extname(file).toLowerCase();
 
-      return {
+      const fileDetail = {
         name: file,
         path: normalizePath(path.join(dir, file)),
         size: fileStats.size,
         mtime: fileStats.mtime,
         type: isDirectory ? 'directory' : getFileType(extension)
+      };
+      
+      // If cover is requested and this is a directory, find a cover image
+      if (cover === 'true' && isDirectory) {
+        try {
+          const subFiles = fs.readdirSync(filePath);
+          const imageFiles = subFiles
+            .filter(subFile => {
+              const ext = path.extname(subFile).toLowerCase();
+              return getFileType(ext) === 'image';
+            })
+            .sort(); // Sort alphabetically
+          
+          if (imageFiles.length > 0) {
+            const coverImage = imageFiles[0];
+            fileDetail.cover = normalizePath(path.join(dir, file, coverImage));
+          }
+        } catch (err) {
+          // Silently fail if can't read subdirectory
+        }
       }
+      
+      return fileDetail;
     })
 
     res.json({ files: fileDetails })
@@ -155,6 +177,78 @@ app.get('/api/download', (req, res) => {
       res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
       res.sendFile(fullPath);
     }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/thumbnail', (req, res) => {
+  const { path: requestedPath, width = 300, height, quality = 80 } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, requestedPath);
+
+  // Security check to ensure we don't access files outside base directory
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      return res.status(400).json({ error: 'Cannot generate thumbnail for directory' });
+    }
+
+    // Check file type
+    const extension = path.extname(fullPath).toLowerCase();
+    if (getFileType(extension) !== 'image') {
+      return res.status(400).json({ error: 'File is not an image' });
+    }
+
+    // Cache mechanism: generate cache path
+    const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    // Create cache filename (based on original path, width, height and quality)
+    const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
+    const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
+
+    // If cache exists, return cached thumbnail directly
+    if (fs.existsSync(cachePath)) {
+      const contentType = getContentType(extension);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
+      return fs.createReadStream(cachePath).pipe(res);
+    }
+
+    // Process image with Sharp library
+    const sharp = require('sharp');
+    
+    let transformer = sharp(fullPath)
+      .rotate() // Auto-rotate based on EXIF data
+      .resize({
+        width: parseInt(width),
+        height: height ? parseInt(height) : null,
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .jpeg({ quality: parseInt(quality) });
+    
+    // Save to cache
+    transformer
+      .clone()
+      .toFile(cachePath)
+      .catch(err => console.error('Error caching thumbnail:', err));
+    
+    // Send to client
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    transformer.pipe(res);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
