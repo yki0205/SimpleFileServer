@@ -577,7 +577,7 @@ export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderPro
             handleFullScreenChange(false);
           } else {
             // Otherwise close the reader
-            onClose?.();
+          onClose?.();
           }
           break;
         case 'Enter':

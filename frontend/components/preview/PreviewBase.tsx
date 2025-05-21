@@ -55,6 +55,10 @@ export interface PreviewBaseProps {
     enableCtrlWheelZoom?: boolean;
     /** Enable base handle keyboard events */
     enableBaseHandleKeyboard?: boolean;
+    /** Enable navigation in fullscreen mode */
+    enableFullscreenNavigation?: boolean;
+    /** Enable toolbar in fullscreen mode */
+    enableFullscreenToolbar?: boolean;
     /** Prevent browser default zooming */
     preventBrowserZoom?: boolean;
     /** Prevent browser context menu (right-click) */
@@ -92,8 +96,10 @@ const defaultControls = {
   enableTouchNavigation: false,
   enableWheelNavigation: false,
   enableCtrlWheelZoom: false,
-  enableHandleKeyboard: false,
-  enableBaseHandleKeyboard: false,
+  enableHandleKeyboard: true,
+  enableBaseHandleKeyboard: true,
+  enableFullscreenNavigation: true,
+  enableFullscreenToolbar: true,
   preventBrowserZoom: false,
   preventContextMenu: false,
   preventTextSelection: false,
@@ -400,7 +406,6 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     if (!controls.enableHandleKeyboard) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-
       const defaultArrowLeftHandler = () => {
         direction === 'rtl' ? onNext?.() : onPrev?.();
       }
@@ -426,21 +431,19 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         setShowControls(prev => !prev);
       }
 
-      const defaultKeyHandlers = {
+      const defaultKeyHandlers = controls.enableBaseHandleKeyboard ? {
         'ArrowLeft': defaultArrowLeftHandler,
         'ArrowRight': defaultArrowRightHandler,
         'Escape': defaultEscapeHandler,
         'Enter': defaultEnterHandler,
         ' ': defaultSpaceHandler,
-      }
+      } : {};
 
       const keyHandlers = { ...defaultKeyHandlers, ...customKeyHandlers };
 
-      if (controls.enableBaseHandleKeyboard) {
-        if (keyHandlers[e.key as keyof typeof keyHandlers]) {
-          keyHandlers[e.key as keyof typeof keyHandlers]();
-          return;
-        }
+      if (keyHandlers[e.key as keyof typeof keyHandlers]) {
+        keyHandlers[e.key as keyof typeof keyHandlers]?.();
+        return;
       }
     };
 
@@ -488,7 +491,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       </div>
 
       {/* Fullscreen navigation areas - must be after content to be on top */}
-      {isFullScreen && (
+      {isFullScreen && controls.enableFullscreenNavigation && (
         <>
           <div
             className="absolute left-0 top-0 w-1/4 h-full z-[100] cursor-pointer"
@@ -520,7 +523,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
       {/* Title */}
       {title && (
-        <div className={`fixed bottom-4 sm:top-4 left-4 z-[200] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && !showControls ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`fixed bottom-4 sm:top-4 left-4 z-[50] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && (!showControls || !controls.enableFullscreenToolbar) ? 'opacity-0' : 'opacity-100'}`}>
           <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate select-none">
             {title}
           </h3>
@@ -557,7 +560,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       )}
 
       {/* Top right controls */}
-      <div className={`absolute z-[200] top-4 right-4 flex gap-2 transition-opacity duration-300 ${isFullScreen && !showControls ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`absolute z-[200] top-4 right-4 flex gap-2 transition-opacity duration-300 ${isFullScreen && (!showControls || !controls.enableFullscreenToolbar) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {controls.showDirectionToggle && (
           <Toggle
             pressed={direction === 'rtl'}

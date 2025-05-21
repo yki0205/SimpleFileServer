@@ -127,6 +127,7 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
         <ContextMenuTrigger>
           <FileItemGridView
             {...file}
+            cover=""
             onClick={() => onFileClick(file.path, file.type)}
             className="text-black hover:text-gray-600 hover:bg-accent"
           />
@@ -186,6 +187,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
           <ContextMenuTrigger>
             <FileItemGridView
               {...file}
+              cover={file.cover ? `/api/thumbnail?path=${encodeURIComponent(file.cover)}&width=300&quality=80` : undefined}
               onClick={() => onFileClick(file.path, file.type)}
               className="text-black hover:text-gray-600 hover:bg-accent"
             />

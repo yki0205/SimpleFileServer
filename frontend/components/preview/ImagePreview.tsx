@@ -326,6 +326,8 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
         enableCtrlWheelZoom: true,
         preventBrowserZoom: true,
         enableBaseHandleKeyboard: true,
+        enableFullscreenNavigation: zoom == 1,
+        enableFullscreenToolbar: zoom == 1,
         ...controls
       }}
       {...restProps}

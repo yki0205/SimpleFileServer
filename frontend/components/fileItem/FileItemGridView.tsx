@@ -52,7 +52,7 @@ export function FileItemGridView(
       {cover && (
         <div className="absolute inset-0 w-full h-full">
           <img
-            src={`/api/thumbnail?path=${encodeURIComponent(cover)}&width=300&quality=80`}
+            src={cover}
             alt={`Cover for ${name}`}
             className="w-full h-full object-cover"
             loading="lazy"
