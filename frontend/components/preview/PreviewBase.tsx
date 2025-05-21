@@ -4,10 +4,10 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Error } from "@/components/status/Error";
 import { Loading } from "@/components/status/Loading";
-import { 
-    X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
-    Maximize, Minimize, ArrowLeftRight
-  } from "lucide-react";
+import {
+  X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
+  Maximize, Minimize, ArrowLeftRight
+} from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 
 export interface PreviewBaseProps {
@@ -27,8 +27,10 @@ export interface PreviewBaseProps {
   loadingMessage?: string;
   /** Main content to display in the preview */
   children?: React.ReactNode;
-  /** Use full screen without max-width/height constraints */
+  /** Use full screen without max-width/height constraints (force fullscreen) */
   useFullScreen?: boolean;
+  /** Custom keyboard handlers that can override base handlers */
+  customKeyHandlers?: Record<string, () => void>;
   /** Controls configuration */
   controls?: {
     /** Show close button */
@@ -90,6 +92,7 @@ const defaultControls = {
   enableTouchNavigation: false,
   enableWheelNavigation: false,
   enableCtrlWheelZoom: false,
+  enableHandleKeyboard: false,
   enableBaseHandleKeyboard: false,
   preventBrowserZoom: false,
   preventContextMenu: false,
@@ -109,6 +112,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   loadingMessage = "Loading preview...",
   children,
   useFullScreen = false,
+  customKeyHandlers,
   controls: controlsProp,
   onClose,
   onDownload,
@@ -120,11 +124,12 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   onDirectionChange,
 }) => {
   if (!isOpen) return null;
-  
+
   // Internal state management
   const [showControls, setShowControls] = useState(true);
   const [direction, setDirection] = useState<'ltr' | 'rtl'>(initialDirection);
-  const [isFullScreen, setIsFullScreen] = useState(useFullScreen);
+  const [isFullScreenTemp, setIsFullScreen] = useState(false);
+  const isFullScreen = useFullScreen || isFullScreenTemp;
   const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -178,10 +183,10 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       } else if (e.deltaY > 0 && onZoomOut) {
         onZoomOut();
       }
-      
+
       return false;
     }
-    
+
     // Handle wheel navigation if enabled
     if (controls.enableWheelNavigation && onPrev && onNext) {
       e.stopPropagation();
@@ -200,12 +205,12 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
       }
-      
+
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000);
     }
-    
+
     return () => {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
@@ -223,10 +228,10 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   // Apply browser behavior prevention
   useEffect(() => {
     if (!containerRef.current) return;
-    
+
     const containerElement = containerRef.current;
     const options = { passive: false };
-    
+
     // Prevent default browser zoom on Ctrl+wheel
     const preventDefaultZoom = (e: WheelEvent) => {
       if (controls.preventBrowserZoom && e.ctrlKey) {
@@ -234,7 +239,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         return false;
       }
     };
-    
+
     // Prevent pinch-to-zoom on touchscreens
     const preventPinchZoom = (e: TouchEvent) => {
       if (controls.preventPinchZoom && e.touches.length > 1) {
@@ -242,7 +247,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         return false;
       }
     };
-    
+
     // Prevent browser back/forward navigation on swipe
     const preventBrowserNav = (e: TouchEvent) => {
       if (controls.preventBrowserNavigation) {
@@ -251,27 +256,27 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         }
       }
     };
-    
+
     // Add all event listeners
     if (controls.preventBrowserZoom) {
       containerElement.addEventListener('wheel', preventDefaultZoom, options);
     }
-    
+
     if (controls.preventPinchZoom) {
       containerElement.addEventListener('touchstart', preventPinchZoom, options);
       containerElement.addEventListener('touchmove', preventPinchZoom, options);
     }
-    
+
     if (controls.preventBrowserNavigation) {
       containerElement.addEventListener('touchstart', preventBrowserNav, options);
     }
-    
+
     // Apply CSS for text selection and drag prevention
     if (controls.preventTextSelection) {
       containerElement.style.userSelect = 'none';
       containerElement.style.webkitUserSelect = 'none';
     }
-    
+
     if (controls.preventDrag) {
       // Use setAttribute for non-standard CSS properties
       containerElement.setAttribute('style', `${containerElement.getAttribute('style') || ''}; -webkit-user-drag: none;`);
@@ -281,33 +286,33 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         img.setAttribute('draggable', 'false');
       });
     }
-    
+
     // Cleanup function
     return () => {
       if (controls.preventBrowserZoom) {
         containerElement.removeEventListener('wheel', preventDefaultZoom);
       }
-      
+
       if (controls.preventPinchZoom) {
         containerElement.removeEventListener('touchstart', preventPinchZoom);
         containerElement.removeEventListener('touchmove', preventPinchZoom);
       }
-      
+
       if (controls.preventBrowserNavigation) {
         containerElement.removeEventListener('touchstart', preventBrowserNav);
       }
-      
+
       // Reset styles
       if (controls.preventTextSelection) {
         containerElement.style.userSelect = '';
         containerElement.style.webkitUserSelect = '';
       }
-      
+
       if (controls.preventDrag) {
         // Remove non-standard CSS properties
         const style = containerElement.getAttribute('style') || '';
         containerElement.setAttribute('style', style.replace('-webkit-user-drag: none;', ''));
-        
+
         const images = containerElement.querySelectorAll('img');
         images.forEach(img => {
           img.draggable = true;
@@ -392,39 +397,60 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
   // Handle keyboard events for navigation
   useEffect(() => {
-    if (!controls.enableBaseHandleKeyboard) return;
+    if (!controls.enableHandleKeyboard) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Left arrow key
-      if (e.key === 'ArrowLeft' && onPrev && onNext) {
-        direction === 'rtl' ? onNext() : onPrev();
+
+      const defaultArrowLeftHandler = () => {
+        direction === 'rtl' ? onNext?.() : onPrev?.();
       }
 
-      if (e.key === 'ArrowRight' && onPrev && onNext) {
-        direction === 'rtl' ? onPrev() : onNext();
-      }
-      
-      if (e.key === 'Escape' && (useFullScreen || controls.showFullscreen)) {
-        setIsFullScreen(false);
-        onFullScreenChange?.(false);
+      const defaultArrowRightHandler = () => {
+        direction === 'rtl' ? onPrev?.() : onNext?.();
       }
 
-      if (e.key === 'Enter' && (useFullScreen || controls.showFullscreen)) {
-        handleFullScreen();
+      const defaultEscapeHandler = () => {
+        if (useFullScreen || controls.showFullscreen) {
+          setIsFullScreen(false);
+          onFullScreenChange?.(false);
+        }
       }
-      
-      if (e.key === ' ') {
+
+      const defaultEnterHandler = () => {
+        if (useFullScreen || controls.showFullscreen) {
+          handleFullScreen();
+        }
+      }
+
+      const defaultSpaceHandler = () => {
         setShowControls(prev => !prev);
       }
+
+      const defaultKeyHandlers = {
+        'ArrowLeft': defaultArrowLeftHandler,
+        'ArrowRight': defaultArrowRightHandler,
+        'Escape': defaultEscapeHandler,
+        'Enter': defaultEnterHandler,
+        ' ': defaultSpaceHandler,
+      }
+
+      const keyHandlers = { ...defaultKeyHandlers, ...customKeyHandlers };
+
+      if (controls.enableBaseHandleKeyboard) {
+        if (keyHandlers[e.key as keyof typeof keyHandlers]) {
+          keyHandlers[e.key as keyof typeof keyHandlers]();
+          return;
+        }
+      }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullScreen, onPrev, onNext, direction, onFullScreenChange]);
+  }, [isFullScreen, onPrev, onNext, direction, onFullScreenChange, customKeyHandlers, controls.enableBaseHandleKeyboard, useFullScreen, controls.showFullscreen, handleFullScreen]);
 
   // Determine CSS classes based on fullscreen state
-  const rootClasses = isFullScreen 
-    ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black" 
+  const rootClasses = isFullScreen
+    ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black"
     : "fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm";
 
   return (
@@ -440,8 +466,8 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       ref={containerRef}
     >
       {/* Main content with loading/error states */}
-      <div 
-        className={`relative ${isFullScreen ? 'w-screen h-screen' : 'max-w-[90vw] max-h-[90vh]'} flex items-center justify-center`} 
+      <div
+        className={`relative ${isFullScreen ? 'w-screen h-screen' : 'max-w-[90vw] max-h-[90vh]'} flex items-center justify-center`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Loading and Error states */}
@@ -454,7 +480,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             <></>
           )}
         </div>
-        
+
         {/* Actual content */}
         <div className="w-full h-full relative">
           {children}
@@ -464,8 +490,8 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       {/* Fullscreen navigation areas - must be after content to be on top */}
       {isFullScreen && (
         <>
-          <div 
-            className="absolute left-0 top-0 w-1/4 h-full z-[100] cursor-pointer" 
+          <div
+            className="absolute left-0 top-0 w-1/4 h-full z-[100] cursor-pointer"
             onClick={handleLeftAreaClick}
             data-testid="left-nav-area"
           >
@@ -474,13 +500,13 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
               <ChevronLeft size={30} className="text-white" />
             </div>
           </div>
-          <div 
-            className="absolute left-1/4 top-0 w-1/2 h-full z-[100] cursor-pointer" 
+          <div
+            className="absolute left-1/4 top-0 w-1/2 h-full z-[100] cursor-pointer"
             onClick={handleCenterAreaClick}
             data-testid="center-nav-area"
           />
-          <div 
-            className="absolute right-0 top-0 w-1/4 h-full z-[100] cursor-pointer" 
+          <div
+            className="absolute right-0 top-0 w-1/4 h-full z-[100] cursor-pointer"
             onClick={handleRightAreaClick}
             data-testid="right-nav-area"
           >
@@ -495,7 +521,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       {/* Title */}
       {title && (
         <div className={`fixed bottom-4 sm:top-4 left-4 z-[200] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && !showControls ? 'opacity-0' : 'opacity-100'}`}>
-          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate select-none"> 
+          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate select-none">
             {title}
           </h3>
         </div>
@@ -542,7 +568,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             <ArrowLeftRight size={24} />
           </Toggle>
         )}
-        
+
         {controls.showZoom && (
           <>
             <Button
@@ -565,7 +591,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             </Button>
           </>
         )}
-        
+
         {controls.showFullscreen && (
           <Toggle
             pressed={isFullScreen}
@@ -576,7 +602,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             {isFullScreen ? <Minimize size={24} /> : <Maximize size={24} />}
           </Toggle>
         )}
-        
+
         {controls.showDownload && (
           <Button
             variant="outline"
@@ -591,7 +617,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             <Download size={20} />
           </Button>
         )}
-        
+
         {controls.showClose && (
           <Button
             variant="outline"

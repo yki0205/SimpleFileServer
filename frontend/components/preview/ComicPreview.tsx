@@ -1,4 +1,6 @@
-import React from "react";
+"use client"
+
+import React, { useState } from "react";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 import { ComicReader } from "@/components/reader/ComicReader";
 
@@ -13,6 +15,9 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
   controls,
   ...restProps
 }) => {
+
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
   return (
     <PreviewBase
       onClose={onClose}
@@ -20,6 +25,8 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         showClose: false,
         showDownload: false,
         showNavigation: false,
+        showFullscreen: false,
+        enableBackdropClose: !isFullScreen,
         ...controls
       }}
       {...restProps}
@@ -28,6 +35,7 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         <ComicReader
           src={src}
           onClose={onClose}
+          onFullScreenChange={setIsFullScreen}
         />
       </div>
     </PreviewBase>

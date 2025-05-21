@@ -7,14 +7,15 @@ import { Toggle } from '@/components/ui/toggle';
 import { Loading } from '@/components/status/Loading';
 import { Error } from '@/components/status/Error';
 import { NotFound } from '@/components/status/NotFound';
-import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize, Minimize } from 'lucide-react';
 
 interface ComicReaderProps {
   src: string;
   onClose?: () => void;
+  onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export function ComicReader({ src, onClose }: ComicReaderProps) {
+export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -24,6 +25,7 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
 
   // Image zoom and position state
   const [zoom, setZoom] = useState(1);
+  const [useFullScreen, setUseFullScreen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -218,6 +220,13 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
   const handleDoubleClick = () => {
     setZoom(1);
     setPosition({ x: 0, y: 0 });
+  };
+
+  const handleFullScreenChange = (isFullScreen: boolean) => {
+    setUseFullScreen(isFullScreen);
+    if (onFullScreenChange) {
+      onFullScreenChange(isFullScreen);
+    }
   };
 
   // Zoom control functions
@@ -550,7 +559,10 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (zoom > 1) return;
+      // Don't handle keyboard navigation when zoomed in
+      if (zoom > 1 && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === ' ')) {
+        return;
+      }
 
       switch (e.key) {
         case 'ArrowRight':
@@ -560,7 +572,17 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
           isRightToLeft ? debouncedNextPage() : debouncedPrevPage();
           break;
         case 'Escape':
-          onClose?.();
+          if (useFullScreen) {
+            // First exit fullscreen if in fullscreen mode
+            handleFullScreenChange(false);
+          } else {
+            // Otherwise close the reader
+            onClose?.();
+          }
+          break;
+        case 'Enter':
+          // Toggle fullscreen
+          handleFullScreenChange(!useFullScreen);
           break;
         case ' ':
           e.preventDefault();
@@ -571,7 +593,7 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoom, isRightToLeft, onClose, debouncedNextPage, debouncedPrevPage]);
+  }, [zoom, isRightToLeft, onClose, debouncedNextPage, debouncedPrevPage, useFullScreen, handleFullScreenChange]);
 
   // Set up wheel event listener
   useEffect(() => {
@@ -764,6 +786,16 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
           </Toggle>
 
           <Toggle
+            pressed={useFullScreen}
+            onPressedChange={handleFullScreenChange}
+            aria-label="Full screen"
+            title="Full screen"
+            className="text-white hover:text-white/80 bg-transparent hover:bg-white/20"
+          >
+            {useFullScreen ? <Minimize size={18} /> : <Maximize size={18} />}
+          </Toggle>
+
+          <Toggle
             pressed={isDoublePage}
             onPressedChange={setIsDoublePage}
             aria-label="Double page view"
@@ -828,8 +860,8 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
               transform: `scale(${zoom})`,
               transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               margin: zoom > 1 ? '-10%' : 0,
-              maxWidth: '95vw',
-              maxHeight: 'calc(100vh - 80px)',
+              maxWidth: useFullScreen ? '100vw' : '95vw',
+              maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 80px)',
               display: 'flex',
               flexDirection: 'row',
               alignItems: 'center',
@@ -844,8 +876,8 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
                 src={pages[nextPageIndex]}
                 alt={`Page ${nextPageIndex + 1}`}
                 style={{
-                  maxHeight: 'calc(100vh - 100px)',
-                  maxWidth: '45vw',
+                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
+                  maxWidth: useFullScreen ? '48vw' : '45vw',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -864,8 +896,8 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
                 src={pages[currentPageIndex]}
                 alt={`Page ${currentPageIndex + 1}`}
                 style={{
-                  maxHeight: 'calc(100vh - 100px)',
-                  maxWidth: '45vw',
+                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
+                  maxWidth: useFullScreen ? '48vw' : '45vw',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -887,8 +919,8 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
                 src={pages[isRightToLeft ? currentPageIndex : nextPageIndex]}
                 alt={`Page ${(isRightToLeft ? currentPageIndex : nextPageIndex) + 1}`}
                 style={{
-                  maxHeight: 'calc(100vh - 100px)',
-                  maxWidth: '45vw',
+                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
+                  maxWidth: useFullScreen ? '48vw' : '45vw',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -918,8 +950,8 @@ export function ComicReader({ src, onClose }: ComicReaderProps) {
                 src={pages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
                 style={{
-                  maxWidth: '95vw',
-                  maxHeight: 'calc(100vh - 80px)',
+                  maxWidth: useFullScreen ? '100vw' : '95vw',
+                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 80px)',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
