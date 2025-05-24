@@ -207,6 +207,11 @@ app.get('/api/thumbnail', (req, res) => {
     if (getFileType(extension) !== 'image') {
       return res.status(400).json({ error: 'File is not an image' });
     }
+    if (extension === '.bmp') {
+      // Cause sharp cannot handle bmp files, I return the original file directly
+      res.setHeader('Content-Type', 'image/bmp');
+      return fs.createReadStream(fullPath).pipe(res);
+    }
 
     // Cache mechanism: generate cache path
     const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
@@ -752,7 +757,6 @@ async function parallelSearch(dir, query, basePath) {
       return rootResults.concat(...workerResults);
     } catch (error) {
       return res.status(500).json({ error: 'Server error' });
-      return [];
     }
   }
 }

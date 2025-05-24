@@ -15,8 +15,8 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
-  List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home,
-  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal
+  List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
+  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout, Info
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -24,6 +24,7 @@ import { Error, Loading, NotFound } from "@/components/status";
 import { Image } from "@/components/image";
 import { FileItemListView, FileItemGridView } from "@/components/fileItem";
 import { ConfirmDialog } from "@/components/dialog";
+import { DetailsDialog } from "@/components/dialog";
 
 import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview } from "@/components/preview";
 
@@ -68,11 +69,12 @@ interface FileRowProps {
     onFileClick: (path: string, type: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
+    onShowDetails?: (file: FileData) => void;
   };
 }
 
 const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
-  const { files, isSearching, onFileClick, onDownload, onDelete } = data;
+  const { files, isSearching, onFileClick, onDownload, onDelete, onShowDetails } = data;
   const file = files[index];
 
   return (
@@ -87,6 +89,10 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+            <Info className="mr-2" size={16} />
+            Details
+          </ContextMenuItem>
           <ContextMenuItem onClick={() => onDownload(file.path)}>
             <Download className="mr-2" size={16} />
             Download
@@ -111,11 +117,12 @@ interface FileCellProps {
     onFileClick: (path: string, type: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
+    onShowDetails?: (file: FileData) => void;
   };
 }
 
 const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
-  const { files, columnCount, onFileClick, onDownload, onDelete } = data;
+  const { files, columnCount, onFileClick, onDownload, onDelete, onShowDetails } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -133,6 +140,10 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+            <Info className="mr-2" size={16} />
+            Details
+          </ContextMenuItem>
           <ContextMenuItem onClick={() => onDownload(file.path)}>
             <Download className="mr-2" size={16} />
             Download
@@ -157,11 +168,12 @@ interface ImageCellProps {
     onFileClick: (path: string, type: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
+    onShowDetails?: (file: FileData) => void;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, columnCount, onFileClick, onDownload, onDelete } = data;
+  const { files, columnCount, onFileClick, onDownload, onDelete, onShowDetails } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -170,14 +182,32 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
   if (file.type === 'image') {
     return (
       <div style={style} className="p-1">
-        <Image
-          src={`/api/download?path=${encodeURIComponent(file.path)}`}
-          thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
-          alt={file.name}
-          onClick={() => onFileClick(file.path, file.type)}
-          className="w-full h-full object-cover rounded-md cursor-pointer"
-          loading="eager"
-        />
+        <ContextMenu>
+          <ContextMenuTrigger>
+            <Image
+              src={`/api/download?path=${encodeURIComponent(file.path)}`}
+              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+              alt={file.name}
+              onClick={() => onFileClick(file.path, file.type)}
+              className="w-full h-full object-cover rounded-md cursor-pointer"
+              loading="eager"
+            />
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+              <Info className="mr-2" size={16} />
+              Details
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDownload(file.path)}>
+              <Download className="mr-2" size={16} />
+              Download
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDelete(file.path)}>
+              <Trash2 className="mr-2" size={16} />
+              Delete
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </div>
     );
   } else {
@@ -193,6 +223,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             />
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+              <Info className="mr-2" size={16} />
+              Details
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onDownload(file.path)}>
               <Download className="mr-2" size={16} />
               Download
@@ -219,11 +253,12 @@ interface MasonryCellProps {
     onFileClick: (path: string, type: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
+    onShowDetails?: (file: FileData) => void;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, columnCount, columnWidth, direction, onFileClick } = data;
+  const { files, columnCount, columnWidth, direction, onFileClick, onDownload, onDelete, onShowDetails } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -245,15 +280,33 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
     >
       {columnFiles.map((file) => (
         <div key={file.path} className="break-inside-avoid mb-2 w-full">
-          <Image
-            {...file}
-            src={`/api/download?path=${encodeURIComponent(file.path)}`}
-            thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
-            alt={file.name}
-            onClick={() => onFileClick(file.path, file.type)}
-            className="w-full h-auto rounded-md"
-            loading="lazy"
-          />
+          <ContextMenu>
+            <ContextMenuTrigger>
+              <Image
+                {...file}
+                src={`/api/download?path=${encodeURIComponent(file.path)}`}
+                thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+                alt={file.name}
+                onClick={() => onFileClick(file.path, file.type)}
+                className="w-full h-auto rounded-md"
+                loading="lazy"
+              />
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+                <Info className="mr-2" size={16} />
+                Details
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onDownload(file.path)}>
+                <Download className="mr-2" size={16} />
+                Download
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onDelete(file.path)}>
+                <Trash2 className="mr-2" size={16} />
+                Delete
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
       ))}
     </div>
@@ -290,13 +343,25 @@ function FileExplorerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const currentPath = searchParams.get('p') || '';
+  const searchQuery = searchParams.get('q') || '';
+  const isSearching = !!searchQuery;
+  const canGoBack = currentPath !== '' || isSearching;
+
   const [fileToDownload, setFileToDownload] = useState('');
   const [downloadComfirmDialogOpen, setDownloadComfirmDialogOpen] = useState(false);
 
   const [fileToDelete, setFileToDelete] = useState('');
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
+  const [fileToShowDetails, setFileToShowDetails] = useState<FileData | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const [viewMode, setViewModeTemp] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
+  const setViewMode = (mode: 'list' | 'grid' | 'image' | 'imageOnly') => {
+    if (isSearching && mode === 'imageOnly') return;
+    setViewModeTemp(mode);
+  }
   const viewModeRef = useRef(viewMode);
 
   // EXPERIMENTAL FEATURE FOR IMAGE ONLY VIEW
@@ -324,12 +389,6 @@ function FileExplorerContent() {
     path: '',
     type: '',
   });
-
-  const currentPath = searchParams.get('p') || '';
-  const searchQuery = searchParams.get('q') || '';
-  const isSearching = !!searchQuery;
-  const canGoBack = currentPath !== '' || isSearching;
-
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
@@ -573,6 +632,12 @@ function FileExplorerContent() {
     navigateTo(currentPath, query);
   }
 
+  const handleClearSearch = () => {
+    if (isSearching) {
+      navigateTo(currentPath, '');
+    }
+  }
+
   const handleUpload = async () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -654,6 +719,11 @@ function FileExplorerContent() {
     scrollPosition.current = currentScroll;
     setShowScrollTop(currentScroll > 100);
   };
+
+  const handleShowDetails = useCallback((file: FileData) => {
+    setFileToShowDetails(file);
+    setDetailsDialogOpen(true);
+  }, []);
 
 
 
@@ -783,14 +853,15 @@ function FileExplorerContent() {
         isSearching,
         onFileClick: handleFileClick,
         onDownload: handleDownload,
-        onDelete: handleDelete
+        onDelete: handleDelete,
+        onShowDetails: handleShowDetails
       }}
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
     >
       {FileRow}
     </List>
-  ), [sortedFiles, isSearching, handleFileClick, handleDownload, handleDelete]);
+  ), [sortedFiles, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -814,7 +885,8 @@ function FileExplorerContent() {
           columnCount,
           onFileClick: handleFileClick,
           onDownload: handleDownload,
-          onDelete: handleDelete
+          onDelete: handleDelete,
+          onShowDetails: handleShowDetails
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -822,7 +894,7 @@ function FileExplorerContent() {
         {FileCell}
       </Grid>
     );
-  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -846,7 +918,8 @@ function FileExplorerContent() {
           columnCount,
           onFileClick: handleFileClick,
           onDownload: handleDownload,
-          onDelete: handleDelete
+          onDelete: handleDelete,
+          onShowDetails: handleShowDetails
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -854,7 +927,7 @@ function FileExplorerContent() {
         {ImageCell}
       </Grid>
     );
-  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+  }, [sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -881,13 +954,14 @@ function FileExplorerContent() {
               direction: gridDirection,
               onFileClick: handleFileClick,
               onDownload: handleDownload,
-              onDelete: handleDelete
+              onDelete: handleDelete,
+              onShowDetails: handleShowDetails
             }}
           />
         ))}
       </div>
     );
-  }, [useMasonry, gridDirection, sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete]);
+  }, [useMasonry, gridDirection, sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
 
 
@@ -948,6 +1022,11 @@ function FileExplorerContent() {
           <Button type="submit" variant="secondary" size="icon">
             <Search size={18} />
           </Button>
+          {isSearching && (
+            <Button type="button" variant="secondary" size="icon" className="text-red-500" onClick={handleClearSearch}>
+              <X size={18} />
+            </Button>
+          )}
         </form>
 
         <div className="order-2 sm:order-4 flex gap-1">
@@ -1035,9 +1114,9 @@ function FileExplorerContent() {
           </div>
         ) : (
           <div className="bg-muted px-1 py-1 rounded-md text-sm flex flex-wrap items-center overflow-x-auto whitespace-nowrap">
-            <BreadcrumbNav 
-              currentPath={currentPath} 
-              onNavigate={navigateTo} 
+            <BreadcrumbNav
+              currentPath={currentPath}
+              onNavigate={navigateTo}
               showRootIcon
               onRootClick={goHome}
             />
@@ -1119,11 +1198,13 @@ function FileExplorerContent() {
               isOpen={preview.isOpen}
               title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
               src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-              onClose={closePreview}
-              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
-              onNext={() => navigatePreview('next')}
-              onPrev={() => navigatePreview('prev')}
-              direction={viewMode === 'imageOnly' && gridDirection === 'rtl' ? 'rtl' : 'ltr'}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onNext: () => navigatePreview('next'),
+                onPrev: () => navigatePreview('prev'),
+                direction: viewMode === 'imageOnly' && gridDirection === 'rtl' ? 'rtl' : 'ltr'
+              }}
             />
           )}
 
@@ -1133,10 +1214,12 @@ function FileExplorerContent() {
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
               src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-              onClose={closePreview}
-              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
-              onNext={() => navigatePreview('next')}
-              onPrev={() => navigatePreview('prev')}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onNext: () => navigatePreview('next'),
+                onPrev: () => navigatePreview('prev'),
+              }}
             />
           )}
 
@@ -1146,10 +1229,12 @@ function FileExplorerContent() {
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
               src={`/api/download?path=${encodeURIComponent(preview.path)}`}
-              onClose={closePreview}
-              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
-              onNext={() => navigatePreview('next')}
-              onPrev={() => navigatePreview('prev')}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onNext: () => navigatePreview('next'),
+                onPrev: () => navigatePreview('prev'),
+              }}
             />
           )}
 
@@ -1162,8 +1247,10 @@ function FileExplorerContent() {
               content={previewContent}
               isLoading={contentLoading}
               hasError={!!contentError}
-              onClose={closePreview}
-              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+              }}
             />
           )}
 
@@ -1171,10 +1258,12 @@ function FileExplorerContent() {
           {preview.type === 'comic' && (
             <ComicPreview
               isOpen={preview.isOpen}
-              // title={preview.path.split('/').pop()}
+              title={preview.path.split('/').pop()}
               src={`/api/comic?path=${encodeURIComponent(preview.path)}`}
-              onClose={closePreview}
-              onDownload={() => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank')}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+              }}
             />
           )}
         </>
@@ -1191,24 +1280,51 @@ function FileExplorerContent() {
         </a>
       </footer>
 
+      {/* Masonry toggle button - only visible in imageOnly mode */}
+      {viewMode === 'imageOnly' && (
+        <button
+          onClick={() => setUseMasonry(!useMasonry)}
+          className={cn(
+            showScrollTop ? "fixed bottom-20 right-8"
+              : "fixed bottom-8 right-8",
+            useMasonry ? "bg-white/50 hover:bg-white/70 text-black"
+              : "bg-black/50 hover:bg-black/70 text-white",
+            "w-10 h-10 rounded-full",
+            "flex items-center justify-center",
+            "transition-all duration-300",
+            "shadow-lg",
+          )}
+          aria-label="Toggle masonry layout"
+        >
+          <Layout size={24} />
+        </button>
+      )}
+
       {/* Scroll to top button */}
       <button
         onClick={scrollToTop}
         className={cn(
           "fixed bottom-8 right-8",
+          "bg-black/50 hover:bg-black/70 text-white",
           "w-10 h-10 rounded-full",
-          "bg-black/50 hover:bg-black/70",
-          "text-white",
           "flex items-center justify-center",
           "transition-all duration-300",
           "shadow-lg",
-          "focus:outline-none focus:ring-2 focus:ring-white/50",
           showScrollTop ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
         )}
         aria-label="Scroll to top"
       >
         <ArrowUp size={24} />
       </button>
+
+      {/* Details dialog */}
+      {fileToShowDetails && (
+        <DetailsDialog
+          open={detailsDialogOpen}
+          setOpen={setDetailsDialogOpen}
+          file={fileToShowDetails}
+        />
+      )}
 
       {/* Download confirm dialog */}
       <ConfirmDialog

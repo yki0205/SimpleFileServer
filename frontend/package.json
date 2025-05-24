@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack --port 2712",
+    "tmp": "next dev --turbopack --port 9070 -H 0.0.0.0",
+    "dev": "next dev --turbopack --port 2712 -H localhost",
+    "dev:global": "next dev --turbopack --port 2712 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start --port 2711",
+    "start": "next start --port 2711 -H 0.0.0.0",
     "lint": "next lint"
   },
   "dependencies": {

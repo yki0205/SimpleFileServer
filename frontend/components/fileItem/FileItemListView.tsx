@@ -36,7 +36,7 @@ export function FileItemListView(
 
   return (
     <div
-      className={cn("flex items-center p-2 rounded-md cursor-pointer", className)}
+      className={cn("flex items-center p-2 rounded-md cursor-pointer select-none", className)}
       onClick={onClick}
     >
       <div className="mr-2">

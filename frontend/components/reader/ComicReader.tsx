@@ -10,12 +10,13 @@ import { NotFound } from '@/components/status/NotFound';
 import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize, Minimize } from 'lucide-react';
 
 interface ComicReaderProps {
+  title?: string;
   src: string;
   onClose?: () => void;
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderProps) {
+export function ComicReader({ title, src, onClose, onFullScreenChange }: ComicReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -36,7 +37,7 @@ export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderPro
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reader settings
-  const [isRightToLeft, setIsRightToLeft] = useState(false);
+  const [isRightToLeft, setIsRightToLeft] = useState(true);
   const [isDoublePage, setIsDoublePage] = useState(false);
 
   const imageRef = useRef<HTMLImageElement>(null);
@@ -720,7 +721,7 @@ export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderPro
             />
           ) : (
             <span 
-              className="text-white cursor-pointer hover:text-white/80"
+              className="text-white cursor-pointer hover:text-white/80 select-none"
               onClick={handlePageClick}
             >
               {currentPage + 1} / {totalPages}
@@ -748,7 +749,7 @@ export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderPro
               />
             ) : (
               <span 
-                className="text-white mx-2 cursor-pointer hover:text-white/80"
+                className="text-white mx-2 cursor-pointer hover:text-white/80 select-none"
                 onClick={handleZoomClick}
               >
                 {Math.round(zoom * 100)}%
@@ -773,6 +774,12 @@ export function ComicReader({ src, onClose, onFullScreenChange }: ComicReaderPro
             </Button>
           </div>
         </div>
+
+        {title && (
+          <div className="flex-1 flex justify-center items-center gap-2">
+            <h1 className="text-white text-sm lg:text-lg font-bold truncate max-sm:hidden">{title}</h1>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <Toggle

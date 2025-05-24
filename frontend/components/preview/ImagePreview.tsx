@@ -314,12 +314,10 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     <PreviewBase
       isLoading={isLoading}
       hasError={hasError}
-      onZoomIn={handleZoomIn}
-      onZoomOut={handleZoomOut}
-      onFullScreenChange={handleFullScreenChange}
       controls={{
         showZoom: true,
         showFullscreen: true,
+        useBrowserFullscreenAPI: true,
         showDirectionToggle: true,
         enableTouchNavigation: zoom <= 1,
         enableWheelNavigation: zoom <= 1,
@@ -328,7 +326,12 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
         enableBaseHandleKeyboard: true,
         enableFullscreenNavigation: zoom == 1,
         enableFullscreenToolbar: zoom == 1,
+        onZoomIn: handleZoomIn,
+        onZoomOut: handleZoomOut,
         ...controls
+      }}
+      callbacks={{
+        onFullScreenChange: handleFullScreenChange
       }}
       {...restProps}
     >

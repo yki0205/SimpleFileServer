@@ -8,7 +8,7 @@ module.exports = {
   port: process.env.PORT || 11073,
 
   baseDirectory: process.env.BASE_DIRECTORY || 'H:/ACGN',
-  // baseDirectory: process.env.BASE_DIRECTORY || 'D:/Program/Code/Computer_Science/Parallel',
+  // baseDirectory: process.env.BASE_DIRECTORY || 'D:/Program/Code/Computer_Science/Compilers_Principle',
 
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Folder, FolderOpen, File, FileText, FileArchive, Image, Music, Video, FileCode, BookOpen } from "lucide-react";
 
 interface FileItemProps {
@@ -44,6 +45,7 @@ export function FileItemGridView(
         "flex flex-col items-center justify-center",
         "cursor-pointer hover:bg-accent transition-colors",
         "relative overflow-hidden",
+        "select-none",
         className
       )}
       onClick={onClick}
@@ -66,7 +68,16 @@ export function FileItemGridView(
         <Icon size={48} className={cover ? "text-foreground/90" : ""} />
       </div>
       <div className={`w-full mt-2 p-2 ${cover ? 'z-10' : ''}`}>
-        <div className="text-center truncate text-sm font-medium">{name}</div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="text-center truncate text-sm font-medium">{name}</div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{name}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {type !== 'directory' && (
           <div className="text-center text-xs text-muted-foreground">
             {"size: " + formatFileSize(size)}

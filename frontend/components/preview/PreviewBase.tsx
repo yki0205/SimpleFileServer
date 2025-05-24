@@ -15,8 +15,6 @@ export interface PreviewBaseProps {
   isOpen: boolean;
   /** Title to display at the top left */
   title?: string;
-  /** Direction for RTL/LTR navigation */
-  direction?: 'ltr' | 'rtl';
   /** Whether the preview is loading */
   isLoading?: boolean;
   /** Whether there was an error loading the preview */
@@ -27,38 +25,66 @@ export interface PreviewBaseProps {
   loadingMessage?: string;
   /** Main content to display in the preview */
   children?: React.ReactNode;
-  /** Use full screen without max-width/height constraints (force fullscreen) */
-  useFullScreen?: boolean;
-  /** Custom keyboard handlers that can override base handlers */
-  customKeyHandlers?: Record<string, () => void>;
+
   /** Controls configuration */
   controls?: {
     /** Show close button */
     showClose?: boolean;
-    /** Show download button */
-    showDownload?: boolean;
-    /** Show navigation buttons */
-    showNavigation?: boolean;
-    /** Show zoom buttons */
-    showZoom?: boolean;
-    /** Show fullscreen button */
-    showFullscreen?: boolean;
-    /** Show direction toggle button */
-    showDirectionToggle?: boolean;
     /** Enable backdrop click to close */
     enableBackdropClose?: boolean;
+    /** Close event handler */
+    onClose?: () => void;
+
+    /** Show download button */
+    showDownload?: boolean;
+    /** Download event handler */
+    onDownload?: () => void;
+
+    /** Show zoom buttons */
+    showZoom?: boolean;
+    /** Enable Ctrl+wheel zoom */
+    enableCtrlWheelZoom?: boolean;
+    /** Zoom in event handler */
+    onZoomIn?: () => void;
+    /** Zoom out event handler */
+    onZoomOut?: () => void;
+
+    /** Show direction toggle button */
+    showDirectionToggle?: boolean;
+    /** Direction for RTL/LTR navigation (force) */
+    direction?: 'ltr' | 'rtl';
+
+    /** Show fullscreen button */
+    showFullscreen?: boolean;
+    /** Use full screen without max-width/height constraints (force fullscreen) */
+    useFullScreen?: boolean;
+    /** Use browser fullscreen API to enter fullscreen mode (This will not work when you use "useFullScreen" option) */
+    useBrowserFullscreenAPI?: boolean;
+    /** Enable toolbar in fullscreen mode */
+    enableFullscreenToolbar?: boolean;
+    /** Enable navigation in fullscreen mode */
+    enableFullscreenNavigation?: boolean;
+
+    /** Show navigation buttons */
+    showNavigation?: boolean;
     /** Enable touch navigation */
     enableTouchNavigation?: boolean;
     /** Enable wheel navigation */
     enableWheelNavigation?: boolean;
-    /** Enable Ctrl+wheel zoom */
-    enableCtrlWheelZoom?: boolean;
+    /** Reverse wheel navigation */
+    reverseWheelNavigation?: boolean;
+    /** On prev event handler */
+    onPrev?: () => void;
+    /** On next event handler */
+    onNext?: () => void;
+
+    /** Enable handle keyboard events */
+    enableHandleKeyboard?: boolean;
     /** Enable base handle keyboard events */
     enableBaseHandleKeyboard?: boolean;
-    /** Enable navigation in fullscreen mode */
-    enableFullscreenNavigation?: boolean;
-    /** Enable toolbar in fullscreen mode */
-    enableFullscreenToolbar?: boolean;
+    /** Custom keyboard handlers that can override base handlers */
+    customKeyHandlers?: Record<string, () => void>;
+
     /** Prevent browser default zooming */
     preventBrowserZoom?: boolean;
     /** Prevent browser context menu (right-click) */
@@ -72,34 +98,43 @@ export interface PreviewBaseProps {
     /** Prevent browser back/forward navigation on swipe */
     preventBrowserNavigation?: boolean;
   };
-  /** Event handlers */
-  onClose?: () => void;
-  onDownload?: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  /** Callback when fullscreen state changes */
-  onFullScreenChange?: (isFullScreen: boolean) => void;
-  /** Callback when direction changes */
-  onDirectionChange?: (direction: 'ltr' | 'rtl') => void;
+
+  /** Callback functions */
+  callbacks?: {
+    /** Callback when fullscreen state changes */
+    onFullScreenChange?: (isFullScreen: boolean) => void;
+    /** Callback when direction changes */
+    onDirectionChange?: (direction: 'ltr' | 'rtl') => void;
+  }
 }
 
 const defaultControls = {
   showClose: true,
-  showDownload: true,
-  showNavigation: true,
-  showZoom: false,
-  showFullscreen: false,
-  showDirectionToggle: false,
   enableBackdropClose: true,
-  enableTouchNavigation: false,
-  enableWheelNavigation: false,
+
+  showDownload: true,
+
+  showZoom: false,
   enableCtrlWheelZoom: false,
-  enableHandleKeyboard: true,
-  enableBaseHandleKeyboard: true,
+
+  showDirectionToggle: false,
+  direction: 'ltr' as 'ltr' | 'rtl',
+
+  showNavigation: true,
+  enableWheelNavigation: false,
+  enableTouchNavigation: false,
+  reverseWheelNavigation: false,
+
+  showFullscreen: false,
+  useFullScreen: false,
+  useBrowserFullscreenAPI: false,
   enableFullscreenNavigation: true,
   enableFullscreenToolbar: true,
+
+  enableHandleKeyboard: true,
+  enableBaseHandleKeyboard: true,
+  customKeyHandlers: {},
+
   preventBrowserZoom: false,
   preventContextMenu: false,
   preventTextSelection: false,
@@ -111,48 +146,158 @@ const defaultControls = {
 export const PreviewBase: React.FC<PreviewBaseProps> = ({
   isOpen,
   title,
-  direction: initialDirection = 'ltr',
   isLoading = false,
   hasError = false,
   errorMessage = "Error loading preview. Please try again.",
   loadingMessage = "Loading preview...",
   children,
-  useFullScreen = false,
-  customKeyHandlers,
   controls: controlsProp,
-  onClose,
-  onDownload,
-  onPrev,
-  onNext,
-  onZoomIn,
-  onZoomOut,
-  onFullScreenChange,
-  onDirectionChange,
+  callbacks
 }) => {
   if (!isOpen) return null;
-
-  // Internal state management
-  const [showControls, setShowControls] = useState(true);
-  const [direction, setDirection] = useState<'ltr' | 'rtl'>(initialDirection);
-  const [isFullScreenTemp, setIsFullScreen] = useState(false);
-  const isFullScreen = useFullScreen || isFullScreenTemp;
-  const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Update internal direction state when prop changes (for external control)
-  useEffect(() => {
-    setDirection(initialDirection);
-  }, [initialDirection]);
 
   // Merge provided controls with defaults
   const controls = { ...defaultControls, ...controlsProp };
 
-  // Handle fullscreen toggle
+  // Extract common handlers from controls for easier access
+  const {
+    showClose,
+    enableBackdropClose,
+    onClose,
+
+    showDownload,
+    onDownload,
+
+    showZoom,
+    enableCtrlWheelZoom,
+    onZoomIn,
+    onZoomOut,
+
+    showDirectionToggle,
+    direction: forceDirection,
+
+    showFullscreen,
+    useFullScreen: forceFullScreen,
+    useBrowserFullscreenAPI,
+    enableFullscreenNavigation,
+    enableFullscreenToolbar,
+
+    showNavigation,
+    enableTouchNavigation,
+    enableWheelNavigation,
+    reverseWheelNavigation,
+    onPrev,
+    onNext,
+
+    enableHandleKeyboard,
+    enableBaseHandleKeyboard,
+    customKeyHandlers,
+
+  } = controls;
+
+  const {
+    onFullScreenChange,
+    onDirectionChange,
+  } = callbacks || {};
+
+  // Internal state management
+  const [showControls, setShowControls] = useState(true);
+
+  const [directionTemp, setDirection] = useState<'ltr' | 'rtl'>('ltr');
+  const direction = forceDirection || directionTemp;
+
+  const [isFullScreenTemp, setIsFullScreen] = useState(false);
+  const isFullScreen = forceFullScreen || isFullScreenTemp;
+
+  const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+
+  // Internal event handlers
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && enableBackdropClose) {
+      onClose?.();
+    }
+  }, [enableBackdropClose, onClose]);
+
+  // Toggle fullscreen
   const handleFullScreen = useCallback(() => {
     const newFullScreenState = !isFullScreen;
     setIsFullScreen(newFullScreenState);
+    
+    // Handle browser fullscreen API if enabled
+    if (useBrowserFullscreenAPI && containerRef.current) {
+      try {
+        if (newFullScreenState) {
+          if (containerRef.current.requestFullscreen) {
+            containerRef.current.requestFullscreen();
+          } else if ((containerRef.current as any).webkitRequestFullscreen) {
+            (containerRef.current as any).webkitRequestFullscreen();
+          } else if ((containerRef.current as any).msRequestFullscreen) {
+            (containerRef.current as any).msRequestFullscreen();
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+          } else if ((document as any).msExitFullscreen) {
+            (document as any).msExitFullscreen();
+          }
+        }
+      } catch (error) {
+        console.error("Error toggling browser fullscreen mode:", error);
+      }
+    }
+    
     onFullScreenChange?.(newFullScreenState);
-  }, [isFullScreen, onFullScreenChange]);
+  }, [isFullScreen, onFullScreenChange, useBrowserFullscreenAPI]);
+
+  // Listen for browser fullscreen changes if using browser fullscreen API
+  useEffect(() => {
+    if (!useBrowserFullscreenAPI) return;
+    
+    const handleBrowserFullscreenChange = () => {
+      const isDocFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).msFullscreenElement
+      );
+      
+      // Only update state if it doesn't match current browser fullscreen state
+      if (isFullScreen !== isDocFullscreen) {
+        setIsFullScreen(isDocFullscreen);
+        onFullScreenChange?.(isDocFullscreen);
+      }
+    };
+    
+    document.addEventListener("fullscreenchange", handleBrowserFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleBrowserFullscreenChange);
+    document.addEventListener("msfullscreenchange", handleBrowserFullscreenChange);
+    
+    return () => {
+      document.removeEventListener("fullscreenchange", handleBrowserFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleBrowserFullscreenChange);
+      document.removeEventListener("msfullscreenchange", handleBrowserFullscreenChange);
+    };
+  }, [isFullScreen, onFullScreenChange, useBrowserFullscreenAPI]);
+
+  // Escape key should also exit browser fullscreen if active
+  useEffect(() => {
+    if (!useBrowserFullscreenAPI) return;
+    
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isFullScreen) {
+        setIsFullScreen(false);
+        onFullScreenChange?.(false);
+      }
+    };
+    
+    window.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      window.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [isFullScreen, onFullScreenChange, useBrowserFullscreenAPI]);
 
   // Toggle direction
   const handleToggleDirection = useCallback(() => {
@@ -161,49 +306,35 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     onDirectionChange?.(newDirection);
   }, [direction, onDirectionChange]);
 
-  // Internal event handlers
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && controls.enableBackdropClose && onClose) {
-      onClose();
-    }
-  }, [controls.enableBackdropClose, onClose]);
-
-  // Prevent context menu (right-click)
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (controls.preventContextMenu) {
-      e.preventDefault();
-      return false;
-    }
-  }, [controls.preventContextMenu]);
-
   // Handle wheel events, including Ctrl+wheel for zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
     // Handle Ctrl+wheel zoom if enabled
-    if (e.ctrlKey && controls.enableCtrlWheelZoom) {
+    if (e.ctrlKey && enableCtrlWheelZoom) {
       e.preventDefault();
       e.stopPropagation();
 
       // Call zoom in or out based on wheel direction
-      if (e.deltaY < 0 && onZoomIn) {
-        onZoomIn();
-      } else if (e.deltaY > 0 && onZoomOut) {
-        onZoomOut();
+      if (e.deltaY < 0) {
+        onZoomIn?.();
+      } else if (e.deltaY > 0) {
+        onZoomOut?.();
       }
 
       return false;
     }
 
     // Handle wheel navigation if enabled
-    if (controls.enableWheelNavigation && onPrev && onNext) {
+    if (enableWheelNavigation) {
       e.stopPropagation();
 
       if (e.deltaY > 0) {
-        direction === 'rtl' ? onPrev() : onNext();
+        reverseWheelNavigation ? onPrev?.() : onNext?.();
       } else if (e.deltaY < 0) {
-        direction === 'rtl' ? onNext() : onPrev();
+        reverseWheelNavigation ? onNext?.() : onPrev?.();
       }
     }
-  }, [controls.enableCtrlWheelZoom, controls.enableWheelNavigation, direction, onNext, onPrev, onZoomIn, onZoomOut]);
+  }, [enableCtrlWheelZoom, enableWheelNavigation, reverseWheelNavigation, direction, onNext, onPrev, onZoomIn, onZoomOut]);
+
 
   // Auto-hide controls after inactivity in fullscreen mode
   useEffect(() => {
@@ -230,6 +361,141 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       setShowControls(true);
     }
   }, [isFullScreen]);
+
+  // Determine CSS classes based on fullscreen state
+  const rootClasses = isFullScreen
+    ? "select-none fixed inset-0 z-[9999] flex items-center justify-center bg-black"
+    : "select-none fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm";
+
+
+  // Touch event handling for navigation
+  const touchStartX = React.useRef<number | null>(null);
+  const touchEndX = React.useRef<number | null>(null);
+  const minSwipeDistance = 50;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!enableTouchNavigation) return;
+    touchStartX.current = e.touches[0].clientX;
+  }, [enableTouchNavigation]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!enableTouchNavigation) return;
+    touchEndX.current = e.touches[0].clientX;
+  }, [enableTouchNavigation]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!enableTouchNavigation || !touchStartX.current || !touchEndX.current) return;
+
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      direction === 'rtl' ? onPrev?.() : onNext?.();
+    } else if (isRightSwipe) {
+      direction === 'rtl' ? onNext?.() : onPrev?.();
+    }
+
+    // Reset values
+    touchStartX.current = null;
+    touchEndX.current = null;
+  }, [enableTouchNavigation, direction, onNext, onPrev]);
+
+
+  // Handle clicks in fullscreen mode areas
+  const handleLeftAreaClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isFullScreen) {
+      if (direction === 'ltr') {
+        onPrev?.();
+      } else if (direction === 'rtl') {
+        onNext?.();
+      } else {
+        setShowControls(true);
+      }
+    }
+  }, [isFullScreen, onPrev, onNext, direction]);
+
+  const handleRightAreaClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isFullScreen) {
+      if (direction === 'ltr') {
+        onNext?.();
+      } else if (direction === 'rtl') {
+        onPrev?.();
+      } else {
+        setShowControls(true);
+      }
+    }
+  }, [isFullScreen, onNext, onPrev, direction]);
+
+  const handleCenterAreaClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isFullScreen) {
+      setShowControls(!showControls);
+    }
+  }, [isFullScreen, showControls]);
+
+  // Handle keyboard events for navigation
+  useEffect(() => {
+    if (!enableHandleKeyboard) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const defaultArrowLeftHandler = () => {
+        direction === 'rtl' ? onNext?.() : onPrev?.();
+      }
+
+      const defaultArrowRightHandler = () => {
+        direction === 'rtl' ? onPrev?.() : onNext?.();
+      }
+
+      const defaultEscapeHandler = () => {
+        setIsFullScreen(false);
+        onFullScreenChange?.(false);
+      }
+
+      const defaultEnterHandler = () => {
+        handleFullScreen();
+      }
+
+      const defaultSpaceHandler = () => {
+        setShowControls(prev => !prev);
+      }
+
+      const defaultKeyHandlers = enableBaseHandleKeyboard ? {
+        'ArrowLeft': defaultArrowLeftHandler,
+        'ArrowRight': defaultArrowRightHandler,
+        'Escape': defaultEscapeHandler,
+        'Enter': defaultEnterHandler,
+        ' ': defaultSpaceHandler,
+      } : {};
+
+      const keyHandlers = { ...defaultKeyHandlers, ...customKeyHandlers };
+
+      if (keyHandlers[e.key as keyof typeof keyHandlers]) {
+        keyHandlers[e.key as keyof typeof keyHandlers]?.();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    handleFullScreen, onFullScreenChange, onPrev, onNext,
+    direction, enableHandleKeyboard, enableBaseHandleKeyboard, customKeyHandlers,
+  ]);
+
+
+  // Prevent context menu (right-click)
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (controls.preventContextMenu) {
+      e.preventDefault();
+      return false;
+    }
+  }, [controls.preventContextMenu]);
 
   // Apply browser behavior prevention
   useEffect(() => {
@@ -334,127 +600,6 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     controls.preventBrowserNavigation
   ]);
 
-  // Touch event handling for navigation
-  const touchStartX = React.useRef<number | null>(null);
-  const touchEndX = React.useRef<number | null>(null);
-  const minSwipeDistance = 50;
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!controls.enableTouchNavigation) return;
-    touchStartX.current = e.touches[0].clientX;
-  }, [controls.enableTouchNavigation]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!controls.enableTouchNavigation) return;
-    touchEndX.current = e.touches[0].clientX;
-  }, [controls.enableTouchNavigation]);
-
-  const handleTouchEnd = useCallback(() => {
-    if (!controls.enableTouchNavigation || !touchStartX.current || !touchEndX.current) return;
-    if (!onNext || !onPrev) return;
-
-    const distance = touchStartX.current - touchEndX.current;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe) {
-      direction === 'rtl' ? onPrev() : onNext();
-    } else if (isRightSwipe) {
-      direction === 'rtl' ? onNext() : onPrev();
-    }
-
-    // Reset values
-    touchStartX.current = null;
-    touchEndX.current = null;
-  }, [controls.enableTouchNavigation, direction, onNext, onPrev]);
-
-  // Handle clicks in fullscreen mode areas
-  const handleLeftAreaClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (isFullScreen) {
-      if (onPrev) {
-        onPrev();
-      } else {
-        setShowControls(true);
-      }
-    }
-  }, [isFullScreen, onPrev]);
-
-  const handleRightAreaClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (isFullScreen) {
-      if (onNext) {
-        onNext();
-      } else {
-        setShowControls(true);
-      }
-    }
-  }, [isFullScreen, onNext]);
-
-  const handleCenterAreaClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (isFullScreen) {
-      setShowControls(!showControls);
-    }
-  }, [isFullScreen, showControls]);
-
-  // Handle keyboard events for navigation
-  useEffect(() => {
-    if (!controls.enableHandleKeyboard) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const defaultArrowLeftHandler = () => {
-        direction === 'rtl' ? onNext?.() : onPrev?.();
-      }
-
-      const defaultArrowRightHandler = () => {
-        direction === 'rtl' ? onPrev?.() : onNext?.();
-      }
-
-      const defaultEscapeHandler = () => {
-        if (useFullScreen || controls.showFullscreen) {
-          setIsFullScreen(false);
-          onFullScreenChange?.(false);
-        }
-      }
-
-      const defaultEnterHandler = () => {
-        if (useFullScreen || controls.showFullscreen) {
-          handleFullScreen();
-        }
-      }
-
-      const defaultSpaceHandler = () => {
-        setShowControls(prev => !prev);
-      }
-
-      const defaultKeyHandlers = controls.enableBaseHandleKeyboard ? {
-        'ArrowLeft': defaultArrowLeftHandler,
-        'ArrowRight': defaultArrowRightHandler,
-        'Escape': defaultEscapeHandler,
-        'Enter': defaultEnterHandler,
-        ' ': defaultSpaceHandler,
-      } : {};
-
-      const keyHandlers = { ...defaultKeyHandlers, ...customKeyHandlers };
-
-      if (keyHandlers[e.key as keyof typeof keyHandlers]) {
-        keyHandlers[e.key as keyof typeof keyHandlers]?.();
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullScreen, onPrev, onNext, direction, onFullScreenChange, customKeyHandlers, controls.enableBaseHandleKeyboard, useFullScreen, controls.showFullscreen, handleFullScreen]);
-
-  // Determine CSS classes based on fullscreen state
-  const rootClasses = isFullScreen
-    ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black"
-    : "fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm";
 
   return (
     <div
@@ -491,7 +636,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       </div>
 
       {/* Fullscreen navigation areas - must be after content to be on top */}
-      {isFullScreen && controls.enableFullscreenNavigation && (
+      {isFullScreen && enableFullscreenNavigation && (
         <>
           <div
             className="absolute left-0 top-0 w-1/4 h-full z-[100] cursor-pointer"
@@ -523,15 +668,15 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
       {/* Title */}
       {title && (
-        <div className={`fixed bottom-4 sm:top-4 left-4 z-[50] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && (!showControls || !controls.enableFullscreenToolbar) ? 'opacity-0' : 'opacity-100'}`}>
-          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate select-none">
+        <div className={`absolute max-sm:bottom-4 sm:top-4 left-4 z-[200] sm:max-w-[50vw] transition-opacity duration-300 ${isFullScreen && (!showControls || !enableFullscreenToolbar) ? 'opacity-0' : 'opacity-100'}`}>
+          <h3 className="text-white text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-bold font-mono max-sm:text-wrap sm:truncate">
             {title}
           </h3>
         </div>
       )}
 
       {/* Navigation buttons - only shown in non-fullscreen mode */}
-      {controls.showNavigation && onPrev && onNext && !isFullScreen && (
+      {!isFullScreen && showNavigation && (
         <>
           <Button
             variant="outline"
@@ -539,7 +684,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             className="absolute z-[200] left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
             onClick={(e) => {
               e.stopPropagation();
-              direction === 'rtl' ? onNext() : onPrev();
+              direction === 'rtl' ? onNext?.() : onPrev?.();
             }}
           >
             <ChevronLeft size={24} />
@@ -551,7 +696,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             className="absolute z-[200] right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 border-white/20 text-white hover:text-white/80"
             onClick={(e) => {
               e.stopPropagation();
-              direction === 'rtl' ? onPrev() : onNext();
+              direction === 'rtl' ? onPrev?.() : onNext?.();
             }}
           >
             <ChevronRight size={24} />
@@ -560,8 +705,8 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       )}
 
       {/* Top right controls */}
-      <div className={`absolute z-[200] top-4 right-4 flex gap-2 transition-opacity duration-300 ${isFullScreen && (!showControls || !controls.enableFullscreenToolbar) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        {controls.showDirectionToggle && (
+      <div className={`absolute z-[200] top-4 right-4 flex gap-2 transition-opacity duration-300 ${isFullScreen && (!showControls || !enableFullscreenToolbar) ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        {showDirectionToggle && (
           <Toggle
             pressed={direction === 'rtl'}
             onPressedChange={() => handleToggleDirection()}
@@ -572,7 +717,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
           </Toggle>
         )}
 
-        {controls.showZoom && (
+        {showZoom && (
           <>
             <Button
               variant="outline"
@@ -595,7 +740,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
           </>
         )}
 
-        {controls.showFullscreen && (
+        {showFullscreen && (
           <Toggle
             pressed={isFullScreen}
             onPressedChange={() => handleFullScreen()}
@@ -606,7 +751,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
           </Toggle>
         )}
 
-        {controls.showDownload && (
+        {showDownload && (
           <Button
             variant="outline"
             size="icon"
@@ -621,7 +766,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
           </Button>
         )}
 
-        {controls.showClose && (
+        {showClose && (
           <Button
             variant="outline"
             size="icon"

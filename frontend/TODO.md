@@ -1,6 +1,2 @@
-- ImageOnly 与 Search 的互斥
 - 优化Video组件
 - 完成Audio组件
-- row以及grid组件的标题显示不全问题
-- thumbnail生成bug
-- 图片全屏后放大无法移动

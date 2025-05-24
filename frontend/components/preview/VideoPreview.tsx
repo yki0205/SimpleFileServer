@@ -15,8 +15,6 @@ interface VideoPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoadi
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
   src,
   autoPlay = true,
-  direction,
-  onClose,
   controls,
   ...restProps
 }) => {
@@ -94,9 +92,12 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     <PreviewBase
       isLoading={isLoading}
       hasError={hasError}
-      onClose={onClose}
       controls={{
-        showDirectionToggle: true,
+        showClose: false,
+        showDownload: false,
+        showNavigation: false,
+        enableHandleKeyboard: false,
+        preventContextMenu: true,
         ...controls
       }}
       {...restProps}
@@ -111,7 +112,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           )}
           onLoad={handleLoad}
           onError={handleError}
-          onClose={onClose}
         />
       </div>
     </PreviewBase>

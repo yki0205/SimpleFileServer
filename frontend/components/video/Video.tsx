@@ -2,31 +2,39 @@ import React, { useState, useRef, useEffect } from 'react';
 import { cn } from "@/lib/utils";
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
-  SkipBack, SkipForward, Settings, X
+  SkipBack, SkipForward, Settings, X, Download,
+  Sun, ChevronLeft, ChevronRight, Monitor
 } from 'lucide-react';
 
 interface VideoProps {
   src: string;
   autoPlay?: boolean;
   className?: string;
-  onClose?: () => void;
   onError?: () => void;
   onLoad?: () => void;
+  onClose?: () => void;
+  onDownload?: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 export const Video = ({
   src,
   autoPlay = false,
   className,
-  onClose,
   onError,
-  onLoad
+  onLoad,
+  onClose,
+  onDownload,
+  onNext,
+  onPrev,
 }: VideoProps) => {
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const progressDraggingRef = useRef(false);
   
   // State
   const [isPlaying, setIsPlaying] = useState(autoPlay);
@@ -39,7 +47,17 @@ export const Video = ({
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showSettings, setShowSettings] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
+  const [brightness, setBrightness] = useState(1);
+  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
+  
+  // Touch gestures
+  const touchStartRef = useRef<{ x: number, y: number } | null>(null);
+  const lastTouchRef = useRef<{ x: number, y: number } | null>(null);
+  const touchingProgressRef = useRef(false);
+  
+  // Double click
+  const lastClickTimeRef = useRef(0);
+  const clickPositionRef = useRef<number | null>(null);
 
   // Format time in MM:SS format
   const formatTime = (seconds: number) => {
@@ -48,7 +66,6 @@ export const Video = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Toggle play/pause
   const togglePlay = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -61,7 +78,25 @@ export const Video = ({
     }
   };
 
-  // Handle progress bar click
+  // Toggle picture-in-picture mode
+  const togglePictureInPicture = async () => {
+    if (!videoRef.current) return;
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPictureInPicture(false);
+      } else if (document.pictureInPictureEnabled) {
+        await videoRef.current.requestPictureInPicture();
+        setIsPictureInPicture(true);
+      } else {
+        console.error("Picture-in-Picture is not supported in this browser");
+      }
+    } catch (error) {
+      console.error("Error toggling Picture-in-Picture mode:", error);
+    }
+  };
+
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (progressRef.current && videoRef.current && duration > 0) {
       const rect = progressRef.current.getBoundingClientRect();
@@ -70,7 +105,46 @@ export const Video = ({
     }
   };
 
-  // Handle volume change
+  // Progress bar dragging
+  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (duration > 0) {
+      progressDraggingRef.current = true;
+      handleProgressDrag(e);
+      // Prevent text selection during drag
+      document.body.style.userSelect = 'none';
+    }
+  };
+
+  const handleProgressDrag = (e: React.MouseEvent | MouseEvent) => {
+    if (progressDraggingRef.current && progressRef.current && videoRef.current) {
+      const rect = progressRef.current.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      videoRef.current.currentTime = pos * duration;
+    }
+  };
+
+  const handleProgressMouseUp = () => {
+    if (progressDraggingRef.current) {
+      progressDraggingRef.current = false;
+      document.body.style.userSelect = '';
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => handleProgressDrag(e);
+    const handleMouseUp = () => handleProgressMouseUp();
+
+    if (progressDraggingRef.current) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [progressDraggingRef.current]);
+
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
@@ -80,7 +154,11 @@ export const Video = ({
     }
   };
 
-  // Toggle mute
+  const handleBrightnessChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newBrightness = parseFloat(e.target.value);
+    setBrightness(newBrightness);
+  };
+
   const toggleMute = () => {
     if (videoRef.current) {
       const newMutedState = !isMuted;
@@ -89,7 +167,6 @@ export const Video = ({
     }
   };
 
-  // Toggle fullscreen
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
 
@@ -104,7 +181,6 @@ export const Video = ({
     }
   };
 
-  // Skip forward/backward
   const skip = (seconds: number) => {
     if (videoRef.current) {
       const newTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
@@ -112,13 +188,163 @@ export const Video = ({
     }
   };
 
-  // Change playback rate
   const changePlaybackRate = (rate: number) => {
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
       setPlaybackRate(rate);
     }
     setShowSettings(false);
+  };
+
+  // Handle wheel events for brightness and volume control
+  const handleWheel = (e: React.WheelEvent) => {
+    if (containerRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX;
+      const containerWidth = containerRect.width;
+      const mousePosition = (mouseX - containerRect.left) / containerWidth;
+      
+      // Left half of the container
+      if (mousePosition < 0.5) {
+        // Adjust brightness
+        const delta = e.deltaY < 0 ? 0.05 : -0.05;
+        setBrightness(prev => Math.max(0.1, Math.min(2, prev + delta)));
+      } 
+      // Right half of the container
+      else {
+        // Adjust volume
+        const delta = e.deltaY < 0 ? 0.05 : -0.05;
+        if (videoRef.current) {
+          const newVolume = Math.max(0, Math.min(1, volume + delta));
+          setVolume(newVolume);
+          videoRef.current.volume = newVolume;
+          setIsMuted(newVolume === 0);
+        }
+      }
+      
+      // Show controls when adjusting
+      resetControlsTimeout();
+    }
+  };
+
+  // Handle double click for skipping forward/backward
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const now = Date.now();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    
+    if (containerRect) {
+      const mouseX = e.clientX;
+      const containerWidth = containerRect.width;
+      const position = (mouseX - containerRect.left) / containerWidth;
+      
+      if (now - lastClickTimeRef.current < 300) {
+        // It's a double click
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (position < 0.3) {
+          // Left area - skip backward
+          skip(-10);
+        } else if (position > 0.7) {
+          // Right area - skip forward
+          skip(10);
+        } else {
+          // Center area - toggle play
+          togglePlay();
+        }
+      }
+      
+      lastClickTimeRef.current = now;
+    }
+  };
+
+  // Handle touch events for gestures
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      
+      // Check if touch started on progress bar
+      if (progressRef.current) {
+        const progressRect = progressRef.current.getBoundingClientRect();
+        touchingProgressRef.current = (
+          touch.clientY >= progressRect.top &&
+          touch.clientY <= progressRect.bottom &&
+          touch.clientX >= progressRect.left &&
+          touch.clientX <= progressRect.right
+        );
+      }
+      
+      resetControlsTimeout();
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && touchStartRef.current && lastTouchRef.current) {
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - lastTouchRef.current.x;
+      const deltaY = touch.clientY - lastTouchRef.current.y;
+      const totalDeltaX = touch.clientX - touchStartRef.current.x;
+      const totalDeltaY = touch.clientY - touchStartRef.current.y;
+      
+      // Update last touch position
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      
+      // If touch started on progress bar, scrub through video
+      if (touchingProgressRef.current && progressRef.current && videoRef.current) {
+        const rect = progressRef.current.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+        videoRef.current.currentTime = pos * duration;
+        return;
+      }
+      
+      // Determine if this is primarily a horizontal or vertical gesture
+      if (Math.abs(totalDeltaX) > 20 && Math.abs(totalDeltaX) > Math.abs(totalDeltaY) * 2) {
+        // Horizontal gesture - scrubbing
+        if (duration > 0 && videoRef.current) {
+          const scrubAmount = (deltaX / containerRef.current!.clientWidth) * duration * 0.5;
+          videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + scrubAmount));
+        }
+        
+        e.preventDefault();
+        return;
+      }
+      
+      if (Math.abs(totalDeltaY) > 20 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) * 2) {
+        // Vertical gesture
+        const containerRect = containerRef.current?.getBoundingClientRect();
+        
+        if (containerRect) {
+          const touchX = touch.clientX;
+          const containerWidth = containerRect.width;
+          const position = (touchX - containerRect.left) / containerWidth;
+          
+          if (position < 0.5) {
+            // Left side - adjust brightness
+            const brightnessDelta = -deltaY * 0.01;
+            setBrightness(prev => Math.max(0.1, Math.min(2, prev + brightnessDelta)));
+          } else {
+            // Right side - adjust volume
+            const volumeDelta = -deltaY * 0.01;
+            if (videoRef.current) {
+              const newVolume = Math.max(0, Math.min(1, volume + volumeDelta));
+              setVolume(newVolume);
+              videoRef.current.volume = newVolume;
+              setIsMuted(newVolume === 0);
+            }
+          }
+        }
+        
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+    lastTouchRef.current = null;
+    touchingProgressRef.current = false;
   };
 
   // Auto-hide controls after inactivity
@@ -190,6 +416,14 @@ export const Video = ({
       setIsBuffering(false);
     };
 
+    const onEnterpictureinpicture = () => {
+      setIsPictureInPicture(true);
+    };
+
+    const onLeavepictureinpicture = () => {
+      setIsPictureInPicture(false);
+    };
+
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('ended', onEnded);
@@ -198,6 +432,8 @@ export const Video = ({
     video.addEventListener('volumechange', onVolumeChange);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('playing', onPlaying);
+    video.addEventListener('enterpictureinpicture', onEnterpictureinpicture);
+    video.addEventListener('leavepictureinpicture', onLeavepictureinpicture);
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('click', handleClickOutside);
 
@@ -210,6 +446,8 @@ export const Video = ({
       video.removeEventListener('volumechange', onVolumeChange);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('enterpictureinpicture', onEnterpictureinpicture);
+      video.removeEventListener('leavepictureinpicture', onLeavepictureinpicture);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
       document.removeEventListener('click', handleClickOutside);
       
@@ -223,10 +461,6 @@ export const Video = ({
   useEffect(() => {
     // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 修改判断条件，允许键盘事件在组件聚焦或全屏时生效
-      if (!isFullscreen && !isFocused && !containerRef.current?.contains(document.activeElement)) {
-        return;
-      }
       
       switch (e.key) {
         case ' ':
@@ -241,13 +475,62 @@ export const Video = ({
           e.preventDefault();
           skip(-10);
           break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (e.ctrlKey) {
+            // Ctrl+Up for brightness
+            setBrightness(prev => Math.min(2, prev + 0.1));
+          } else {
+            // Up for volume
+            if (videoRef.current) {
+              const newVolume = Math.min(1, videoRef.current.volume + 0.1);
+              videoRef.current.volume = newVolume;
+            }
+          }
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (e.ctrlKey) {
+            // Ctrl+Down for brightness
+            setBrightness(prev => Math.max(0.1, prev - 0.1));
+          } else {
+            // Down for volume
+            if (videoRef.current) {
+              const newVolume = Math.max(0, videoRef.current.volume - 0.1);
+              videoRef.current.volume = newVolume;
+            }
+          }
+          break;
         case 'f':
           e.preventDefault();
           toggleFullscreen();
           break;
+        case 'p':
+          if (e.ctrlKey) {
+            e.preventDefault();
+            togglePictureInPicture();
+          } else if (onPrev) {
+            e.preventDefault();
+            onPrev();
+          }
+          break;
+        case 'i':
+          if (e.altKey) {
+            e.preventDefault();
+            togglePictureInPicture();
+          }
+          break;
         case 'm':
           e.preventDefault();
           toggleMute();
+          break;
+        case 'n':
+          e.preventDefault();
+          if (onNext) onNext();
+          break;
+        case 'd':
+          e.preventDefault();
+          if (onDownload) onDownload();
           break;
         case '>':
         case '.':
@@ -273,7 +556,7 @@ export const Video = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isPlaying, playbackRate, isFullscreen, isFocused, duration]);
+  }, [isPlaying, playbackRate, isFullscreen, duration, volume, brightness, onNext, onPrev, onDownload]);
 
   return (
     <div 
@@ -290,24 +573,35 @@ export const Video = ({
           togglePlay();
         }
       }}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      tabIndex={0} // 添加tabIndex使div可聚焦
+      onDoubleClick={handleDoubleClick}
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <video
         ref={videoRef}
         src={src}
         className="w-full h-full object-contain"
+        style={{ filter: `brightness(${brightness})` }}
         autoPlay={autoPlay}
         onClick={(e) => e.stopPropagation()}
         onError={onError}
-        tabIndex={-1} // 防止视频元素获取焦点
       />
 
       {/* Buffering indicator */}
       {isBuffering && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+
+      {/* Large play/pause button in center when paused */}
+      {!isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/40 rounded-full p-5">
+            <Play size={60} className="text-white" />
+          </div>
         </div>
       )}
 
@@ -325,6 +619,7 @@ export const Video = ({
           ref={progressRef}
           className="w-full h-2 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress"
           onClick={handleProgressClick}
+          onMouseDown={handleProgressMouseDown}
         >
           <div 
             className="h-full bg-red-500 rounded-full"
@@ -349,17 +644,36 @@ export const Video = ({
               onClick={togglePlay}
               className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
               aria-label={isPlaying ? "Pause" : "Play"}
-              tabIndex={0}
             >
               {isPlaying ? <Pause size={24} /> : <Play size={24} />}
             </button>
+
+            {/* Previous/Next buttons */}
+            {onPrev && (
+              <button 
+                onClick={onPrev}
+                className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
+                aria-label="Previous video"
+              >
+                <ChevronLeft size={24} />
+              </button>
+            )}
+            
+            {onNext && (
+              <button 
+                onClick={onNext}
+                className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
+                aria-label="Next video"
+              >
+                <ChevronRight size={24} />
+              </button>
+            )}
 
             {/* Skip buttons */}
             <button 
               onClick={() => skip(-10)}
               className="text-white hover:text-gray-300 transition-colors hidden sm:block focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
               aria-label="Skip backward 10 seconds"
-              tabIndex={0}
             >
               <SkipBack size={20} />
             </button>
@@ -367,7 +681,6 @@ export const Video = ({
               onClick={() => skip(10)}
               className="text-white hover:text-gray-300 transition-colors hidden sm:block focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
               aria-label="Skip forward 10 seconds"
-              tabIndex={0}
             >
               <SkipForward size={20} />
             </button>
@@ -381,13 +694,58 @@ export const Video = ({
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Brightness control */}
+            <div className="flex items-center gap-2 group/brightness">
+              <button 
+                onClick={() => setBrightness(brightness === 1 ? 1.5 : 1)}
+                className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
+                aria-label="Adjust brightness"
+              >
+                <Sun size={20} />
+              </button>
+              <div className="w-0 overflow-hidden transition-all duration-200 group-hover/brightness:w-20">
+                <input
+                  type="range"
+                  min="0.1"
+                  max="2"
+                  step="0.1"
+                  value={brightness}
+                  onChange={handleBrightnessChange}
+                  className="w-20 accent-yellow-500"
+                  aria-label="Brightness"
+                />
+              </div>
+            </div>
+
+            {/* Picture-in-picture button */}
+            <button
+              onClick={togglePictureInPicture}
+              className={cn(
+                "text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1",
+                isPictureInPicture ? "text-blue-400 hover:text-blue-300" : ""
+              )}
+              aria-label={isPictureInPicture ? "Exit picture-in-picture" : "Enter picture-in-picture"}
+            >
+              <Monitor size={20} />
+            </button>
+
+            {/* Download button */}
+            {onDownload && (
+              <button 
+                onClick={onDownload}
+                className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
+                aria-label="Download video"
+              >
+                <Download size={20} />
+              </button>
+            )}
+
             {/* Playback rate */}
             <div className="relative settings-container">
               <button 
                 onClick={() => setShowSettings(!showSettings)}
                 className="text-white hover:text-gray-300 transition-colors hidden sm:block focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
                 aria-label="Settings"
-                tabIndex={0}
               >
                 <Settings size={20} />
               </button>
@@ -404,7 +762,6 @@ export const Video = ({
                           "text-left px-2 py-1 rounded hover:bg-gray-700 text-sm transition-colors",
                           playbackRate === rate ? "bg-gray-700 text-white" : "text-gray-300"
                         )}
-                        tabIndex={0}
                       >
                         {rate}x
                       </button>
@@ -420,7 +777,6 @@ export const Video = ({
                 onClick={toggleMute}
                 className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
                 aria-label={isMuted ? "Unmute" : "Mute"}
-                tabIndex={0}
               >
                 {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
               </button>
@@ -434,7 +790,6 @@ export const Video = ({
                   onChange={handleVolumeChange}
                   className="w-20 accent-red-500"
                   aria-label="Volume"
-                  tabIndex={0}
                 />
               </div>
             </div>
@@ -444,7 +799,6 @@ export const Video = ({
               onClick={toggleFullscreen}
               className="text-white hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded-full p-1"
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              tabIndex={0}
             >
               {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
@@ -464,7 +818,6 @@ export const Video = ({
             showControls ? "opacity-100" : "opacity-0 pointer-events-none"
           )}
           aria-label="Close video"
-          tabIndex={0}
         >
           <X size={24} />
         </button>
@@ -473,7 +826,7 @@ export const Video = ({
       {/* Keyboard shortcuts info - only shown in fullscreen */}
       {isFullscreen && showControls && (
         <div className="absolute top-4 left-4 bg-black/50 text-white text-xs p-2 rounded">
-          Space: Play/Pause | ←→: Skip 10s | F: Fullscreen | M: Mute | &lt;&gt;: Speed
+          Space: Play/Pause | ←→: Skip 10s | F: Fullscreen | M: Mute | P: PiP | &lt;&gt;: Speed
         </div>
       )}
     </div>
