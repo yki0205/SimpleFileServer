@@ -364,9 +364,11 @@ function FileExplorerContent() {
   }
   const viewModeRef = useRef(viewMode);
 
-  // EXPERIMENTAL FEATURE FOR IMAGE ONLY VIEW
-  const [useMasonry, setUseMasonry] = useState(false);
+  // EXPERIMENTAL FEATURE FOR GRID VIEW, IMAGE VIEW & IMAGE ONLY VIEW
   const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
+
+  // EXPERIMENTAL FEATURE FOR IMAGE ONLY VIEW (MASONRY)
+  const [useMasonry, setUseMasonry] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // EXPERIMENTAL FEATURE FOR IMAGE VIEW
@@ -1203,7 +1205,6 @@ function FileExplorerContent() {
                 onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
-                direction: viewMode === 'imageOnly' && gridDirection === 'rtl' ? 'rtl' : 'ltr'
               }}
             />
           )}

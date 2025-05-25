@@ -118,7 +118,7 @@ const defaultControls = {
   enableCtrlWheelZoom: false,
 
   showDirectionToggle: false,
-  direction: 'ltr' as 'ltr' | 'rtl',
+  direction: undefined as 'ltr' | 'rtl' | undefined,
 
   showNavigation: true,
   enableWheelNavigation: false,
