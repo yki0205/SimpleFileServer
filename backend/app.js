@@ -973,6 +973,7 @@ function getFileType(extension) {
   const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
 
   const pdfExtensions = ['.pdf'];
+  const epubExtensions = ['.epub'];
 
   if (imageExtensions.includes(extension)) return 'image';
   if (videoExtensions.includes(extension)) return 'video';
@@ -982,6 +983,7 @@ function getFileType(extension) {
   if (codeExtensions.includes(extension)) return 'code';
   if (comicExtensions.includes(extension)) return 'comic';
   if (pdfExtensions.includes(extension)) return 'pdf';
+  if (epubExtensions.includes(extension)) return 'epub';
   return 'other';
 }
 
@@ -1098,6 +1100,7 @@ function getContentType(extension) {
     '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
     '.odp': 'application/vnd.oasis.opendocument.presentation',
     '.tex': 'application/x-tex',
+    '.epub': 'application/epub+zip',
 
     // Archives
     '.zip': 'application/zip',

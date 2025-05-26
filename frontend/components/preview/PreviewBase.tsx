@@ -615,7 +615,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     >
       {/* Main content with loading/error states */}
       <div
-        className={`relative ${isFullScreen ? 'w-screen h-screen' : 'max-w-[90vw] max-h-[90vh]'} flex items-center justify-center`}
+        className={`relative flex items-center justify-center`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Loading and Error states */}
@@ -624,15 +624,11 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
             <Error message={errorMessage} className="text-white w-100" />
           ) : isLoading ? (
             <Loading message={loadingMessage} className="text-white w-100" />
-          ) : (
-            <></>
-          )}
+          ) : null}
         </div>
 
         {/* Actual content */}
-        <div className="w-full h-full relative">
-          {children}
-        </div>
+        {children}
       </div>
 
       {/* Fullscreen navigation areas - must be after content to be on top */}

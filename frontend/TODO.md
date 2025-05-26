@@ -1,2 +1,2 @@
-- 优化Video组件
+- EPUB组件
 - 完成Audio组件

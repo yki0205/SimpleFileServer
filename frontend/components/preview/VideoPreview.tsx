@@ -20,7 +20,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 }) => {
   const currentSrcRef = useRef(src);
   const cachedVideosRef = useRef<Set<string>>(new Set());
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -102,18 +101,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       }}
       {...restProps}
     >
-      <div ref={containerRef} className="flex flex-col items-center w-full">
-        <Video
-          src={src}
-          autoPlay={autoPlay}
-          className={cn(
-            (isLoading || hasError) && "opacity-0",
-            "max-w-full max-h-[80vh] shadow-2xl"
-          )}
-          onLoad={handleLoad}
-          onError={handleError}
-        />
-      </div>
+      <Video
+        src={src}
+        autoPlay={autoPlay}
+        className={cn(
+          (isLoading || hasError) && "opacity-0",
+        )}
+        onLoad={handleLoad}
+        onError={handleError}
+        onNext={controls?.onNext}
+        onPrev={controls?.onPrev}
+      />
     </PreviewBase>
   );
 };

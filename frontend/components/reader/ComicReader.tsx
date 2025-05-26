@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from '@/lib/utils';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
@@ -12,11 +13,12 @@ import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Ro
 interface ComicReaderProps {
   title?: string;
   src: string;
+  className?: string;
   onClose?: () => void;
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export function ComicReader({ title, src, onClose, onFullScreenChange }: ComicReaderProps) {
+export function ComicReader({ title, src, className, onClose, onFullScreenChange }: ComicReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -688,7 +690,7 @@ export function ComicReader({ title, src, onClose, onFullScreenChange }: ComicRe
   return (
     <div 
       ref={containerRef} 
-      className="relative w-full h-full flex flex-col"
+      className={cn("relative flex flex-col", className)}
       style={{ 
         touchAction: 'none', // prevent default touch behavior
         overscrollBehavior: 'none', // prevent pull-down refresh
@@ -844,7 +846,7 @@ export function ComicReader({ title, src, onClose, onFullScreenChange }: ComicRe
 
       {/* Comic page display */}
       <div
-        className="w-full h-full flex items-center justify-center bg-black image-container"
+        className="flex items-center justify-center bg-black image-container"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

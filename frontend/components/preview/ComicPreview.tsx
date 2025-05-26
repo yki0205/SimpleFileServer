@@ -34,14 +34,13 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
       }}
       {...restProps}
     >
-      <div className="w-full h-full overflow-hidden rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <ComicReader
-          title={title}
-          src={src}
-          onClose={controls?.onClose}
-          onFullScreenChange={setIsFullScreen}
-        />
-      </div>
+      <ComicReader
+        title={title}
+        src={src}
+        onClose={controls?.onClose}
+        onFullScreenChange={setIsFullScreen}
+        className="rounded-md overflow-hidden"
+      />
     </PreviewBase>
   );
 };

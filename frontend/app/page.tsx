@@ -26,7 +26,7 @@ import { FileItemListView, FileItemGridView } from "@/components/fileItem";
 import { ConfirmDialog } from "@/components/dialog";
 import { DetailsDialog } from "@/components/dialog";
 
-import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview } from "@/components/preview";
+import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview, EpubPreview } from "@/components/preview";
 
 
 interface FileData {
@@ -334,7 +334,8 @@ const previewSupported: Record<string, boolean> = {
   'code': true,
   'document': true,
   'comic': true,
-  'pdf': false
+  'pdf': false,
+  'epub': true
 }
 
 
@@ -1010,13 +1011,13 @@ function FileExplorerContent() {
           </Button>
         </div>
 
-        <form onSubmit={handleSearch} className="order-3 max-sm:w-full flex gap-1">
+        <form onSubmit={handleSearch} className="order-3 max-sm:w-full sm:max-w-sm flex gap-1">
           <Input
             name="searchQuery"
             placeholder="Search files..."
             defaultValue={searchQuery}
             className={cn(
-              "w-full md:w-[200px]",
+              "w-full",
               "text-white",
               "selection:bg-white selection:text-black"
             )}
@@ -1261,6 +1262,18 @@ function FileExplorerContent() {
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
               src={`/api/comic?path=${encodeURIComponent(preview.path)}`}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+              }}
+            />
+          )}
+
+          {preview.type === 'epub' && (
+            <EpubPreview
+              isOpen={preview.isOpen}
+              title={preview.path.split('/').pop()}
+              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
                 onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),

@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -335,34 +335,28 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       }}
       {...restProps}
     >
-      <div
-        ref={containerRef}
-        className="relative w-full h-full flex items-center justify-center"
-      >
-        <img
-          src={src}
-          alt={alt}
-          className={cn(
-            (isLoading || hasError) && "opacity-0",
-            "max-w-full",
-            isFullScreen ? "max-h-[98vh]" : "max-h-[90vh]",
-            isDragging && "cursor-grabbing",
-            zoom > 1 && !isDragging && "cursor-grab"
-          )}
-          style={getImageStyles()}
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          onDoubleClick={handleResetZoom}
-          onMouseDown={handleImageMouseDown}
-          onMouseMove={handleImageMouseMove}
-          onMouseUp={handleImageMouseUp}
-          onMouseLeave={() => isDragging && handleImageMouseUp()}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchCancel}
-        />
-      </div>
+      <img
+        src={src}
+        alt={alt}
+        className={cn(
+          (isLoading || hasError) && "opacity-0",
+          isFullScreen ? "max-w-screen max-h-screen" : "max-w-[90vw] max-h-[90vh]",
+          isDragging && "cursor-grabbing",
+          zoom > 1 && !isDragging && "cursor-grab"
+        )}
+        style={getImageStyles()}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+        onDoubleClick={handleResetZoom}
+        onMouseDown={handleImageMouseDown}
+        onMouseMove={handleImageMouseMove}
+        onMouseUp={handleImageMouseUp}
+        onMouseLeave={() => isDragging && handleImageMouseUp()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+      />
     </PreviewBase>
   );
 };
