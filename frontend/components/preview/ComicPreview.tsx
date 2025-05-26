@@ -30,6 +30,7 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         showFullscreen: false,
         enableFullscreenToolbar: false,
         enableFullscreenNavigation: false,
+        enableHandleKeyboard: false,
         ...controls
       }}
       {...restProps}
@@ -38,6 +39,8 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         title={title}
         src={src}
         onClose={controls?.onClose}
+        onNext={controls?.onNext}
+        onPrev={controls?.onPrev}
         onFullScreenChange={setIsFullScreen}
         className="rounded-md overflow-hidden"
       />

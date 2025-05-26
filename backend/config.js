@@ -11,7 +11,7 @@ module.exports = {
   // baseDirectory: process.env.BASE_DIRECTORY || 'D:/Program/Code/Computer_Science/',
 
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
-  uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB
+  uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 1024 * 100, // 100MB
 
   contentMaxSize: process.env.CONTENT_MAX_SIZE || 5 * 1024 * 1024, // 5MB
 

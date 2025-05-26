@@ -185,7 +185,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
         <ContextMenu>
           <ContextMenuTrigger>
             <Image
-              src={`/api/download?path=${encodeURIComponent(file.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(file.path)}`}
               thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
               alt={file.name}
               onClick={() => onFileClick(file.path, file.type)}
@@ -284,7 +284,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
             <ContextMenuTrigger>
               <Image
                 {...file}
-                src={`/api/download?path=${encodeURIComponent(file.path)}`}
+                src={`/api/raw?path=${encodeURIComponent(file.path)}`}
                 thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
                 alt={file.name}
                 onClick={() => onFileClick(file.path, file.type)}
@@ -703,7 +703,7 @@ function FileExplorerContent() {
   }, []);
 
   const handleDownload = useCallback((path: string) => {
-    window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
+    window.open(`/api/raw?path=${encodeURIComponent(path)}`, '_blank');
   }, []);
 
   const handleFileClick = useCallback((path: string, type: string) => {
@@ -1200,10 +1200,10 @@ function FileExplorerContent() {
             <ImagePreview
               isOpen={preview.isOpen}
               title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
-              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1215,10 +1215,10 @@ function FileExplorerContent() {
             <VideoPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1230,10 +1230,10 @@ function FileExplorerContent() {
             <AudioPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1251,7 +1251,7 @@ function FileExplorerContent() {
               hasError={!!contentError}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
               }}
             />
           )}
@@ -1264,7 +1264,9 @@ function FileExplorerContent() {
               src={`/api/comic?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onNext: () => navigatePreview('next'),
+                onPrev: () => navigatePreview('prev'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
               }}
             />
           )}
@@ -1273,10 +1275,10 @@ function FileExplorerContent() {
             <EpubPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/download?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/download?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
               }}
             />
           )}
@@ -1349,7 +1351,7 @@ function FileExplorerContent() {
         confirmText="Download"
         cancelText="Cancel"
         onConfirm={() => {
-          window.open(`/api/download?path=${encodeURIComponent(fileToDownload)}`, '_blank');
+          window.open(`/api/raw?path=${encodeURIComponent(fileToDownload)}`, '_blank');
           setFileToDownload('');
           setDownloadComfirmDialogOpen(false);
         }}

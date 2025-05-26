@@ -24,7 +24,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   alt = "Preview",
   initialZoom = 1,
   maxZoom = 5,
-  minZoom = 0.1,
+  minZoom = 0.5,
   zoomStep = 0.5,
   controls,
   ...restProps
@@ -40,16 +40,78 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   const animationRef = useRef<number | null>(null);
   const currentSrcRef = useRef(src);
   const cachedImagesRef = useRef<Set<string>>(new Set());
+  const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Track image dimensions
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
 
   // Internal loading and error states
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  // Calculate bounds for the image based on zoom level and dimensions
+  const getBounds = useCallback(() => {
+    if (!imageRef.current || !containerRef.current) {
+      return { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity };
+    }
+
+    const img = imageRef.current;
+    const container = containerRef.current;
+
+    // Calculate the scaled dimensions of the image
+    const scaledWidth = img.naturalWidth * zoom;
+    const scaledHeight = img.naturalHeight * zoom;
+    
+    // Get container dimensions
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    // If the image is smaller than the container (even with zoom), center it
+    if (scaledWidth <= containerWidth) {
+      // No horizontal movement allowed, just keep it centered
+      const centerX = 0;
+      return {
+        minX: centerX,
+        maxX: centerX,
+        minY: -Math.max(0, (scaledHeight - containerHeight) / 2),
+        maxY: Math.max(0, (scaledHeight - containerHeight) / 2)
+      };
+    } else {
+      // Allow horizontal movement within bounds
+      const horizontalExcess = (scaledWidth - containerWidth) / 2;
+      const verticalExcess = Math.max(0, (scaledHeight - containerHeight) / 2);
+      
+      return {
+        minX: -horizontalExcess,
+        maxX: horizontalExcess,
+        minY: -verticalExcess,
+        maxY: verticalExcess
+      };
+    }
+  }, [zoom]);
+
+  // Constrain position within bounds
+  const constrainPosition = useCallback((pos: {x: number, y: number}) => {
+    const bounds = getBounds();
+    return {
+      x: Math.min(Math.max(pos.x, bounds.minX), bounds.maxX),
+      y: Math.min(Math.max(pos.y, bounds.minY), bounds.maxY)
+    };
+  }, [getBounds]);
+
   // Handle image load event
   const handleImageLoad = useCallback(() => {
     cachedImagesRef.current.add(src);
     setIsLoading(false);
+    
+    // Update image dimensions when it loads
+    if (imageRef.current) {
+      setImageDimensions({
+        width: imageRef.current.naturalWidth,
+        height: imageRef.current.naturalHeight
+      });
+    }
   }, [src]);
 
   // Handle image error event
@@ -97,13 +159,17 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       return;
     }
 
-    setPosition(prev => ({
-      x: prev.x + moveSpeedRef.current.x,
-      y: prev.y + moveSpeedRef.current.y
-    }));
+    // Apply position with constraints
+    setPosition(prev => {
+      const newPosition = {
+        x: prev.x + moveSpeedRef.current.x,
+        y: prev.y + moveSpeedRef.current.y
+      };
+      return constrainPosition(newPosition);
+    });
 
     animationRef.current = requestAnimationFrame(applyInertia);
-  }, []);
+  }, [constrainPosition]);
 
   // Handle image mouse events for dragging
   const handleImageMouseDown = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
@@ -136,12 +202,15 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
 
     lastMousePosition.current = { x: e.clientX, y: e.clientY };
 
-    setPosition({
+    // Apply position with constraints
+    const rawPosition = {
       x: e.clientX - dragStartPosition.current.x,
       y: e.clientY - dragStartPosition.current.y
-    });
+    };
+    
+    setPosition(constrainPosition(rawPosition));
     e.preventDefault();
-  }, [isDragging]);
+  }, [isDragging, constrainPosition]);
 
   const handleImageMouseUp = useCallback(() => {
     if (isDragging) {
@@ -193,12 +262,15 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
 
     lastMousePosition.current = { x: touch.clientX, y: touch.clientY };
 
-    setPosition({
+    // Apply position with constraints
+    const rawPosition = {
       x: touch.clientX - dragStartPosition.current.x,
       y: touch.clientY - dragStartPosition.current.y
-    });
+    };
+    
+    setPosition(constrainPosition(rawPosition));
     e.preventDefault();
-  }, [isDragging]);
+  }, [isDragging, constrainPosition]);
 
   const handleTouchEnd = useCallback(() => {
     handleImageMouseUp();
@@ -212,7 +284,12 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   // Handle fullscreen change from PreviewBase
   const handleFullScreenChange = useCallback((fullScreenState: boolean) => {
     setIsFullScreen(fullScreenState);
-  }, []);
+    
+    // Recalculate position constraints when going fullscreen
+    if (zoom > 1) {
+      setPosition(prev => constrainPosition(prev));
+    }
+  }, [zoom, constrainPosition]);
 
   const getImageStyles = () => {
     const safeZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
@@ -242,6 +319,12 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       img.onload = () => {
         cachedImagesRef.current.add(src);
         setIsLoading(false);
+        
+        // Update dimensions from this loaded image
+        setImageDimensions({
+          width: img.naturalWidth,
+          height: img.naturalHeight
+        });
       };
       img.onerror = () => {
         setIsLoading(true);
@@ -255,6 +338,10 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       if (img.complete) {
         cachedImagesRef.current.add(src);
         setIsLoading(false);
+        setImageDimensions({
+          width: img.naturalWidth, 
+          height: img.naturalHeight
+        });
       } else {
         setIsLoading(true);
       }
@@ -283,8 +370,25 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   useEffect(() => {
     if (zoom <= 1) {
       setPosition({ x: 0, y: 0 });
+    } else {
+      // When zooming in, make sure position stays within bounds
+      setPosition(prev => constrainPosition(prev));
     }
-  }, [zoom]);
+  }, [zoom, constrainPosition]);
+
+  // Reapply constraints when window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      if (zoom > 1) {
+        setPosition(prev => constrainPosition(prev));
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [zoom, constrainPosition]);
 
   // Global mouse up handler
   useEffect(() => {
@@ -321,11 +425,14 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
         showDirectionToggle: true,
         enableTouchNavigation: zoom <= 1,
         enableWheelNavigation: zoom <= 1,
+        enablePinchZoom: true,
         enableCtrlWheelZoom: true,
-        preventBrowserZoom: true,
         enableBaseHandleKeyboard: true,
         enableFullscreenNavigation: zoom == 1,
         enableFullscreenToolbar: zoom == 1,
+        preventDrag: true,
+        preventPullToRefresh: true,
+        removeTouchDelay: true,
         onZoomIn: handleZoomIn,
         onZoomOut: handleZoomOut,
         ...controls
@@ -335,28 +442,31 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       }}
       {...restProps}
     >
-      <img
-        src={src}
-        alt={alt}
-        className={cn(
-          (isLoading || hasError) && "opacity-0",
-          isFullScreen ? "max-w-screen max-h-screen" : "max-w-[90vw] max-h-[90vh]",
-          isDragging && "cursor-grabbing",
-          zoom > 1 && !isDragging && "cursor-grab"
-        )}
-        style={getImageStyles()}
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-        onDoubleClick={handleResetZoom}
-        onMouseDown={handleImageMouseDown}
-        onMouseMove={handleImageMouseMove}
-        onMouseUp={handleImageMouseUp}
-        onMouseLeave={() => isDragging && handleImageMouseUp()}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchCancel}
-      />
+      <div ref={containerRef} className="relative flex items-center justify-center w-full h-full">
+        <img
+          ref={imageRef}
+          src={src}
+          alt={alt}
+          className={cn(
+            (isLoading || hasError) && "opacity-0",
+            isFullScreen ? "max-w-screen max-h-screen" : "max-w-[90vw] max-h-[90vh]",
+            isDragging && "cursor-grabbing",
+            zoom > 1 && !isDragging && "cursor-grab"
+          )}
+          style={getImageStyles()}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          onDoubleClick={handleResetZoom}
+          onMouseDown={handleImageMouseDown}
+          onMouseMove={handleImageMouseMove}
+          onMouseUp={handleImageMouseUp}
+          onMouseLeave={() => isDragging && handleImageMouseUp()}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
+        />
+      </div>
     </PreviewBase>
   );
 };

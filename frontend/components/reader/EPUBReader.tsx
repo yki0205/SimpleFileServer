@@ -5,21 +5,25 @@ import { ReactReader } from 'react-reader';
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Settings, X } from 'lucide-react';
 
-interface EpubReaderProps {
+interface EPUBReaderProps {
   src: string;
   className?: string;
   onClose?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  // Fallback
+  onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export const EpubReader = ({
+export const EPUBReader = ({
   src,
   className,
   onClose,
   onNext,
   onPrev,
-}: EpubReaderProps) => {
+  onFullScreenChange,
+}: EPUBReaderProps) => {
+
   // Core reader refs
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -83,7 +87,7 @@ export const EpubReader = ({
       )}
       onMouseMove={resetControlsTimeout}
     >
-      <div className="w-full h-full bg-white">
+      <div className="w-[90vw] h-[90vh] bg-white">
         <ReactReader
           url={src}
           location={location}
@@ -93,7 +97,7 @@ export const EpubReader = ({
             manager: "default"
           }}
           epubInitOptions={{
-            openAs: 'binary'
+            openAs: 'epub'
           }}
           getRendition={(rendition) => {
             console.log("EPUB rendition created:", rendition);
@@ -186,4 +190,4 @@ export const EpubReader = ({
   );
 };
 
-export default EpubReader;
+export default EPUBReader;

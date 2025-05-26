@@ -44,6 +44,8 @@ export interface PreviewBaseProps {
     showZoom?: boolean;
     /** Enable Ctrl+wheel zoom */
     enableCtrlWheelZoom?: boolean;
+    /** Enable pinch-to-zoom on touchscreens */
+    enablePinchZoom?: boolean;
     /** Zoom in event handler */
     onZoomIn?: () => void;
     /** Zoom out event handler */
@@ -97,6 +99,10 @@ export interface PreviewBaseProps {
     preventPinchZoom?: boolean;
     /** Prevent browser back/forward navigation on swipe */
     preventBrowserNavigation?: boolean;
+    /** Prevent pull-to-refresh on mobile */
+    preventPullToRefresh?: boolean;
+    /** Remove touch delay on mobile */
+    removeTouchDelay?: boolean;
   };
 
   /** Callback functions */
@@ -116,6 +122,7 @@ const defaultControls = {
 
   showZoom: false,
   enableCtrlWheelZoom: false,
+  enablePinchZoom: false,
 
   showDirectionToggle: false,
   direction: undefined as 'ltr' | 'rtl' | undefined,
@@ -140,7 +147,9 @@ const defaultControls = {
   preventTextSelection: false,
   preventDrag: false,
   preventPinchZoom: false,
-  preventBrowserNavigation: false
+  preventBrowserNavigation: false,
+  preventPullToRefresh: false,
+  removeTouchDelay: false,
 };
 
 export const PreviewBase: React.FC<PreviewBaseProps> = ({
@@ -170,6 +179,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
     showZoom,
     enableCtrlWheelZoom,
+    enablePinchZoom,
     onZoomIn,
     onZoomOut,
 
@@ -209,6 +219,11 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   const [isFullScreenTemp, setIsFullScreen] = useState(false);
   const isFullScreen = forceFullScreen || isFullScreenTemp;
 
+  // Pinch zoom tracking
+  const [lastTouchDistance, setLastTouchDistance] = useState(0);
+  const [isPinching, setIsPinching] = useState(false);
+  const lastZoomPinchTime = useRef(0);
+
   const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -224,7 +239,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   const handleFullScreen = useCallback(() => {
     const newFullScreenState = !isFullScreen;
     setIsFullScreen(newFullScreenState);
-    
+
     // Handle browser fullscreen API if enabled
     if (useBrowserFullscreenAPI && containerRef.current) {
       try {
@@ -249,32 +264,32 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
         console.error("Error toggling browser fullscreen mode:", error);
       }
     }
-    
+
     onFullScreenChange?.(newFullScreenState);
   }, [isFullScreen, onFullScreenChange, useBrowserFullscreenAPI]);
 
   // Listen for browser fullscreen changes if using browser fullscreen API
   useEffect(() => {
     if (!useBrowserFullscreenAPI) return;
-    
+
     const handleBrowserFullscreenChange = () => {
       const isDocFullscreen = !!(
         document.fullscreenElement ||
         (document as any).webkitFullscreenElement ||
         (document as any).msFullscreenElement
       );
-      
+
       // Only update state if it doesn't match current browser fullscreen state
       if (isFullScreen !== isDocFullscreen) {
         setIsFullScreen(isDocFullscreen);
         onFullScreenChange?.(isDocFullscreen);
       }
     };
-    
+
     document.addEventListener("fullscreenchange", handleBrowserFullscreenChange);
     document.addEventListener("webkitfullscreenchange", handleBrowserFullscreenChange);
     document.addEventListener("msfullscreenchange", handleBrowserFullscreenChange);
-    
+
     return () => {
       document.removeEventListener("fullscreenchange", handleBrowserFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", handleBrowserFullscreenChange);
@@ -285,14 +300,14 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   // Escape key should also exit browser fullscreen if active
   useEffect(() => {
     if (!useBrowserFullscreenAPI) return;
-    
+
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isFullScreen) {
         setIsFullScreen(false);
         onFullScreenChange?.(false);
       }
     };
-    
+
     window.addEventListener("keydown", handleEscapeKey);
     return () => {
       window.removeEventListener("keydown", handleEscapeKey);
@@ -373,17 +388,73 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
   const touchEndX = React.useRef<number | null>(null);
   const minSwipeDistance = 50;
 
+  // Get distance between two touch points
+  const getTouchDistance = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) return 0;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      touchStartX.current = null;
+      touchEndX.current = null;
+      
+      if (enablePinchZoom) {
+        setIsPinching(true);
+        const distance = getTouchDistance(e);
+        setLastTouchDistance(distance);
+        e.preventDefault();
+      }
+      return;
+    }
+
     if (!enableTouchNavigation) return;
     touchStartX.current = e.touches[0].clientX;
-  }, [enableTouchNavigation]);
+  }, [enableTouchNavigation, enablePinchZoom]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && enablePinchZoom) {
+      e.preventDefault();
+      const distance = getTouchDistance(e);
+
+      if (lastTouchDistance > 0 && distance > 0) {
+        // Throttle zoom events to avoid too many calls
+        const now = Date.now();
+        if (now - lastZoomPinchTime.current < 50) return;
+
+        lastZoomPinchTime.current = now;
+
+        // Calculate zoom direction based on pinch
+        // - If fingers are moving apart (distance increasing), zoom in
+        // - If fingers are moving together (distance decreasing), zoom out
+        // - We use a 2% threshold to avoid small unintended zooms
+        if (Math.abs(distance - lastTouchDistance) > 10) {
+          if (distance > lastTouchDistance * 1.02) {
+            onZoomIn?.();
+          } else if (distance < lastTouchDistance * 0.98) {
+            onZoomOut?.();
+          }
+
+          setLastTouchDistance(distance);
+        }
+      }
+
+      return;
+    }
+
     if (!enableTouchNavigation) return;
     touchEndX.current = e.touches[0].clientX;
-  }, [enableTouchNavigation]);
+  }, [enableTouchNavigation, enablePinchZoom, lastTouchDistance, onZoomIn, onZoomOut]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (isPinching) {
+      setIsPinching(false);
+      setLastTouchDistance(0);
+      return;
+    }
+
     if (!enableTouchNavigation || !touchStartX.current || !touchEndX.current) return;
 
     const distance = touchStartX.current - touchEndX.current;
@@ -399,7 +470,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     // Reset values
     touchStartX.current = null;
     touchEndX.current = null;
-  }, [enableTouchNavigation, direction, onNext, onPrev]);
+  }, [enableTouchNavigation, isPinching, direction, onNext, onPrev]);
 
 
   // Handle clicks in fullscreen mode areas
@@ -506,15 +577,15 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
     // Prevent default browser zoom on Ctrl+wheel
     const preventDefaultZoom = (e: WheelEvent) => {
-      if (controls.preventBrowserZoom && e.ctrlKey) {
+      if (enableCtrlWheelZoom || controls.preventBrowserZoom && e.ctrlKey) {
         e.preventDefault();
         return false;
       }
     };
 
-    // Prevent pinch-to-zoom on touchscreens
+    // Prevent browser's default pinch-to-zoom behavior
     const preventPinchZoom = (e: TouchEvent) => {
-      if (controls.preventPinchZoom && e.touches.length > 1) {
+      if ((enablePinchZoom || controls.preventPinchZoom) && e.touches.length > 1) {
         e.preventDefault();
         return false;
       }
@@ -522,7 +593,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
     // Prevent browser back/forward navigation on swipe
     const preventBrowserNav = (e: TouchEvent) => {
-      if (controls.preventBrowserNavigation) {
+      if (enableTouchNavigation || controls.preventBrowserNavigation) {
         if (Math.abs(e.touches[0].clientX - window.innerWidth) < 20) {
           e.preventDefault();
         }
@@ -530,16 +601,16 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     };
 
     // Add all event listeners
-    if (controls.preventBrowserZoom) {
+    if (enableCtrlWheelZoom || controls.preventBrowserZoom) {
       containerElement.addEventListener('wheel', preventDefaultZoom, options);
     }
 
-    if (controls.preventPinchZoom) {
+    if (enablePinchZoom || controls.preventPinchZoom) {
       containerElement.addEventListener('touchstart', preventPinchZoom, options);
       containerElement.addEventListener('touchmove', preventPinchZoom, options);
     }
 
-    if (controls.preventBrowserNavigation) {
+    if (enableTouchNavigation || controls.preventBrowserNavigation) {
       containerElement.addEventListener('touchstart', preventBrowserNav, options);
     }
 
@@ -559,18 +630,29 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       });
     }
 
+    // Prevent pull-to-refresh
+    if (controls.preventPullToRefresh) {
+      containerElement.style.overscrollBehavior = 'none';
+      document.body.style.overflow = 'hidden';
+    }
+
+    // Remove touch delay
+    if (controls.removeTouchDelay) {
+      containerElement.style.touchAction = 'manipulation';
+    }
+
     // Cleanup function
     return () => {
-      if (controls.preventBrowserZoom) {
+      if (enableCtrlWheelZoom || controls.preventBrowserZoom) {
         containerElement.removeEventListener('wheel', preventDefaultZoom);
       }
 
-      if (controls.preventPinchZoom) {
+      if (enablePinchZoom || controls.preventPinchZoom) {
         containerElement.removeEventListener('touchstart', preventPinchZoom);
         containerElement.removeEventListener('touchmove', preventPinchZoom);
       }
 
-      if (controls.preventBrowserNavigation) {
+      if (enableTouchNavigation || controls.preventBrowserNavigation) {
         containerElement.removeEventListener('touchstart', preventBrowserNav);
       }
 
@@ -591,13 +673,27 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
           img.removeAttribute('draggable');
         });
       }
+
+      if (controls.preventPullToRefresh) {
+        containerElement.style.overscrollBehavior = '';
+        document.body.style.overflow = '';
+      }
+
+      if (controls.removeTouchDelay) {
+        containerElement.style.touchAction = '';
+      }
     };
   }, [
     controls.preventBrowserZoom,
     controls.preventPinchZoom,
     controls.preventTextSelection,
     controls.preventDrag,
-    controls.preventBrowserNavigation
+    controls.preventBrowserNavigation,
+    controls.preventPullToRefresh,
+    controls.removeTouchDelay,
+    enablePinchZoom,
+    enableCtrlWheelZoom,
+    enableTouchNavigation,
   ]);
 
 

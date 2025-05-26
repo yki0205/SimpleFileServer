@@ -72,7 +72,6 @@ export const Video = ({
   // Touch gesture refs
   const touchStartRef = useRef<{ x: number, y: number } | null>(null);
   const lastTouchRef = useRef<{ x: number, y: number } | null>(null);
-  const touchingProgressRef = useRef(false);
 
   // Settings menu state and refs
   const [showSettings, setShowSettings] = useState(false);
@@ -241,13 +240,17 @@ export const Video = ({
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (duration > 0) {
       progressDraggingRef.current = true;
-      handleProgressDrag(e);
+      
+      // Set the initial preview position
+      if (progressRef.current) {
+        const rect = progressRef.current.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        previewPositionRef.current = pos;
+        setCurrentTime(pos * duration);
+      }
 
-      // NOTE: Well, I want to prevent text selection of the whole component by using "select-none".
-      // If you don't like this way, you can uncomment the following line and remove the "select-none" class from the component.
-
-      // Prevent text selection during drag
-      // document.body.style.userSelect = 'none';
+      // Prevent default behaviors
+      e.preventDefault();
     }
   };
 
@@ -256,11 +259,12 @@ export const Video = ({
       const rect = progressRef.current.getBoundingClientRect();
       const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
 
-      // Store preview position but don't update video time yet
+      // Update preview position
       previewPositionRef.current = pos;
-
-      // Temporarily update current time display without seeking the video
       setCurrentTime(pos * duration);
+      
+      // Prevent default behaviors
+      e.preventDefault();
     }
   };
 
@@ -269,16 +273,12 @@ export const Video = ({
       // Mark that we're seeking to prevent progress bar jumps
       seekingRef.current = true;
 
-      // Only update video current time on mouse up
+      // Update video current time on mouse up
       videoRef.current.currentTime = previewPositionRef.current * duration;
-
-      // Don't reset previewPosition until seeking is complete
-      // previewPositionRef.current will be reset when the seeking event completes
-      progressDraggingRef.current = false;
-
-      // NOTE: Same as above.
-      // document.body.style.userSelect = '';
     }
+    
+    // Always reset drag state
+    progressDraggingRef.current = false;
   };
 
   useEffect(() => {
@@ -391,17 +391,7 @@ export const Video = ({
       touchStartRef.current = { x: touch.clientX, y: touch.clientY };
       lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
 
-      // Check if touch started on progress bar
-      if (progressRef.current) {
-        const progressRect = progressRef.current.getBoundingClientRect();
-        touchingProgressRef.current = (
-          touch.clientY >= progressRect.top &&
-          touch.clientY <= progressRect.bottom &&
-          touch.clientX >= progressRect.left &&
-          touch.clientX <= progressRect.right
-        );
-      }
-
+      // Always reset controls timeout on touch
       resetControlsTimeout();
     }
   };
@@ -417,11 +407,17 @@ export const Video = ({
       // Update last touch position
       lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
 
-      // If touch started on progress bar, scrub through video
-      if (touchingProgressRef.current && progressRef.current && videoRef.current) {
+      // Check if this is a progress scrubbing gesture (horizontal movement)
+      if (progressRef.current && (Math.abs(totalDeltaX) > 10 || progressDraggingRef.current)) {
+        // For progress bar interaction, we'll be more lenient
+        progressDraggingRef.current = true;
         const rect = progressRef.current.getBoundingClientRect();
         const pos = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-        videoRef.current.currentTime = pos * duration;
+        
+        // Set preview position
+        previewPositionRef.current = pos;
+        setCurrentTime(pos * duration);
+        e.preventDefault();
         return;
       }
 
@@ -532,9 +528,19 @@ export const Video = ({
   };
 
   const handleTouchEnd = () => {
+    // Handle progress bar touch end
+    if (progressDraggingRef.current && videoRef.current && previewPositionRef.current !== null) {
+      // Mark that we're seeking to prevent progress bar jumps
+      seekingRef.current = true;
+
+      // Only update video current time on touch end
+      videoRef.current.currentTime = previewPositionRef.current * duration;
+    }
+
+    // Always reset these states on touch end
+    progressDraggingRef.current = false;
     touchStartRef.current = null;
     lastTouchRef.current = null;
-    touchingProgressRef.current = false;
   };
 
   // Auto-hide controls after inactivity
@@ -913,8 +919,8 @@ export const Video = ({
         <div
           ref={progressRef}
           className={cn(
-            "w-full h-2 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress",
-            progressDraggingRef.current ? "h-4 transition-height duration-150" : ""
+            "w-full h-3 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress",
+            progressDraggingRef.current ? "bg-gray-500/60" : ""
           )}
           onClick={handleProgressClick}
           onMouseDown={handleProgressMouseDown}
@@ -927,39 +933,32 @@ export const Video = ({
             )}
             style={{
               width: `${duration > 0 ?
-                (seekingRef.current || (progressDraggingRef.current && previewPositionRef.current !== null)
-                  ? (previewPositionRef.current ?? (currentTime / duration)) * 100
+                (previewPositionRef.current !== null
+                  ? (previewPositionRef.current * 100)
                   : (currentTime / duration) * 100)
                 : 0}%`
             }}
+          />
+
+          {/* Time indicator tooltip - always shown, changes position during dragging */}
+          <div
+            className={cn(
+              "absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded transition-opacity duration-150",
+              progressDraggingRef.current || previewPositionRef.current !== null
+                ? "opacity-100"
+                : "opacity-0 group-hover/progress:opacity-100"
+            )}
+            style={{ 
+              left: `${previewPositionRef.current !== null 
+                ? previewPositionRef.current * 100 
+                : (currentTime / duration) * 100}%` 
+            }}
           >
-            {/* Drag handle thumb */}
-            <div className={cn(
-              "absolute right-0 top-1/2 -translate-y-1/2 bg-white border-2 border-red-500 rounded-full shadow-md transition-all",
-              progressDraggingRef.current
-                ? "w-5 h-5 scale-100"
-                : "w-3 h-3 scale-0 group-hover/progress:scale-100"
-            )} />
+            {previewPositionRef.current !== null
+              ? formatTime(previewPositionRef.current * duration)
+              : `${formatTime(currentTime)} / ${formatTime(duration)}`
+            }
           </div>
-
-          {/* Time indicator tooltip */}
-          {progressDraggingRef.current && previewPositionRef.current !== null && (
-            <div
-              className="absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded pointer-events-none"
-              style={{ left: `${previewPositionRef.current * 100}%` }}
-            >
-              {formatTime(previewPositionRef.current * duration)}
-            </div>
-          )}
-
-          {/* Hover time indicator (only shown when not dragging) */}
-          {!progressDraggingRef.current && (
-            <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover/progress:opacity-100">
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black/80 px-2 py-1 rounded text-xs text-white whitespace-nowrap">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Controls grid layout */}

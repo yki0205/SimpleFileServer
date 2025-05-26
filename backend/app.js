@@ -119,7 +119,7 @@ app.get('/api/images', (req, res) => {
   }
 })
 
-app.get('/api/download', (req, res) => {
+app.get('/api/raw', (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   
@@ -586,8 +586,8 @@ app.get('/api/comic', async (req, res) => {
             continue;
           }
 
-          // Create a direct download URL for the image - don't use relative path since it's a temp file
-          pages.push(`/api/download?path=${encodeURIComponent(entryPath)}`);
+          // Create a direct raw URL for the image - don't use relative path since it's a temp file
+          pages.push(`/api/raw?path=${encodeURIComponent(entryPath)}`);
         }
       } catch (error) {
         return res.status(500).json({ error: 'Failed to extract CBZ file' });
@@ -650,8 +650,8 @@ app.get('/api/comic', async (req, res) => {
             continue;
           }
 
-          // Create a direct download URL for the image - don't use relative path since it's a temp file
-          pages.push(`/api/download?path=${encodeURIComponent(entryPath)}`);
+          // Create a direct raw URL for the image - don't use relative path since it's a temp file
+          pages.push(`/api/raw?path=${encodeURIComponent(entryPath)}`);
         }
       } catch (error) {
         return res.status(500).json({ error: 'Failed to extract CBR file' });

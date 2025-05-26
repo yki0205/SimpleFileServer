@@ -15,10 +15,13 @@ interface ComicReaderProps {
   src: string;
   className?: string;
   onClose?: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
+  // Fallback
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export function ComicReader({ title, src, className, onClose, onFullScreenChange }: ComicReaderProps) {
+export function ComicReader({ title, src, className, onClose, onNext, onPrev, onFullScreenChange }: ComicReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -77,13 +80,19 @@ export function ComicReader({ title, src, className, onClose, onFullScreenChange
       } else if (currentPage < totalPages - 1) {
         // Handle case when there's only one page left
         setCurrentPage(currentPage + 1);
+      } else if (onNext) {
+        // If we're at the last page and onNext is provided, call it
+        onNext();
       }
     } else {
       if (currentPage < totalPages - 1) {
         setCurrentPage(currentPage + 1);
+      } else if (onNext) {
+        // If we're at the last page and onNext is provided, call it
+        onNext();
       }
     }
-  }, [currentPage, totalPages, zoom, isDoublePage]);
+  }, [currentPage, totalPages, zoom, isDoublePage, onNext]);
 
   const prevPage = useCallback(() => {
     if (zoom > 1) return;
@@ -94,13 +103,19 @@ export function ComicReader({ title, src, className, onClose, onFullScreenChange
       } else if (currentPage === 1) {
         // Handle case when we're at page 1 to go back to page 0
         setCurrentPage(0);
+      } else if (onPrev) {
+        // If we're at the first page and onPrev is provided, call it
+        onPrev();
       }
     } else {
       if (currentPage > 0) {
         setCurrentPage(currentPage - 1);
+      } else if (onPrev) {
+        // If we're at the first page and onPrev is provided, call it
+        onPrev();
       }
     }
-  }, [currentPage, zoom, isDoublePage]);
+  }, [currentPage, zoom, isDoublePage, onPrev]);
 
   const debouncedNextPage = useCallback(() => {
     const now = Date.now();
