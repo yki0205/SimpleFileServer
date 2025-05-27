@@ -16,4 +16,21 @@ module.exports = {
   contentMaxSize: process.env.CONTENT_MAX_SIZE || 5 * 1024 * 1024, // 5MB
 
   thumbnailCacheDir: process.env.THUMBNAIL_CACHE_DIR || path.join(os.tmpdir(), 'simple-file-server-thumbnails'),
+  
+  // File indexing options
+  // useFileIndex: process.env.USE_FILE_INDEX === 'true' || false,
+  useFileIndex: true,
+  fileIndexPath: process.env.FILE_INDEX_PATH || path.join(os.tmpdir(), 'file-index.db'),
+  rebuildIndexOnStartup: process.env.REBUILD_INDEX_ON_STARTUP === 'true' || false,
+  indexBatchSize: parseInt(process.env.INDEX_BATCH_SIZE) || 1000,
+  
+  // File watcher options
+  // useFileWatcher: process.env.USE_FILE_WATCHER === 'true' || false,
+  useFileWatcher: true,
+  // Watch depth: 0 = only base directory, 1 = base + one level, etc., -1 = all subdirectories (may impact performance)
+  watchDepth: parseInt(process.env.WATCH_DEPTH) || 1, 
+  // Ignore patterns (glob patterns) for files/directories to ignore during watching
+  watchIgnorePatterns: (process.env.WATCH_IGNORE_PATTERNS || '**/.git/**,**/node_modules/**').split(','),
+  // Debounce interval in ms for file change events
+  watchDebounceInterval: parseInt(process.env.WATCH_DEBOUNCE_INTERVAL) || 1000
 }

@@ -3,10 +3,23 @@ const os = require('os');
 const fs = require('fs')
 const path = require('path')
 const cors = require('cors')
+const utils = require('./utils');
+const config = require('./config')
+
+// handle zip and rar files
 const AdmZip = require('adm-zip')
 const unrar = require('node-unrar-js');
+
+// handle file uploads
 const multer = require('multer')
-const config = require('./config')
+
+// indexer
+const indexer = require('./indexer');
+
+// watcher
+const watcher = require('./watcher');
+
+// worker threads
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
 const app = express();
@@ -14,6 +27,41 @@ const PORT = config.port;
 
 app.use(cors());
 app.use(express.json());
+
+if (config.useFileIndex) {
+  console.log('Initializing file indexer...');
+  indexer.initializeDatabase();
+
+  if (config.rebuildIndexOnStartup || !indexer.isIndexBuilt()) {
+    console.log('Building file index...');
+    indexer.buildIndex(config.baseDirectory)
+      .then(result => {
+        if (result.success) {
+          console.log('File index built successfully');
+          console.log(`Indexed ${result.stats.fileCount} files`);
+        } else {
+          console.error('Failed to build file index:', result.message);
+        }
+      })
+      .catch(error => {
+        console.error('Error building file index:', error);
+      });
+  } else {
+    const stats = indexer.getIndexStats();
+    console.log(`Using existing file index with ${stats.fileCount} files, last built on ${stats.lastBuilt}`);
+  }
+}
+
+if (config.useFileWatcher) {
+  console.log('Initializing file watcher...');
+  try {
+    watcher.initialize() && watcher.startWatching(config.baseDirectory);
+  } catch (error) {
+    console.error('Error initializing file watcher:', error);
+  } finally {
+    console.log('File watcher initialized');
+  }
+}
 
 app.get('/api/files', (req, res) => {
   const { dir = '', cover = 'false' } = req.query;
@@ -40,12 +88,12 @@ app.get('/api/files', (req, res) => {
 
       const fileDetail = {
         name: file,
-        path: normalizePath(path.join(dir, file)),
+        path: utils.normalizePath(path.join(dir, file)),
         size: fileStats.size,
         mtime: fileStats.mtime,
-        type: isDirectory ? 'directory' : getFileType(extension)
+        type: isDirectory ? 'directory' : utils.getFileType(extension)
       };
-      
+
       // If cover is requested and this is a directory, find a cover image
       if (cover === 'true' && isDirectory) {
         try {
@@ -53,19 +101,19 @@ app.get('/api/files', (req, res) => {
           const imageFiles = subFiles
             .filter(subFile => {
               const ext = path.extname(subFile).toLowerCase();
-              return getFileType(ext) === 'image';
+              return utils.getFileType(ext) === 'image';
             })
             .sort(); // Sort alphabetically
-          
+
           if (imageFiles.length > 0) {
             const coverImage = imageFiles[0];
-            fileDetail.cover = normalizePath(path.join(dir, file, coverImage));
+            fileDetail.cover = utils.normalizePath(path.join(dir, file, coverImage));
           }
         } catch (err) {
           // Silently fail if can't read subdirectory
         }
       }
-      
+
       return fileDetail;
     })
 
@@ -85,6 +133,13 @@ app.get('/api/search', (req, res) => {
   }
 
   try {
+    // Use file index if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      const results = indexer.searchIndex(query, dir);
+      return res.json({ results });
+    }
+
+    // Otherwise, use real-time search
     parallelSearch(searchPath, query, basePath)
       .then(results => {
         res.json({ results });
@@ -107,6 +162,13 @@ app.get('/api/images', (req, res) => {
   }
 
   try {
+    // Use file index if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      const images = indexer.findImagesInIndex(dir);
+      return res.json({ images });
+    }
+
+    // Otherwise, use real-time search
     parallelFindImages(searchPath, basePath)
       .then(images => {
         res.json({ images });
@@ -122,21 +184,21 @@ app.get('/api/images', (req, res) => {
 app.get('/api/raw', (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
-  
+
   // Get normalized temp directory prefix (for Windows path consistency)
   let tempDirBase = os.tmpdir();
   // On Windows, make sure we consistently use forward slashes
   if (process.platform === 'win32') {
     tempDirBase = tempDirBase.replace(/\\/g, '/');
   }
-  
+
   // Detect if this is an absolute path (temp file) or relative path
   let fullPath;
   const tempDirPrefix = 'comic-extract-';
-  
+
   // Check if it's a temp comic file path
   const isTempComicFile = requestedPath.includes(tempDirPrefix);
-  
+
   if (isTempComicFile) {
     // For temp files, use the path directly
     fullPath = requestedPath;
@@ -170,7 +232,7 @@ app.get('/api/raw', (req, res) => {
       const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
 
       const extension = path.extname(fullPath).toLowerCase();
-      const contentType = getContentType(extension);
+      const contentType = utils.getContentType(extension);
 
       res.setHeader('Content-Type', contentType);
       // res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
@@ -204,58 +266,102 @@ app.get('/api/thumbnail', (req, res) => {
 
     // Check file type
     const extension = path.extname(fullPath).toLowerCase();
-    if (getFileType(extension) !== 'image') {
-      return res.status(400).json({ error: 'File is not an image' });
-    }
-    if (extension === '.bmp') {
-      // Cause sharp cannot handle bmp files, I return the original file directly
-      res.setHeader('Content-Type', 'image/bmp');
-      return fs.createReadStream(fullPath).pipe(res);
-    }
+    if (utils.getFileType(extension) === 'image') {
+      if (extension === '.bmp') {
+        // Cause sharp cannot handle bmp files, I return the original file directly
+        res.setHeader('Content-Type', 'image/bmp');
+        return fs.createReadStream(fullPath).pipe(res);
+      }
 
-    // Cache mechanism: generate cache path
-    const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
+      // Cache mechanism: generate cache path
+      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+
+      // Create cache filename (based on original path, width, height and quality)
+      const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
+      const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
+
+      // If cache exists, return cached thumbnail directly
+      if (fs.existsSync(cachePath)) {
+        const contentType = utils.getContentType(extension);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
+        return fs.createReadStream(cachePath).pipe(res);
+      }
+
+      // Process image with Sharp library
+      const sharp = require('sharp');
+
+      let transformer = sharp(fullPath)
+        .rotate() // Auto-rotate based on EXIF data
+        .resize({
+          width: parseInt(width),
+          height: height ? parseInt(height) : null,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: parseInt(quality) });
+
+      // Save to cache
+      transformer
+        .clone()
+        .toFile(cachePath)
+        .catch(err => console.error('Error caching thumbnail:', err));
+
+      // Send to client
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      transformer.pipe(res);
+    } else if (utils.getFileType(extension) === 'video') {
+
+      // Cache mechanism: generate cache path
+      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+
+      // Create cache filename (based on original path, width, height and quality)
+      const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
+      const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
+
+      // If cache exists, return cached thumbnail directly
+      if (fs.existsSync(cachePath)) {
+        const contentType = utils.getContentType(extension);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
+        return fs.createReadStream(cachePath).pipe(res);
+      }
+
+      // Process video with ffmpeg
+      const ffmpeg = require('fluent-ffmpeg');
+
+      const outputPath = path.join(cacheDir, `${cacheKey}.jpg`);
+
+      ffmpeg(fullPath)
+        .screenshots({
+          timestamps: ['10%'],
+          filename: path.basename(outputPath),
+          folder: path.dirname(outputPath),
+          size: `${width}x${height || '?'}`
+        })
+        .on('end', () => {
+          // Send to client
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=31536000');
+          fs.createReadStream(outputPath).pipe(res);
+        })
+        .on('error', (err) => {
+          console.error('Error generating video thumbnail:', err);
+          res.status(500).json({ error: 'Failed to generate thumbnail' });
+        });
+    } else {
+      res.status(400).json({ error: 'File is not supported' });
     }
-
-    // Create cache filename (based on original path, width, height and quality)
-    const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
-    const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
-
-    // If cache exists, return cached thumbnail directly
-    if (fs.existsSync(cachePath)) {
-      const contentType = getContentType(extension);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
-      return fs.createReadStream(cachePath).pipe(res);
-    }
-
-    // Process image with Sharp library
-    const sharp = require('sharp');
-    
-    let transformer = sharp(fullPath)
-      .rotate() // Auto-rotate based on EXIF data
-      .resize({
-        width: parseInt(width),
-        height: height ? parseInt(height) : null,
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-      .jpeg({ quality: parseInt(quality) });
-    
-    // Save to cache
-    transformer
-      .clone()
-      .toFile(cachePath)
-      .catch(err => console.error('Error caching thumbnail:', err));
-    
-    // Send to client
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-    transformer.pipe(res);
   } catch (error) {
     res.status(500).json({ error: error.message });
+    console.log(error)
   }
 });
 
@@ -282,8 +388,8 @@ app.post('/api/upload', (req, res) => {
       cb(null, uploadPath);
     },
     filename: function (req, file, cb) {
-      // Keep original filename
-      cb(null, file.originalname);
+      const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      cb(null, decodedName);
     }
   });
 
@@ -395,7 +501,6 @@ app.delete('/api/delete', (req, res) => {
   }
 })
 
-// TO TEST:
 app.post('/api/clone', (req, res) => {
   const { source, destination } = req.body;
   const basePath = path.resolve(config.baseDirectory);
@@ -433,7 +538,6 @@ app.post('/api/clone', (req, res) => {
   }
 })
 
-// TO TEST:
 app.post('/api/move', (req, res) => {
   const { source, destination } = req.body;
   const basePath = path.resolve(config.baseDirectory);
@@ -465,9 +569,9 @@ app.post('/api/move', (req, res) => {
 })
 
 app.get('/api/content', (req, res) => {
-  const { path: filePath } = req.query;
+  const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, filePath);
+  const fullPath = path.join(basePath, requestedPath);
 
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
@@ -480,32 +584,18 @@ app.get('/api/content', (req, res) => {
 
     const stats = fs.statSync(fullPath);
     if (stats.isDirectory()) {
-      return res.status(400).json({ error: 'Cannot read content of a directory' });
+      return res.status(400).json({ error: 'Cannot show content of a directory' });
     }
 
-    // Check file size to prevent loading very large files
     if (stats.size > config.contentMaxSize) {
-      return res.status(413).json({ error: 'File too large to preview' });
+      return res.status(413).json({ error: 'File too large to display' });
     }
 
-    // Set appropriate content type for text files
+    const content = fs.readFileSync(fullPath, 'utf8');
     const extension = path.extname(fullPath).toLowerCase();
-    const contentType = getContentType(extension);
-    const fileName = path.basename(fullPath);
-    const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
 
-    // res.setHeader('Content-Type', contentType);
-    // Always set content type as text/plain to ensure content is treated as string
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
-
-    // Read and send file content
-    fs.readFile(fullPath, 'utf8', (err, data) => {
-      if (err) {
-        return res.status(500).json({ error: 'Error reading file' });
-      }
-      res.send(data);
-    });
+    res.setHeader('Content-Type', utils.getContentType(extension));
+    res.send(content);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -533,11 +623,11 @@ app.get('/api/comic', async (req, res) => {
     if (process.platform === 'win32') {
       tempDirBase = tempDirBase.replace(/\\/g, '/');
     }
-    
+
     // Create extraction directory name
     const extractionId = Date.now();
     const tempDirName = `comic-extract-${extractionId}`;
-    
+
     if (extension === '.cbz') {
       // Handle CBZ files (ZIP format)
       try {
@@ -666,6 +756,75 @@ app.get('/api/comic', async (req, res) => {
   }
 });
 
+app.get('/api/index-status', (req, res) => {
+  if (!config.useFileIndex) {
+    return res.json({ enabled: false });
+  }
+  
+  const stats = indexer.getIndexStats();
+  res.json({
+    enabled: true,
+    ...stats
+  });
+});
+
+app.post('/api/rebuild-index', (req, res) => {
+  if (!config.useFileIndex) {
+    return res.status(400).json({ error: "File indexing is not enabled" });
+  }
+  
+  const stats = indexer.getIndexStats();
+  if (stats.isBuilding) {
+    return res.status(409).json({ error: "Index is already being built", progress: stats.progress });
+  }
+  
+  // Start rebuilding index in background
+  indexer.buildIndex(config.baseDirectory)
+    .then(result => {
+      console.log(result.success ? 'Index rebuilt successfully' : 'Failed to rebuild index');
+    })
+    .catch(error => {
+      console.error('Error rebuilding index:', error);
+    });
+  
+  res.json({ message: "Index rebuild started", progress: indexer.getIndexStats().progress });
+});
+
+app.get('/api/watcher-status', (req, res) => {
+  if (!config.useFileWatcher) {
+    return res.json({ enabled: false });
+  }
+  
+  const status = watcher.getStatus();
+  res.json({
+    enabled: true,
+    ...status
+  });
+});
+
+app.post('/api/toggle-watcher', (req, res) => {
+  if (!config.useFileWatcher) {
+    return res.status(400).json({ error: "File watching is not enabled in config" });
+  }
+  
+  const status = watcher.getStatus();
+  
+  if (status.active) {
+    watcher.stopWatching();
+    return res.json({ message: "File watcher stopped", active: false });
+  } else {
+    const started = watcher.startWatching(config.baseDirectory);
+    return res.json({ 
+      message: started ? "File watcher started" : "Failed to start file watcher", 
+      active: started 
+    });
+  }
+});
+
+function getSubdirectories(dir) {
+  return utils.getSubdirectories(dir);
+}
+
 function searchFiles(dir, query, basePath) {
   let results = [];
 
@@ -676,7 +835,7 @@ function searchFiles(dir, query, basePath) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
 
-      if (file.toLowerCase().includes(query)) {
+      if (file.toLowerCase().includes(query.toLowerCase())) {
         results.push({
           name: file,
           path: normalizePath(path.relative(basePath, fullPath)),
@@ -691,7 +850,7 @@ function searchFiles(dir, query, basePath) {
       }
     }
   } catch (error) {
-    return res.status(500).json({ error: 'Server error' });
+    console.error('Error searching files:', error);
   }
 
   return results;
@@ -723,7 +882,64 @@ function findAllImages(dir, basePath) {
       }
     }
   } catch (error) {
-    return res.status(500).json({ error: 'Server error' });
+    console.error('Error finding images:', error);
+  }
+
+  return results;
+}
+
+function searchFilesInDirectory(dir, query, basePath) {
+  let results = [];
+
+  try {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isDirectory() && file.toLowerCase().includes(query.toLowerCase())) {
+        results.push({
+          name: file,
+          path: normalizePath(path.relative(basePath, fullPath)),
+          size: stats.size,
+          mtime: stats.mtime,
+          type: getFileType(path.extname(file).toLowerCase())
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error searching files in directory:', error);
+  }
+
+  return results;
+}
+
+function findImagesInDirectory(dir, basePath) {
+  let results = [];
+
+  try {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isDirectory()) {
+        const extension = path.extname(file).toLowerCase();
+        if (getFileType(extension) === 'image') {
+          results.push({
+            name: file,
+            path: normalizePath(path.relative(basePath, fullPath)),
+            size: stats.size,
+            mtime: stats.mtime,
+            type: 'image'
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error finding images in directory:', error);
   }
 
   return results;
@@ -793,73 +1009,6 @@ async function parallelFindImages(dir, basePath) {
   }
 }
 
-function getSubdirectories(dir) {
-  try {
-    return fs.readdirSync(dir)
-      .map(file => path.join(dir, file))
-      .filter(filePath => fs.statSync(filePath).isDirectory());
-  } catch (error) {
-    return res.status(500).json({ error: 'Server error' });
-  }
-}
-
-function searchFilesInDirectory(dir, query, basePath) {
-  let results = [];
-
-  try {
-    const files = fs.readdirSync(dir);
-
-    for (const file of files) {
-      const fullPath = path.join(dir, file);
-      const stats = fs.statSync(fullPath);
-
-      if (!stats.isDirectory() && file.toLowerCase().includes(query)) {
-        results.push({
-          name: file,
-          path: normalizePath(path.relative(basePath, fullPath)),
-          size: stats.size,
-          mtime: stats.mtime,
-          type: getFileType(path.extname(file).toLowerCase())
-        });
-      }
-    }
-  } catch (error) {
-    return res.status(500).json({ error: 'Server error' });
-  }
-
-  return results;
-}
-
-function findImagesInDirectory(dir, basePath) {
-  let results = [];
-
-  try {
-    const files = fs.readdirSync(dir);
-
-    for (const file of files) {
-      const fullPath = path.join(dir, file);
-      const stats = fs.statSync(fullPath);
-
-      if (!stats.isDirectory()) {
-        const extension = path.extname(file).toLowerCase();
-        if (getFileType(extension) === 'image') {
-          results.push({
-            name: file,
-            path: normalizePath(path.relative(basePath, fullPath)),
-            size: stats.size,
-            mtime: stats.mtime,
-            type: 'image'
-          });
-        }
-      }
-    }
-  } catch (error) {
-    return res.status(500).json({ error: 'Server error' });
-  }
-
-  return results;
-}
-
 function createSearchWorker(directories, query, basePath) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(__filename, {
@@ -914,234 +1063,6 @@ if (!isMainThread) {
   }
 }
 
-function normalizePath(filepath) {
-  return filepath.replace(/\\/g, '/');
-}
-
-function getFileType(extension) {
-  // Image file extensions
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico', '.raw', '.psd'];
-
-  // Video file extensions
-  const videoExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.mpg', '.mpeg', '.3gp', '.ts'];
-
-  // Audio file extensions
-  const audioExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.alac', '.mid', '.midi'];
-
-  // Document file extensions
-  const documentExtensions = [
-    // '.pdf', // pdf now supported, read the code below
-    // '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', // not supported yet
-    '.txt', '.md', '.rtf', '.odt', '.ods', '.odp', '.csv', '.log', '.tex'];
-
-  // Archive and executable file extensions
-  const archiveExtensions = ['.zip', '.rar', '.tar', '.gz', '.bz2', '.7z', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.exe', '.msi', '.app',
-    '.apk', '.xz', '.tgz', '.jar', '.war', '.ear'];
-
-  // Code and programming file extensions
-  const codeExtensions = [
-    // C/C++ family
-    '.c', '.cpp', '.h', '.hpp', '.cc', '.cxx', '.hxx', '.cu', '.cuh',
-
-    // Web development
-    '.jsx', '.tsx', '.js', '.ts', '.html', '.css', '.scss', '.sass', '.less', '.vue', '.svelte',
-
-    // Scripting languages
-    '.py', '.rb', '.php', '.lua', '.pl', '.pm', '.perl', '.tcl', '.awk',
-
-    // JVM languages
-    '.java', '.kt', '.groovy', '.scala', '.clj', '.gradle',
-
-    // Data formats
-    '.json', '.xml', '.yaml', '.yml', '.toml', '.proto', '.graphql', '.gql',
-
-    // Configuration files
-    '.ini', '.conf', '.properties', '.env', '.config',
-
-    // Shell scripts
-    '.sh', '.bash', '.zsh', '.fish', '.ksh',
-
-    // PowerShell
-    '.powershell', '.ps1', '.psm1', '.psd1', '.ps1xml',
-
-    // Other languages
-    '.go', '.rs', '.swift', '.cs', '.fs', '.vb', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
-    '.f', '.f90', '.f95', '.hs', '.lhs', '.lisp', '.cl', '.nim', '.ml', '.mli', '.d', '.erl', '.hrl',
-    '.lua', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
-  ];
-
-  const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
-
-  const pdfExtensions = ['.pdf'];
-  const epubExtensions = ['.epub'];
-
-  if (imageExtensions.includes(extension)) return 'image';
-  if (videoExtensions.includes(extension)) return 'video';
-  if (audioExtensions.includes(extension)) return 'audio';
-  if (documentExtensions.includes(extension)) return 'document';
-  if (archiveExtensions.includes(extension)) return 'archive';
-  if (codeExtensions.includes(extension)) return 'code';
-  if (comicExtensions.includes(extension)) return 'comic';
-  if (pdfExtensions.includes(extension)) return 'pdf';
-  if (epubExtensions.includes(extension)) return 'epub';
-  return 'other';
-}
-
-function getContentType(extension) {
-  const contentTypes = {
-    // Plain text
-    '.txt': 'text/plain',
-    '.ini': 'text/plain',
-    '.cfg': 'text/plain',
-    '.conf': 'text/plain',
-    '.log': 'text/plain',
-    '.env': 'text/plain',
-
-    // Markup and styling
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.md': 'text/markdown',
-    '.xml': 'application/xml',
-    '.svg': 'image/svg+xml',
-    '.rtf': 'application/rtf',
-
-    // Data formats
-    '.json': 'application/json',
-    '.csv': 'text/csv',
-    '.yaml': 'text/yaml',
-    '.yml': 'text/yaml',
-    '.toml': 'text/toml',
-    '.proto': 'text/plain',
-    '.graphql': 'text/plain',
-    '.gql': 'text/plain',
-
-    // Programming languages
-    '.js': 'text/javascript',
-    '.jsx': 'text/javascript',
-    '.ts': 'text/typescript',
-    '.tsx': 'text/typescript',
-    '.py': 'text/x-python',
-    '.java': 'text/x-java',
-    '.c': 'text/x-c',
-    '.cpp': 'text/x-c++',
-    '.cs': 'text/x-csharp',
-    '.go': 'text/x-go',
-    '.rb': 'text/x-ruby',
-    '.php': 'text/x-php',
-    '.sh': 'text/x-sh',
-    '.bash': 'text/x-sh',
-    '.zsh': 'text/x-sh',
-    '.fish': 'text/x-sh',
-    '.powershell': 'text/x-sh',
-    '.ps1': 'text/x-sh',
-    '.psm1': 'text/x-sh',
-    '.vue': 'text/plain',
-    '.svelte': 'text/plain',
-    '.rs': 'text/plain',
-    '.swift': 'text/plain',
-    '.kt': 'text/plain',
-    '.dart': 'text/plain',
-    '.lua': 'text/plain',
-    '.sql': 'text/plain',
-    '.r': 'text/plain',
-    '.dart': 'text/plain',
-    '.elm': 'text/plain',
-    '.ex': 'text/plain',
-    '.exs': 'text/plain',
-
-    // Images
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.bmp': 'image/bmp',
-    '.webp': 'image/webp',
-    '.tiff': 'image/tiff',
-    '.ico': 'image/x-icon',
-    '.raw': 'image/x-raw',
-    '.psd': 'image/vnd.adobe.photoshop',
-
-    // Videos
-    '.mp4': 'video/mp4',
-    '.webm': 'video/webm',
-    '.avi': 'video/x-msvideo',
-    '.mov': 'video/quicktime',
-    '.mkv': 'video/x-matroska',
-    '.flv': 'video/x-flv',
-    '.wmv': 'video/x-ms-wmv',
-    '.m4v': 'video/x-m4v',
-    '.mpg': 'video/mpeg',
-    '.mpeg': 'video/mpeg',
-    '.3gp': 'video/3gpp',
-    '.ts': 'video/mp2t',
-
-    // Audio
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg',
-    '.flac': 'audio/flac',
-    '.aac': 'audio/aac',
-    '.m4a': 'audio/x-m4a',
-    '.wma': 'audio/x-ms-wma',
-    '.aiff': 'audio/aiff',
-    '.alac': 'audio/alac',
-    '.mid': 'audio/midi',
-    '.midi': 'audio/midi',
-
-    // Documents
-    '.pdf': 'application/pdf',
-    '.doc': 'application/msword',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.xls': 'application/vnd.ms-excel',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.ppt': 'application/vnd.ms-powerpoint',
-    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    '.odt': 'application/vnd.oasis.opendocument.text',
-    '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
-    '.odp': 'application/vnd.oasis.opendocument.presentation',
-    '.tex': 'application/x-tex',
-    '.epub': 'application/epub+zip',
-
-    // Archives
-    '.zip': 'application/zip',
-    '.rar': 'application/x-rar-compressed',
-    '.tar': 'application/x-tar',
-    '.gz': 'application/gzip',
-    '.bz2': 'application/x-bzip2',
-    '.7z': 'application/x-7z-compressed',
-    '.iso': 'application/x-iso9660-image',
-    '.dmg': 'application/x-apple-diskimage',
-    '.pkg': 'application/vnd.apple.installer+xml',
-    '.deb': 'application/x-debian-package',
-    '.rpm': 'application/x-redhat-package-manager',
-    '.exe': 'application/x-msdownload',
-    '.msi': 'application/x-msdownload',
-    '.app': 'application/x-apple-application',
-    '.apk': 'application/vnd.android.package-archive',
-    '.xz': 'application/x-xz',
-    '.tgz': 'application/gzip',
-    '.jar': 'application/java-archive',
-    '.war': 'application/java-archive',
-    '.ear': 'application/java-archive',
-
-    // Comic
-    '.cbz': 'application/x-cbz',
-    '.cbr': 'application/x-cbr',
-    '.cb7': 'application/x-cb7',
-    '.cbt': 'application/x-cbt',
-    '.cbl': 'application/x-cbl',
-    '.cbrz': 'application/x-cbrz',
-    '.cbr7': 'application/x-cbr7',
-    '.cbrt': 'application/x-cbrt',
-    '.cblz': 'application/x-cblz',
-    '.cblt': 'application/x-cblt',
-  };
-
-  return contentTypes[extension] || 'application/octet-stream';
-}
-
-// TO TEST:
-// Helper function to copy a folder recursively
 function copyFolderRecursiveSync(source, destination) {
   // Create destination folder if it doesn't exist
   if (!fs.existsSync(destination)) {

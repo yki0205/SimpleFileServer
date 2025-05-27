@@ -16,15 +16,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
-  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout, Info
+  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout, 
+  Info, Database, Eye, MoreHorizontal, TestTube2
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
 import { Error, Loading, NotFound } from "@/components/status";
-import { Image } from "@/components/image";
-import { FileItemListView, FileItemGridView } from "@/components/fileItem";
-import { ConfirmDialog } from "@/components/dialog";
-import { DetailsDialog } from "@/components/dialog";
+import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
+import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog } from "@/components/dialog";
 
 import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview, EpubPreview } from "@/components/preview";
 
@@ -184,7 +183,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
       <div style={style} className="p-1">
         <ContextMenu>
           <ContextMenuTrigger>
-            <Image
+            <ImageItem
               src={`/api/raw?path=${encodeURIComponent(file.path)}`}
               thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
               alt={file.name}
@@ -210,6 +209,36 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
         </ContextMenu>
       </div>
     );
+  } else if (file.type === 'video') {
+    return (
+      <div style={style} className="p-1">
+        <ContextMenu>
+          <ContextMenuTrigger>
+            <VideoItem
+              alt={file.name}
+              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+              onClick={() => onFileClick(file.path, file.type)}
+              className="w-full h-full object-cover rounded-md cursor-pointer"
+              loading="eager"
+            />
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+              <Info className="mr-2" size={16} />
+              Details
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDownload(file.path)}>
+              <Download className="mr-2" size={16} />
+              Download
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDelete(file.path)}>
+              <Trash2 className="mr-2" size={16} />
+              Delete
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </div>
+    )
   } else {
     return (
       <div style={style} className="p-1">
@@ -282,7 +311,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
         <div key={file.path} className="break-inside-avoid mb-2 w-full">
           <ContextMenu>
             <ContextMenuTrigger>
-              <Image
+              <ImageItem
                 {...file}
                 src={`/api/raw?path=${encodeURIComponent(file.path)}`}
                 thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
@@ -324,6 +353,23 @@ function getColumnCount(width: number) {
   if (width < 1024) return 4; // lg
   if (width < 1280) return 6; // xl
   return 8; // 2xl and above
+}
+
+function getButtonStyles(btnCountBefore: number, index: number) {
+  const base = cn(
+    "fixed",
+    "w-10 h-10 rounded-full",
+    "bg-black/50 hover:bg-black/70 text-white",
+    "flex items-center justify-center",
+    "transition-all duration-300",
+  )
+  const positions = [
+    "bottom-8 right-8",
+    "bottom-20 right-8",
+    "bottom-32 right-8",
+    "bottom-44 right-8"
+  ]
+  return cn(base, positions[Math.min(index, positions.length - 1, btnCountBefore)]);
 }
 
 
@@ -392,6 +438,21 @@ function FileExplorerContent() {
     path: '',
     type: '',
   });
+
+  // States for upload progress tracking
+  const [uploadFiles, setUploadFiles] = useState<any[]>([]);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const xhrRefsRef = useRef<Map<string, XMLHttpRequest>>(new Map());
+
+  // States for download progress tracking
+  const [downloadFiles, setDownloadFiles] = useState<any[]>([]);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+
+  // EXPERIMENTAL FEATURE FOR FILE INDEXING
+  const [useFileIndex, setUseFileIndex] = useState(true);
+  const [useFileWatcher, setUseFileWatcher] = useState(true);
+  const [showIndexDialog, setShowIndexDialog] = useState(false);
+  const [showWatcherDialog, setShowWatcherDialog] = useState(false);
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
@@ -518,7 +579,7 @@ function FileExplorerContent() {
 
   const goHome = () => {
     if (currentPath === '') {
-      window.location.reload();
+      router.push('/');
     } else {
       navigateTo('', '');
     }
@@ -623,6 +684,17 @@ function FileExplorerContent() {
     openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
   }
 
+  const handleFileClick = useCallback((path: string, type: string) => {
+    if (type === 'directory') {
+      navigateTo(path, '');
+    } else if (previewSupported[type as keyof typeof previewSupported]) {
+      openPreview(path, type);
+    } else {
+      setFileToDownload(path);
+      setDownloadComfirmDialogOpen(true);
+    }
+  }, [openPreview]);
+
 
 
   const handleSearch = (e: React.FormEvent) => {
@@ -641,6 +713,8 @@ function FileExplorerContent() {
     }
   }
 
+
+  // Handle upload with progress tracking
   const handleUpload = async () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -650,32 +724,303 @@ function FileExplorerContent() {
       const files = (e.target as HTMLInputElement).files;
       if (!files || files.length === 0) return;
 
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-      }
+      // Prepare files for tracking
+      const uploadList = Array.from(files).map(file => ({
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: 'pending' as const,
+        file: file
+      }));
 
-      try {
-        const response = await axios.post(`/api/upload?dir=${encodeURIComponent(currentPath)}`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+      // Add files to tracking state
+      setUploadFiles(uploadList);
+      setShowUploadDialog(true);
+
+      // Process each file upload
+      for (const fileData of uploadList) {
+        await new Promise<void>((resolve) => {
+          const xhr = new XMLHttpRequest();
+
+          // Store the XHR reference in our Map
+          xhrRefsRef.current.set(fileData.id, xhr);
+
+          const formData = new FormData();
+          formData.append('files', fileData.file);
+
+          // Update file status to uploading
+          setUploadFiles(prev => prev.map(f =>
+            f.id === fileData.id ? { ...f, status: 'uploading' } : f
+          ));
+
+          // Setup progress handler
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const progress = Math.round((event.loaded / event.total) * 100);
+
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? { ...f, progress } : f
+              ));
+            }
+          });
+
+          // Handle completion
+          xhr.addEventListener('load', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? { ...f, progress: 100, status: 'completed' } : f
+              ));
+
+              // Refresh file list
+              if (isSearching) {
+                refetchSearch();
+              } else {
+                refetchFiles();
+              }
+            } else {
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? {
+                  ...f,
+                  status: 'error',
+                  error: `Error: ${xhr.status} ${xhr.statusText}`
+                } : f
+              ));
+            }
+            resolve();
+          });
+
+          // Handle errors
+          xhr.addEventListener('error', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? {
+                ...f,
+                status: 'error',
+                error: 'Network error occurred'
+              } : f
+            ));
+            resolve();
+          });
+
+          // Handle abort event
+          xhr.addEventListener('abort', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? {
+                ...f,
+                status: 'error',
+                error: 'Upload cancelled'
+              } : f
+            ));
+            resolve();
+          });
+
+          // Start upload
+          xhr.open('POST', `/api/upload?dir=${encodeURIComponent(currentPath)}`);
+          xhr.send(formData);
         });
-
-        if (isSearching) {
-          refetchSearch();
-        } else {
-          refetchFiles();
-        }
-
-        console.log('Files uploaded successfully:', response.data);
-      } catch (error: any) {
-        console.error('Upload error:', error.response?.data || error.message);
       }
     };
 
     fileInput.click();
   }
+
+  // Cancel specific upload
+  const cancelUpload = (fileId: string) => {
+    const xhr = xhrRefsRef.current.get(fileId);
+    if (xhr) {
+      // Actually abort the XHR request
+      xhr.abort();
+      // UI state will be updated by the abort event handler
+    } else {
+      // If XHR not found (already completed or never started), just update the UI
+      setUploadFiles(prev => prev.map(f =>
+        f.id === fileId ? { ...f, status: 'error', error: 'Cancelled by user' } : f
+      ));
+    }
+  };
+
+  // Cancel all uploads
+  const cancelAllUploads = () => {
+    // Abort all pending XHR requests
+    uploadFiles.forEach(file => {
+      if (file.status === 'pending' || file.status === 'uploading') {
+        const xhr = xhrRefsRef.current.get(file.id);
+        if (xhr) {
+          xhr.abort();
+        }
+      }
+    });
+
+    // Update UI for any uploads that didn't have XHR references
+    setUploadFiles(prev => prev.map(f =>
+      f.status === 'pending' || f.status === 'uploading'
+        ? { ...f, status: 'error', error: 'Cancelled by user' }
+        : f
+    ));
+  };
+
+  // Remove completed or error upload task
+  const removeUploadTask = (fileId: string) => {
+    setUploadFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
+  // Download with progress tracking
+  const handleDownload = useCallback((path: string) => {
+    const filename = path.split('/').pop() || 'download';
+
+    // Create a download entry
+    const downloadId = crypto.randomUUID();
+    const newDownload = {
+      id: downloadId,
+      name: filename,
+      path: path,
+      progress: 0,
+      size: 0, // We'll update this when we get the response
+      status: 'pending' as const
+    };
+
+    // Add to download list
+    setDownloadFiles(prev => [...prev, newDownload]);
+    setShowDownloadDialog(true);
+
+    // Start download with XHR to track progress
+    const xhr = new XMLHttpRequest();
+
+    // Store XHR reference for cancellation
+    xhrRefsRef.current.set(downloadId, xhr);
+
+    xhr.open('GET', `/api/raw?path=${encodeURIComponent(path)}`);
+    xhr.responseType = 'blob';
+
+    // Update status to downloading
+    setDownloadFiles(prev => prev.map(f =>
+      f.id === downloadId ? { ...f, status: 'downloading' } : f
+    ));
+
+    // Track progress
+    xhr.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const progress = Math.round((event.loaded / event.total) * 100);
+        const size = event.total;
+
+        setDownloadFiles(prev => prev.map(f =>
+          f.id === downloadId ? { ...f, progress, size } : f
+        ));
+      }
+    };
+
+    // Handle completion
+    xhr.onload = () => {
+      // Remove XHR reference
+      xhrRefsRef.current.delete(downloadId);
+
+      if (xhr.status === 200) {
+        // Create download link
+        const blob = xhr.response;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+
+        // Update status
+        setDownloadFiles(prev => prev.map(f =>
+          f.id === downloadId ? { ...f, progress: 100, status: 'completed' } : f
+        ));
+      } else {
+        setDownloadFiles(prev => prev.map(f =>
+          f.id === downloadId ? {
+            ...f,
+            status: 'error',
+            error: `Error: ${xhr.status} ${xhr.statusText}`
+          } : f
+        ));
+      }
+    };
+
+    // Handle errors
+    xhr.onerror = () => {
+      // Remove XHR reference
+      xhrRefsRef.current.delete(downloadId);
+
+      setDownloadFiles(prev => prev.map(f =>
+        f.id === downloadId ? {
+          ...f,
+          status: 'error',
+          error: 'Network error occurred'
+        } : f
+      ));
+    };
+
+    // Handle abort event
+    xhr.onabort = () => {
+      // Remove XHR reference
+      xhrRefsRef.current.delete(downloadId);
+
+      setDownloadFiles(prev => prev.map(f =>
+        f.id === downloadId ? {
+          ...f,
+          status: 'error',
+          error: 'Download cancelled'
+        } : f
+      ));
+    };
+
+    xhr.send();
+  }, []);
+
+  // Cancel specific download
+  const cancelDownload = (fileId: string) => {
+    const xhr = xhrRefsRef.current.get(fileId);
+    if (xhr) {
+      // Actually abort the XHR request
+      xhr.abort();
+      // UI state will be updated by the abort event handler
+    } else {
+      // If XHR not found (already completed or never started), just update the UI
+      setDownloadFiles(prev => prev.map(f =>
+        f.id === fileId ? { ...f, status: 'error', error: 'Cancelled by user' } : f
+      ));
+    }
+  };
+
+  // Cancel all downloads
+  const cancelAllDownloads = () => {
+    // Abort all pending XHR requests
+    downloadFiles.forEach(file => {
+      if (file.status === 'pending' || file.status === 'downloading') {
+        const xhr = xhrRefsRef.current.get(file.id);
+        if (xhr) {
+          xhr.abort();
+        }
+      }
+    });
+
+    // Update UI for any downloads that didn't have XHR references
+    setDownloadFiles(prev => prev.map(f =>
+      f.status === 'pending' || f.status === 'downloading'
+        ? { ...f, status: 'error', error: 'Cancelled by user' }
+        : f
+    ));
+  };
+
+  // Remove completed or error download task
+  const removeDownloadTask = (fileId: string) => {
+    setDownloadFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
 
   const handleMkdir = useCallback((path: string) => {
     // TODO: Implement mkdir
@@ -685,10 +1030,33 @@ function FileExplorerContent() {
     // TODO: Implement rename
   }, []);
 
+
   const handleDelete = useCallback((path: string) => {
     setFileToDelete(path);
     setDeleteComfirmDialogOpen(true);
   }, []);
+
+  const handleDeleteConfirm = useCallback((path: string) => {
+    fetch(`/api/delete?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    }).then(() => {
+      setFileToDelete('');
+      setDeleteComfirmDialogOpen(false);
+      if (isSearching) {
+        refetchSearch();
+      } else {
+        refetchFiles();
+      }
+    }).catch((error) => {
+      console.error('Error deleting file:', error);
+    });
+  }, []);
+
+  const handleDeleteCancel = useCallback(() => {
+    setFileToDelete('');
+    setDeleteComfirmDialogOpen(false);
+  }, []);
+
 
   const handleCopy = useCallback((path: string) => {
     // TODO: Implement copy
@@ -702,20 +1070,6 @@ function FileExplorerContent() {
     // TODO: Implement move
   }, []);
 
-  const handleDownload = useCallback((path: string) => {
-    window.open(`/api/raw?path=${encodeURIComponent(path)}`, '_blank');
-  }, []);
-
-  const handleFileClick = useCallback((path: string, type: string) => {
-    if (type === 'directory') {
-      navigateTo(path, '');
-    } else if (previewSupported[type as keyof typeof previewSupported]) {
-      openPreview(path, type);
-    } else {
-      setFileToDownload(path);
-      setDownloadComfirmDialogOpen(true);
-    }
-  }, [openPreview]);
 
   const handleVirtualizedScroll = ({ scrollOffset, scrollTop }: any) => {
     const currentScroll = scrollTop ?? scrollOffset ?? 0;
@@ -727,7 +1081,6 @@ function FileExplorerContent() {
     setFileToShowDetails(file);
     setDetailsDialogOpen(true);
   }, []);
-
 
 
   // intercept history navigation methods
@@ -1004,11 +1357,42 @@ function FileExplorerContent() {
             className={cn(
               "text-black",
               "bg-white hover:bg-white/80",
-              "transition-colors duration-200"
+              "transition-colors duration-200",
+              "max-sm:hidden"
             )}
           >
             <Upload size={18} />
           </Button>
+          {useFileIndex && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowIndexDialog(true)}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200",
+                "max-sm:hidden"
+              )}
+            >
+              <Database size={18} />
+            </Button>
+          )}
+          {useFileWatcher && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowWatcherDialog(true)}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200",
+                "max-sm:hidden"
+              )}
+            >
+              <Eye size={18} />
+            </Button>
+          )}
         </div>
 
         <form onSubmit={handleSearch} className="order-3 max-sm:w-full sm:max-w-sm flex gap-1">
@@ -1107,6 +1491,44 @@ function FileExplorerContent() {
           >
             <ImageIcon size={18} />
           </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="sm:hidden">
+                <MoreHorizontal size={18} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-1 sm:hidden">
+              <div className="grid gap-1">
+                {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
+                  <ListIcon size={18} /> List View
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('grid')}>
+                  <Grid3x3 size={18} /> Grid View
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('image')}>
+                  <ImageIcon size={18} /> Image View
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
+                  <ImageIcon size={18} /> Image Only
+                </Button> */}
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowUploadDialog(true)}>
+                  <Upload size={18} /> Upload Files
+                </Button>
+                {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
+                  <Database size={18} /> Index Settings
+                </Button>}
+                {useFileWatcher && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowWatcherDialog(true)}>
+                  <Eye size={18} /> Watcher Settings
+                </Button>}
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
+                  <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
+                  <Eye size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
 
@@ -1297,41 +1719,85 @@ function FileExplorerContent() {
       </footer>
 
       {/* Masonry toggle button - only visible in imageOnly mode */}
-      {viewMode === 'imageOnly' && (
-        <button
-          onClick={() => setUseMasonry(!useMasonry)}
-          className={cn(
-            showScrollTop ? "fixed bottom-20 right-8"
-              : "fixed bottom-8 right-8",
-            useMasonry ? "bg-white/50 hover:bg-white/70 text-black"
-              : "bg-black/50 hover:bg-black/70 text-white",
-            "w-10 h-10 rounded-full",
-            "flex items-center justify-center",
-            "transition-all duration-300",
-            "shadow-lg",
-          )}
-          aria-label="Toggle masonry layout"
-        >
-          <Layout size={24} />
-        </button>
-      )}
+      {viewMode === 'imageOnly' && <button
+        onClick={() => setUseMasonry(!useMasonry)}
+        className={cn(
+          getButtonStyles(
+            (showScrollTop ? 1 : 0) +
+            (uploadFiles.length === 0 ? 0 : 1) +
+            (downloadFiles.length === 0 ? 0 : 1),
+            3
+          ),
+          useMasonry && "bg-white/50 hover:bg-white/70 text-black",
+        )}
+        aria-label="Toggle masonry layout"
+      >
+        <Layout size={24} />
+      </button>}
 
       {/* Scroll to top button */}
-      <button
+      {showScrollTop && <button
         onClick={scrollToTop}
         className={cn(
-          "fixed bottom-8 right-8",
-          "bg-black/50 hover:bg-black/70 text-white",
-          "w-10 h-10 rounded-full",
-          "flex items-center justify-center",
-          "transition-all duration-300",
-          "shadow-lg",
-          showScrollTop ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
+          getButtonStyles(
+            (uploadFiles.length === 0 ? 0 : 1) +
+            (downloadFiles.length === 0 ? 0 : 1),
+            2
+          ),
         )}
         aria-label="Scroll to top"
       >
         <ArrowUp size={24} />
-      </button>
+      </button>}
+
+      {/* Upload status buttons */}
+      {uploadFiles.length > 0 && <button
+        onClick={() => setShowUploadDialog(true)}
+        className={cn(
+          getButtonStyles(
+            (downloadFiles.length === 0 ? 0 : 1),
+            1
+          ),
+        )}
+        aria-label="Show upload progress"
+      >
+        <Upload size={20} />
+      </button>}
+
+      {/* Download status buttons */}
+      {downloadFiles.length > 0 && <button
+        onClick={() => setShowDownloadDialog(true)}
+        className={cn(
+          "fixed",
+          getButtonStyles(
+            (uploadFiles.length === 0 ? 0 : 1),
+            0
+          ),
+        )}
+        aria-label="Show download progress"
+      >
+        <Download size={20} />
+      </button>}
+
+      {/* Upload dialog */}
+      <UploadDialog
+        open={showUploadDialog}
+        setOpen={setShowUploadDialog}
+        files={uploadFiles}
+        onCancel={cancelUpload}
+        onCancelAll={cancelAllUploads}
+        removeTask={removeUploadTask}
+      />
+
+      {/* Download dialog */}
+      <DownloadDialog
+        open={showDownloadDialog}
+        setOpen={setShowDownloadDialog}
+        files={downloadFiles}
+        onCancel={cancelDownload}
+        onCancelAll={cancelAllDownloads}
+        removeTask={removeDownloadTask}
+      />
 
       {/* Details dialog */}
       {fileToShowDetails && (
@@ -1369,23 +1835,20 @@ function FileExplorerContent() {
         description="Are you sure you want to delete this file?"
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => {
-          fetch(`/api/delete?path=${encodeURIComponent(fileToDelete)}`, {
-            method: 'DELETE',
-          }).then(() => {
-            setFileToDelete('');
-            setDeleteComfirmDialogOpen(false);
-            if (isSearching) {
-              refetchSearch();
-            } else {
-              refetchFiles();
-            }
-          });
-        }}
-        onCancel={() => {
-          setFileToDelete('');
-          setDeleteComfirmDialogOpen(false);
-        }}
+        onConfirm={() => handleDeleteConfirm(fileToDelete)}
+        onCancel={handleDeleteCancel}
+      />
+
+      {/* Index settings dialog */}
+      <IndexSettingsDialog
+        open={showIndexDialog}
+        setOpen={setShowIndexDialog}
+      />
+
+      {/* Watcher settings dialog */}
+      <WatcherSettingsDialog
+        open={showWatcherDialog}
+        setOpen={setShowWatcherDialog}
       />
     </main>
   );

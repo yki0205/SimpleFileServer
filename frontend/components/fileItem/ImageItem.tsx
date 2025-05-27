@@ -6,7 +6,7 @@ import NextImage from "next/image";
 import { cn } from "@/lib/utils";
 import { ImageOff, RotateCw, RefreshCw, Download, X } from "lucide-react";
 
-interface ImageProps {
+interface ImageItemProps {
   src: string,
   alt: string,
   thumbnail?: string,
@@ -17,7 +17,7 @@ interface ImageProps {
   disablePreview?: boolean
 }
 
-export function Image({ src, alt, thumbnail, onClick, className, disablePreview = false, fit = 'contain', loading = 'lazy' }: ImageProps) {
+export function ImageItem({ src, alt, thumbnail, onClick, className, disablePreview = false, fit = 'contain', loading = 'lazy' }: ImageItemProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);

@@ -42,6 +42,14 @@ export const Video = ({
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
+  // Pending progress system
+  const [pendingTime, setPendingTime] = useState<number | null>(null);
+  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Seek gesture state
+  const [showSeekCancelHint, setShowSeekCancelHint] = useState(false);
+  const initialSeekPosRef = useRef<{ x: number, y: number } | null>(null);
+
   // UI controls state and refs
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -55,23 +63,35 @@ export const Video = ({
 
   // Progress bar refs and state
   const progressRef = useRef<HTMLDivElement>(null);
-  const progressDraggingRef = useRef(false);
-  const previewPositionRef = useRef<number | null>(null);
-  const seekingRef = useRef(false);
+  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
+  const progressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Visual indicators state and refs
-  const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
-  const [showBrightnessIndicator, setShowBrightnessIndicator] = useState(false);
   const [skipIndicator, setSkipIndicator] = useState<{ direction: 'forward' | 'backward', seconds: number } | null>(null);
   const skipIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const cumulativeSkipRef = useRef<{ direction: 'forward' | 'backward', seconds: number } | null>(null);
   const skipResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
+  const [showBrightnessIndicator, setShowBrightnessIndicator] = useState(false);
   const volumeIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const brightnessIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Touch gesture refs
+  const isTouchingRef = useRef(false);
+  const isTouchDraggingRef = useRef(false);
+  const touchGestureTypeRef = useRef<'seek' | 'brightness' | 'volume' | null>(null);
   const touchStartRef = useRef<{ x: number, y: number } | null>(null);
   const lastTouchRef = useRef<{ x: number, y: number } | null>(null);
+
+
+  // Mouse gesture refs
+  const isMouseDraggingRef = useRef(false);
+  const isMouseDraggingProgressRef = useRef(false);
+  const mouseGestureTypeRef = useRef<'seek' | 'brightness' | 'volume' | null>(null);
+  const startMousePosRef = useRef<{ x: number, y: number } | null>(null);
+  const lastMousePosRef = useRef<{ x: number, y: number } | null>(null);
+
 
   // Settings menu state and refs
   const [showSettings, setShowSettings] = useState(false);
@@ -88,49 +108,150 @@ export const Video = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const skip = (seconds: number) => {
+  const formatTime2 = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Return appropriate layout class based on container width
+  const getLayoutClass = () => {
+    return containerWidth > 768 ? "grid-cols-3" : "grid-cols-1";
+  };
+
+  // Get display time (pending time if available, otherwise current time)
+  const getDisplayTime = () => {
+    return pendingTime !== null ? pendingTime : currentTime;
+  };
+
+  // Get progress percentage for display
+  const getProgressPercentage = () => {
+    if (duration <= 0) return 0;
+    return (getDisplayTime() / duration) * 100;
+  };
+
+  // Apply pending time to video
+  const applyPendingTime = () => {
     if (videoRef.current) {
-      const newTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
-      videoRef.current.currentTime = newTime;
-
-      const direction = seconds > 0 ? 'forward' : 'backward';
-      const absSeconds = Math.abs(seconds);
-
-      // Update cumulative skip
-      if (cumulativeSkipRef.current && cumulativeSkipRef.current.direction === direction) {
-        // Same direction, add to existing cumulative value
-        cumulativeSkipRef.current.seconds += absSeconds;
-      } else {
-        // Different direction or first skip, set new value
-        cumulativeSkipRef.current = {
-          direction,
-          seconds: absSeconds
-        };
-      }
-
-      // Show skip indicator with cumulative value
-      setSkipIndicator({
-        direction: cumulativeSkipRef.current.direction,
-        seconds: Math.round(cumulativeSkipRef.current.seconds)
+      // Use function update to get the latest pendingTime value, but do not clear it immediately
+      setPendingTime(latestPendingTime => {
+        if (latestPendingTime !== null) {
+          const newTime = Math.max(0, Math.min(duration, latestPendingTime));
+          videoRef.current!.currentTime = newTime;
+          // console.log('applyPendingTime with latest value:', latestPendingTime);
+          // Do not return null here, keep the pendingTime value until the seeked event is triggered
+          return latestPendingTime;
+        }
+        return latestPendingTime;
       });
 
-      // Clear previous timeouts
+      setIsUpdatingProgress(false);
+      setShowSeekCancelHint(false);
+      setSkipIndicator(null);  // Hide skip indicator when applying time
+      initialSeekPosRef.current = null;
+
+      // Clear skip related timeouts
       if (skipIndicatorTimeoutRef.current) {
         clearTimeout(skipIndicatorTimeoutRef.current);
+        skipIndicatorTimeoutRef.current = null;
       }
+      // Reset cumulative skip value
       if (skipResetTimeoutRef.current) {
         clearTimeout(skipResetTimeoutRef.current);
+        skipResetTimeoutRef.current = null;
+      }
+      cumulativeSkipRef.current = null;
+    }
+  };
+
+  // Update pending time with timeout and handle skip indicators
+  const updatePendingTime = (
+    seconds: number,
+    timeoutRef: React.MutableRefObject<NodeJS.Timeout | null>,
+    delay: number = 300,
+    showIndicator: boolean = true
+  ) => {
+    // console.log('updatePendingTime', seconds);
+    setPendingTime(prevPendingTime => {
+      const currentTimeValue = prevPendingTime !== null ? prevPendingTime : currentTime;
+      const newTime = Math.max(0, Math.min(duration, currentTimeValue + seconds));
+      // console.log('newTime', newTime);
+
+      if (showIndicator && seconds !== 0) {
+        const direction = seconds > 0 ? 'forward' : 'backward';
+        const absSeconds = Math.abs(seconds);
+
+        if (cumulativeSkipRef.current && cumulativeSkipRef.current.direction === direction) {
+          cumulativeSkipRef.current.seconds += absSeconds;
+        } else {
+          cumulativeSkipRef.current = {
+            direction,
+            seconds: absSeconds
+          };
+        }
+
+        setSkipIndicator({
+          direction: cumulativeSkipRef.current.direction,
+          seconds: Math.round(cumulativeSkipRef.current.seconds)
+        });
       }
 
-      // Hide indicator after 1 second
-      skipIndicatorTimeoutRef.current = setTimeout(() => {
-        setSkipIndicator(null);
-      }, 1000);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
 
-      // Reset cumulative value after 2 seconds of inactivity
-      skipResetTimeoutRef.current = setTimeout(() => {
-        cumulativeSkipRef.current = null;
-      }, 2000);
+      timeoutRef.current = setTimeout(() => {
+        applyPendingTime();
+      }, delay);
+
+      return newTime;
+    });
+
+    setIsUpdatingProgress(true);
+  };
+
+  // Update pending time without timeout (for direct manipulation).
+  // NOTE: If you use this function, you must call applyPendingTime() to apply the new time.
+  const updatePendingTimeWithoutTimeout = (seconds: number, showIndicator: boolean = false, isNewTime: boolean = false) => {
+    // console.log('updatePendingTimeWithoutTimeout', seconds);
+    setPendingTime(prevPendingTime => {
+      const currentTimeValue = prevPendingTime !== null ? prevPendingTime : currentTime;
+      const newTime = isNewTime ?
+        Math.max(0, Math.min(duration, seconds)) :
+        Math.max(0, Math.min(duration, currentTimeValue + seconds));
+      // console.log('newTime', newTime);
+
+      if (showIndicator && seconds !== 0) {
+        const direction = seconds > 0 ? 'forward' : 'backward';
+        const absSeconds = Math.abs(seconds);
+
+        if (cumulativeSkipRef.current && cumulativeSkipRef.current.direction === direction) {
+          cumulativeSkipRef.current.seconds += absSeconds;
+        } else {
+          cumulativeSkipRef.current = {
+            direction,
+            seconds: absSeconds
+          };
+        }
+
+        setSkipIndicator({
+          direction: cumulativeSkipRef.current.direction,
+          seconds: isNewTime ?
+            Math.round(Math.abs(newTime - currentTime)) :
+            Math.round(cumulativeSkipRef.current.seconds)
+        });
+      }
+
+      return newTime;
+    });
+
+    setIsUpdatingProgress(true);
+  };
+
+  // Simplified skip function that uses updatePendingTime
+  const skip = (seconds: number) => {
+    if (duration > 0) {
+      updatePendingTime(seconds, seekTimeoutRef, 300);
     }
   };
 
@@ -194,109 +315,60 @@ export const Video = ({
     }
   };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
-    if (videoRef.current) {
-      videoRef.current.volume = newVolume;
-      setIsMuted(newVolume === 0);
+  const handleVolumeChange = (newVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, newVolume));
 
-      // Show volume indicator and hide brightness indicator
-      setShowVolumeIndicator(true);
-      setShowBrightnessIndicator(false);
-      if (volumeIndicatorTimeoutRef.current) {
-        clearTimeout(volumeIndicatorTimeoutRef.current);
-      }
-      volumeIndicatorTimeoutRef.current = setTimeout(() => {
-        setShowVolumeIndicator(false);
-      }, 2000);
+    setVolume(clampedVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = clampedVolume;
+      setIsMuted(clampedVolume === 0);
     }
+
+    // Show volume indicator and hide brightness indicator
+    setShowVolumeIndicator(true);
+    setShowBrightnessIndicator(false);
+
+    if (volumeIndicatorTimeoutRef.current) {
+      clearTimeout(volumeIndicatorTimeoutRef.current);
+    }
+    volumeIndicatorTimeoutRef.current = setTimeout(() => {
+      setShowVolumeIndicator(false);
+    }, 2000);
+
+    // Show controls
+    resetControlsTimeout();
   };
 
-  const handleBrightnessChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newBrightness = parseFloat(e.target.value);
-    setBrightness(newBrightness);
+  const handleBrightnessChange = (newBrightness: number) => {
+    const clampedBrightness = Math.max(0.1, Math.min(2, newBrightness));
+
+    setBrightness(clampedBrightness);
 
     // Show brightness indicator and hide volume indicator
     setShowBrightnessIndicator(true);
     setShowVolumeIndicator(false);
+
     if (brightnessIndicatorTimeoutRef.current) {
       clearTimeout(brightnessIndicatorTimeoutRef.current);
     }
     brightnessIndicatorTimeoutRef.current = setTimeout(() => {
       setShowBrightnessIndicator(false);
     }, 2000);
+
+    // Show controls
+    resetControlsTimeout();
   };
 
-  // Handle progress bar events
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (progressRef.current && videoRef.current && duration > 0) {
-      const rect = progressRef.current.getBoundingClientRect();
-      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      videoRef.current.currentTime = pos * duration;
-    }
+  const handleVolumeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value);
+    handleVolumeChange(newVolume);
   };
 
-  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (duration > 0) {
-      progressDraggingRef.current = true;
-      
-      // Set the initial preview position
-      if (progressRef.current) {
-        const rect = progressRef.current.getBoundingClientRect();
-        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        previewPositionRef.current = pos;
-        setCurrentTime(pos * duration);
-      }
-
-      // Prevent default behaviors
-      e.preventDefault();
-    }
+  const handleBrightnessInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newBrightness = parseFloat(e.target.value);
+    handleBrightnessChange(newBrightness);
   };
 
-  const handleProgressDrag = (e: React.MouseEvent | MouseEvent) => {
-    if (progressDraggingRef.current && progressRef.current) {
-      const rect = progressRef.current.getBoundingClientRect();
-      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-
-      // Update preview position
-      previewPositionRef.current = pos;
-      setCurrentTime(pos * duration);
-      
-      // Prevent default behaviors
-      e.preventDefault();
-    }
-  };
-
-  const handleProgressMouseUp = () => {
-    if (progressDraggingRef.current && videoRef.current && previewPositionRef.current !== null) {
-      // Mark that we're seeking to prevent progress bar jumps
-      seekingRef.current = true;
-
-      // Update video current time on mouse up
-      videoRef.current.currentTime = previewPositionRef.current * duration;
-    }
-    
-    // Always reset drag state
-    progressDraggingRef.current = false;
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handleProgressDrag(e);
-    const handleMouseUp = () => handleProgressMouseUp();
-
-    if (progressDraggingRef.current) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [progressDraggingRef.current]);
-
-  // Handle wheel events for brightness and volume control
   const handleWheel = (e: React.WheelEvent) => {
     if (containerRef.current) {
       const containerRect = containerRef.current.getBoundingClientRect();
@@ -304,48 +376,19 @@ export const Video = ({
       const containerWidth = containerRect.width;
       const mousePosition = (mouseX - containerRect.left) / containerWidth;
 
-      // Left half of the container, adjust brightness
+      // Left half of the container adjusts brightness
       if (mousePosition < 0.5) {
         const delta = e.deltaY < 0 ? 0.05 : -0.05;
-        setBrightness(prev => Math.max(0.1, Math.min(2, prev + delta)));
-
-        // Show brightness indicator and hide volume indicator
-        setShowBrightnessIndicator(true);
-        setShowVolumeIndicator(false);
-        if (brightnessIndicatorTimeoutRef.current) {
-          clearTimeout(brightnessIndicatorTimeoutRef.current);
-        }
-        brightnessIndicatorTimeoutRef.current = setTimeout(() => {
-          setShowBrightnessIndicator(false);
-        }, 2000);
+        handleBrightnessChange(brightness + delta);
       }
-      // Right half of the container, adjust volume
+      // Right half of the container adjusts volume
       else {
         const delta = e.deltaY < 0 ? 0.05 : -0.05;
-        if (videoRef.current) {
-          const newVolume = Math.max(0, Math.min(1, volume + delta));
-          setVolume(newVolume);
-          videoRef.current.volume = newVolume;
-          setIsMuted(newVolume === 0);
-
-          // Show volume indicator and hide brightness indicator
-          setShowVolumeIndicator(true);
-          setShowBrightnessIndicator(false);
-          if (volumeIndicatorTimeoutRef.current) {
-            clearTimeout(volumeIndicatorTimeoutRef.current);
-          }
-          volumeIndicatorTimeoutRef.current = setTimeout(() => {
-            setShowVolumeIndicator(false);
-          }, 2000);
-        }
+        handleVolumeChange(volume + delta);
       }
-
-      // Show controls when adjusting
-      resetControlsTimeout();
     }
   };
 
-  // Handle double click for skipping forward/backward
   const handleDoubleClick = (e: React.MouseEvent) => {
     const containerRect = containerRef.current?.getBoundingClientRect();
 
@@ -355,8 +398,6 @@ export const Video = ({
       const containerHeight = containerRect.height;
       const controlsAreaThreshold = containerRect.bottom - (containerHeight * 0.2);
 
-      // If click is in the bottom 20% area, don't process double click
-      // NOTE: This is to prevent double click on the controls area.
       if (clickY > controlsAreaThreshold) {
         return;
       }
@@ -383,165 +424,6 @@ export const Video = ({
     }
   };
 
-  // Handle touch events for gestures.
-  // This is to handle the touch events for the progress bar and the volume/brightness controls on mobile devices.
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
-
-      // Always reset controls timeout on touch
-      resetControlsTimeout();
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && touchStartRef.current && lastTouchRef.current) {
-      const touch = e.touches[0];
-      const deltaX = touch.clientX - lastTouchRef.current.x;
-      const deltaY = touch.clientY - lastTouchRef.current.y;
-      const totalDeltaX = touch.clientX - touchStartRef.current.x;
-      const totalDeltaY = touch.clientY - touchStartRef.current.y;
-
-      // Update last touch position
-      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
-
-      // Check if this is a progress scrubbing gesture (horizontal movement)
-      if (progressRef.current && (Math.abs(totalDeltaX) > 10 || progressDraggingRef.current)) {
-        // For progress bar interaction, we'll be more lenient
-        progressDraggingRef.current = true;
-        const rect = progressRef.current.getBoundingClientRect();
-        const pos = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-        
-        // Set preview position
-        previewPositionRef.current = pos;
-        setCurrentTime(pos * duration);
-        e.preventDefault();
-        return;
-      }
-
-      // Determine if this is primarily a horizontal or vertical gesture
-      if (Math.abs(totalDeltaX) > 20 && Math.abs(totalDeltaX) > Math.abs(totalDeltaY) * 2) {
-        // Horizontal gesture - scrubbing
-        if (duration > 0 && videoRef.current) {
-          // Calculate scrub amount - how many seconds to skip
-          const scrubAmount = (deltaX / containerRef.current!.clientWidth) * duration * 0.5;
-          const newTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + scrubAmount));
-          videoRef.current.currentTime = newTime;
-
-          // Show skip indicator if the movement is significant
-          if (Math.abs(scrubAmount) > 0.5) {
-            const direction = scrubAmount > 0 ? 'forward' : 'backward';
-            const absSeconds = Math.abs(scrubAmount);
-
-            // Update cumulative skip
-            if (cumulativeSkipRef.current && cumulativeSkipRef.current.direction === direction) {
-              // Same direction, add to existing cumulative value
-              cumulativeSkipRef.current.seconds += absSeconds;
-            } else {
-              // Different direction or first skip, set new value
-              cumulativeSkipRef.current = {
-                direction,
-                seconds: absSeconds
-              };
-            }
-
-            // Show skip indicator with cumulative value
-            setSkipIndicator({
-              direction: cumulativeSkipRef.current.direction,
-              seconds: Math.round(cumulativeSkipRef.current.seconds)
-            });
-
-            // Clear previous timeouts
-            if (skipIndicatorTimeoutRef.current) {
-              clearTimeout(skipIndicatorTimeoutRef.current);
-            }
-            if (skipResetTimeoutRef.current) {
-              clearTimeout(skipResetTimeoutRef.current);
-            }
-
-            // Hide indicator after 1 second
-            skipIndicatorTimeoutRef.current = setTimeout(() => {
-              setSkipIndicator(null);
-            }, 1000);
-
-            // Reset cumulative value after 2 seconds of inactivity
-            skipResetTimeoutRef.current = setTimeout(() => {
-              cumulativeSkipRef.current = null;
-            }, 2000);
-          }
-        }
-
-        e.preventDefault();
-        return;
-      }
-
-      if (Math.abs(totalDeltaY) > 20 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) * 2) {
-        // Vertical gesture
-        const containerRect = containerRef.current?.getBoundingClientRect();
-
-        if (containerRect) {
-          const touchX = touch.clientX;
-          const containerWidth = containerRect.width;
-          const position = (touchX - containerRect.left) / containerWidth;
-
-          if (position < 0.5) {
-            // Left side - adjust brightness
-            const brightnessDelta = -deltaY * 0.01;
-            setBrightness(prev => Math.max(0.1, Math.min(2, prev + brightnessDelta)));
-
-            // Show brightness indicator and hide volume indicator
-            setShowBrightnessIndicator(true);
-            setShowVolumeIndicator(false);
-            if (brightnessIndicatorTimeoutRef.current) {
-              clearTimeout(brightnessIndicatorTimeoutRef.current);
-            }
-            brightnessIndicatorTimeoutRef.current = setTimeout(() => {
-              setShowBrightnessIndicator(false);
-            }, 2000);
-          } else {
-            // Right side - adjust volume
-            const volumeDelta = -deltaY * 0.01;
-            if (videoRef.current) {
-              const newVolume = Math.max(0, Math.min(1, volume + volumeDelta));
-              setVolume(newVolume);
-              videoRef.current.volume = newVolume;
-              setIsMuted(newVolume === 0);
-
-              // Show volume indicator and hide brightness indicator
-              setShowVolumeIndicator(true);
-              setShowBrightnessIndicator(false);
-              if (volumeIndicatorTimeoutRef.current) {
-                clearTimeout(volumeIndicatorTimeoutRef.current);
-              }
-              volumeIndicatorTimeoutRef.current = setTimeout(() => {
-                setShowVolumeIndicator(false);
-              }, 2000);
-            }
-          }
-        }
-
-        e.preventDefault();
-      }
-    }
-  };
-
-  const handleTouchEnd = () => {
-    // Handle progress bar touch end
-    if (progressDraggingRef.current && videoRef.current && previewPositionRef.current !== null) {
-      // Mark that we're seeking to prevent progress bar jumps
-      seekingRef.current = true;
-
-      // Only update video current time on touch end
-      videoRef.current.currentTime = previewPositionRef.current * duration;
-    }
-
-    // Always reset these states on touch end
-    progressDraggingRef.current = false;
-    touchStartRef.current = null;
-    lastTouchRef.current = null;
-  };
 
   // Auto-hide controls after inactivity
   const resetControlsTimeout = () => {
@@ -549,14 +431,27 @@ export const Video = ({
       clearTimeout(controlsTimeoutRef.current);
     }
 
+    // setShowControls(!showControls);
     setShowControls(true);
 
-    if (isPlaying) {
+    if (isPlaying && !isUpdatingProgress) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000);
     }
   };
+
+  // Track dragging state to prevent controls from hiding
+  useEffect(() => {
+    if (isUpdatingProgress) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      setShowControls(true);
+    } else {
+      resetControlsTimeout();
+    }
+  }, [isUpdatingProgress, isPlaying]);
 
   // Event listeners
   useEffect(() => {
@@ -564,8 +459,7 @@ export const Video = ({
     if (!video) return;
 
     const onTimeUpdate = () => {
-      // Only update current time from video if we're not in a seeking operation
-      if (!seekingRef.current) {
+      if (pendingTime === null) {
         setCurrentTime(video.currentTime);
       }
     };
@@ -575,7 +469,7 @@ export const Video = ({
       if (onLoad) onLoad();
     };
 
-    const onError = () => {
+    const handleError = () => {
       if (onError) onError();
     };
 
@@ -619,21 +513,15 @@ export const Video = ({
       setIsPictureInPicture(false);
     };
 
-    const onSeeking = () => {
-      // Video is seeking - keep using preview position for the progress bar
-      seekingRef.current = true;
-    };
-
     const onSeeked = () => {
-      // Video has finished seeking - update current time and clear preview
-      seekingRef.current = false;
       setCurrentTime(video.currentTime);
-      previewPositionRef.current = null;
+      // Clear pending time when video has actually seeked to new position
+      setPendingTime(null);
     };
 
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
-    video.addEventListener('error', onError);
+    video.addEventListener('error', handleError);
     video.addEventListener('ended', onEnded);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -642,14 +530,13 @@ export const Video = ({
     video.addEventListener('playing', onPlaying);
     video.addEventListener('enterpictureinpicture', onEnterpictureinpicture);
     video.addEventListener('leavepictureinpicture', onLeavepictureinpicture);
-    video.addEventListener('seeking', onSeeking);
     video.addEventListener('seeked', onSeeked);
     document.addEventListener('fullscreenchange', onFullscreenChange);
 
     return () => {
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
-      video.removeEventListener('error', onError);
+      video.removeEventListener('error', handleError);
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
@@ -658,7 +545,6 @@ export const Video = ({
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('enterpictureinpicture', onEnterpictureinpicture);
       video.removeEventListener('leavepictureinpicture', onLeavepictureinpicture);
-      video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('seeked', onSeeked);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
 
@@ -666,7 +552,38 @@ export const Video = ({
         clearTimeout(controlsTimeoutRef.current);
       }
     };
-  }, [isPlaying, playbackRate, onLoad, isFullscreen]);
+  }, [onLoad, onError]);
+
+  // Setup ResizeObserver to track container width
+  useEffect(() => {
+    if (!controlsContainerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    resizeObserver.observe(controlsContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // Handle click outside settings
+  useEffect(() => {
+    const handleClickOutsideSettings = (e: MouseEvent) => {
+      if (showSettings && settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setShowSettings(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutsideSettings);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideSettings);
+    };
+  }, [showSettings]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -688,27 +605,17 @@ export const Video = ({
         case 'ArrowUp':
           e.preventDefault();
           if (e.ctrlKey) {
-            // Ctrl+Up for brightness
-            setBrightness(prev => Math.min(2, prev + 0.1));
+            handleBrightnessChange(brightness + 0.1);
           } else {
-            // Up for volume
-            if (videoRef.current) {
-              const newVolume = Math.min(1, videoRef.current.volume + 0.1);
-              videoRef.current.volume = newVolume;
-            }
+            handleVolumeChange(volume + 0.1);
           }
           break;
         case 'ArrowDown':
           e.preventDefault();
           if (e.ctrlKey) {
-            // Ctrl+Down for brightness
-            setBrightness(prev => Math.max(0.1, prev - 0.1));
+            handleBrightnessChange(brightness - 0.1);
           } else {
-            // Down for volume
-            if (videoRef.current) {
-              const newVolume = Math.max(0, videoRef.current.volume - 0.1);
-              videoRef.current.volume = newVolume;
-            }
+            handleVolumeChange(volume - 0.1);
           }
           break;
         case 'f':
@@ -743,7 +650,7 @@ export const Video = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isPlaying, playbackRate, isFullscreen, duration, volume, brightness]);
+  }, [volume, brightness, playbackRate, isFullscreen]);
 
   // Clean up timeouts
   useEffect(() => {
@@ -763,48 +670,264 @@ export const Video = ({
       if (skipResetTimeoutRef.current) {
         clearTimeout(skipResetTimeoutRef.current);
       }
+      if (seekTimeoutRef.current) {
+        clearTimeout(seekTimeoutRef.current);
+      }
+      if (progressTimeoutRef.current) {
+        clearTimeout(progressTimeoutRef.current);
+      }
     };
   }, []);
 
-  useEffect(() => {
-    const handleClickOutsideSettings = (e: MouseEvent) => {
-      if (showSettings && settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setShowSettings(false);
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutsideSettings);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutsideSettings);
-    };
-  }, [showSettings]);
+  // Cancel pending seek operation
+  const cancelSeek = () => {
+    setPendingTime(null);
+    setIsUpdatingProgress(false);
+    setSkipIndicator(null);  // Hide skip indicator when canceling
+    // setShowSeekCancelHint(false);
+    initialSeekPosRef.current = null;
 
-  // Setup ResizeObserver to track container width
-  useEffect(() => {
-    if (!controlsContainerRef.current) return;
-    
-    const resizeObserver = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-    
-    resizeObserver.observe(controlsContainerRef.current);
-    
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  // Return appropriate layout class based on container width
-  const getLayoutClass = () => {
-    // Use 768px as breakpoint for layout change (can be adjusted)
-    return containerWidth > 768 ? "grid-cols-3" : "grid-cols-1";
+    if (skipIndicatorTimeoutRef.current) {
+      clearTimeout(skipIndicatorTimeoutRef.current);
+      skipIndicatorTimeoutRef.current = null;
+    }
+    if (skipResetTimeoutRef.current) {
+      clearTimeout(skipResetTimeoutRef.current);
+      skipResetTimeoutRef.current = null;
+    }
+    cumulativeSkipRef.current = null;
   };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // console.log('handleMouseDown');
+    e.preventDefault();
+    e.stopPropagation();
+    isMouseDraggingRef.current = true;
+    startMousePosRef.current = { x: e.clientX, y: e.clientY };
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    mouseGestureTypeRef.current = null;
+    resetControlsTimeout();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    // console.log('handleMouseMove');
+    e.preventDefault();
+    e.stopPropagation();
+    resetControlsTimeout();
+    if (isMouseDraggingRef.current && startMousePosRef.current && lastMousePosRef.current) {
+      const deltaXFromStart = e.clientX - startMousePosRef.current.x;
+      const deltaYFromStart = e.clientY - startMousePosRef.current.y;
+      const deltaX = e.clientX - lastMousePosRef.current.x;
+      const deltaY = e.clientY - lastMousePosRef.current.y;
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      // console.log({ deltaXFromStart, deltaYFromStart, deltaX, deltaY });
+
+      if (mouseGestureTypeRef.current === null) {
+        if (Math.abs(deltaXFromStart) > Math.abs(deltaYFromStart) * 2 && Math.abs(deltaXFromStart) > 10) {
+          mouseGestureTypeRef.current = 'seek';
+        } else if (Math.abs(deltaYFromStart) > Math.abs(deltaXFromStart) * 2 && Math.abs(deltaYFromStart) > 10) {
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          if (containerRect) {
+            const position = (e.clientX - containerRect.left) / containerRect.width;
+            if (position < 0.5) {
+              mouseGestureTypeRef.current = 'brightness';
+            } else {
+              mouseGestureTypeRef.current = 'volume';
+            }
+          }
+        }
+
+      }
+
+      if (mouseGestureTypeRef.current === 'seek') {
+        if (Math.abs(deltaYFromStart) > 50) {
+          setShowSeekCancelHint(true);
+          cancelSeek();
+        } else {
+          setShowSeekCancelHint(false);
+          updatePendingTimeWithoutTimeout(currentTime + deltaXFromStart / 10, true, true);
+        }
+      } else if (mouseGestureTypeRef.current === 'brightness') {
+        handleBrightnessChange(brightness + (deltaY < 0 ? 0.005 : -0.005));
+      } else if (mouseGestureTypeRef.current === 'volume') {
+        handleVolumeChange(volume + (deltaY < 0 ? 0.005 : -0.005));
+      }
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // console.log('handleMouseUp');
+    e.preventDefault();
+    e.stopPropagation();
+    if (isMouseDraggingRef.current) {
+      if (mouseGestureTypeRef.current === 'seek') {
+        applyPendingTime();
+      }
+      isMouseDraggingRef.current = false;
+      mouseGestureTypeRef.current = null;
+      startMousePosRef.current = null;
+      lastMousePosRef.current = null;
+      setShowSeekCancelHint(false);
+    }
+    if (isMouseDraggingProgressRef.current) {
+      applyPendingTime();
+      isMouseDraggingProgressRef.current = false;
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // console.log('handleTouchStart');
+    // e.preventDefault();
+    e.stopPropagation();
+
+    isTouchingRef.current = true;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchGestureTypeRef.current = null;
+    resetControlsTimeout();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // console.log('handleTouchMove');
+    // e.preventDefault();
+    e.stopPropagation();
+    resetControlsTimeout();
+    if (e.touches.length === 1 && touchStartRef.current && lastTouchRef.current) {
+      const touch = e.touches[0];
+      const deltaXFromStart = touch.clientX - touchStartRef.current.x;
+      const deltaYFromStart = touch.clientY - touchStartRef.current.y;
+      const deltaX = touch.clientX - lastTouchRef.current.x;
+      const deltaY = touch.clientY - lastTouchRef.current.y;
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      // console.log({ deltaXFromStart, deltaYFromStart, deltaX, deltaY });
+
+      if (touchGestureTypeRef.current === null) {
+        if (Math.abs(deltaXFromStart) > Math.abs(deltaYFromStart) * 2 && Math.abs(deltaXFromStart) > 10) {
+          touchGestureTypeRef.current = 'seek';
+        } else if (Math.abs(deltaYFromStart) > Math.abs(deltaXFromStart) * 2 && Math.abs(deltaYFromStart) > 10) {
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          if (containerRect) {
+            const position = (touch.clientX - containerRect.left) / containerRect.width;
+            if (position < 0.5) {
+              touchGestureTypeRef.current = 'brightness';
+            } else {
+              touchGestureTypeRef.current = 'volume';
+            }
+          }
+        }
+      }
+
+      if (touchGestureTypeRef.current === 'seek') {
+        if (Math.abs(deltaYFromStart) > 50) {
+          setShowSeekCancelHint(true);
+          cancelSeek();
+        } else {
+          setShowSeekCancelHint(false);
+          updatePendingTimeWithoutTimeout(currentTime + deltaXFromStart, true, true);
+        }
+      } else if (touchGestureTypeRef.current === 'brightness') {
+        handleBrightnessChange(brightness + (deltaY < 0 ? 0.005 : -0.005));
+      } else if (touchGestureTypeRef.current === 'volume') {
+        handleVolumeChange(volume + (deltaY < 0 ? 0.005 : -0.005));
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // console.log('handleTouchEnd');
+    // e.preventDefault();
+    e.stopPropagation();
+    if (isTouchingRef.current) {
+      if (touchGestureTypeRef.current === 'seek') {
+        applyPendingTime();
+      }
+      isTouchingRef.current = false;
+      touchStartRef.current = null;
+      lastTouchRef.current = null;
+      touchGestureTypeRef.current = null;
+      setShowSeekCancelHint(false);
+    }
+    if (isTouchDraggingRef.current) {
+      applyPendingTime();
+      isTouchDraggingRef.current = false;
+    }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // console.log('handleProgressClick');
+    e.preventDefault();
+    e.stopPropagation();
+    if (progressRef.current && duration > 0) {
+      const rect = progressRef.current.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const newTime = pos * duration;
+      updatePendingTimeWithoutTimeout(newTime, false, true);
+      applyPendingTime();
+    }
+  }
+
+  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // console.log('handleProgressMouseDown');
+    e.preventDefault();
+    e.stopPropagation();
+    isMouseDraggingProgressRef.current = true;
+  }
+
+  const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    // console.log('handleProgressMouseMove');
+    e.preventDefault();
+    e.stopPropagation();
+    if (isMouseDraggingProgressRef.current && progressRef.current && duration > 0) {
+      const rect = progressRef.current.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const newTime = pos * duration;
+      updatePendingTimeWithoutTimeout(newTime, false, true);
+    }
+  }
+
+  const handleProgressMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    // Handle this event to the parent to give a better user experience
+  }
+
+  const handleProgressTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    // console.log('handleProgressTouchStart');
+    // e.preventDefault();
+    e.stopPropagation();
+    isTouchDraggingRef.current = true;
+  }
+
+  const handleProgressTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    // console.log('handleProgressTouchMove');
+    // e.preventDefault();
+    e.stopPropagation();
+    if (isTouchDraggingRef.current && progressRef.current && duration > 0) {
+      const rect = progressRef.current.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+      const newTime = pos * duration;
+      updatePendingTimeWithoutTimeout(newTime, false, true);
+    }
+  }
+
+  const handleProgressTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    // console.log('handleProgressTouchEnd');
+    // e.preventDefault();
+    // We don't need to handle this event here, it will be handled by the parent
+  }
+
 
   return (
     <div
       ref={containerRef}
+      onWheel={handleWheel}
+      onDoubleClick={handleDoubleClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       className={cn(
         "select-none",
         "relative group",
@@ -812,33 +935,26 @@ export const Video = ({
         isFullscreen ? "fixed inset-0 z-50 bg-black" : "",
         className
       )}
-      onMouseMove={resetControlsTimeout}
-      onClick={(e) => {
-        // Only toggle play when clicking directly on the video, not on controls
-        if (e.target === containerRef.current || e.target === videoRef.current) {
-          togglePlay();
-        }
-      }}
-      onDoubleClick={handleDoubleClick}
-      onWheel={handleWheel}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
     >
       <video
         ref={videoRef}
         src={src}
+        autoPlay={autoPlay}
         className={isFullscreen ? "max-w-screen max-h-screen" : "max-w-[90vw] max-h-[90vh]"}
         style={{ filter: `brightness(${brightness})` }}
-        autoPlay={autoPlay}
-        onClick={(e) => e.stopPropagation()}
-        onError={onError}
       />
 
       {/* Buffering indicator */}
       {isBuffering && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+
+      {/* Seek cancel hint */}
+      {showSeekCancelHint && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/70 rounded-lg p-3 text-white pointer-events-none">
+          Release to cancel seeking
         </div>
       )}
 
@@ -853,7 +969,7 @@ export const Video = ({
           ) : (
             <SkipBack size={32} />
           )}
-          <span className="text-lg font-semibold mt-1">{skipIndicator.seconds}s</span>
+          <span className="text-lg font-semibold mt-1">{formatTime2(skipIndicator.seconds)}</span>
         </div>
       )}
 
@@ -899,7 +1015,7 @@ export const Video = ({
               togglePlay();
             }}
           >
-            <Play size={60} className="text-white" />
+            <Play size={40} className="text-white" />
           </div>
         </div>
       )}
@@ -913,52 +1029,40 @@ export const Video = ({
           showControls ? "opacity-100" : "opacity-0 pointer-events-none",
           isFullscreen ? "pb-8" : ""
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Progress bar */}
         <div
           ref={progressRef}
-          className={cn(
-            "w-full h-3 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress",
-            progressDraggingRef.current ? "bg-gray-500/60" : ""
-          )}
           onClick={handleProgressClick}
           onMouseDown={handleProgressMouseDown}
+          onMouseMove={handleProgressMouseMove}
+          onMouseUp={handleProgressMouseUp}
+          onTouchStart={handleProgressTouchStart}
+          onTouchMove={handleProgressTouchMove}
+          onTouchEnd={handleProgressTouchEnd}
+          className={cn(
+            "w-full h-2 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress",
+            isUpdatingProgress ? "h-4 transition-all duration-150" : ""
+          )}
         >
           {/* Background bar */}
           <div
             className={cn(
-              "h-full bg-red-500 rounded-full relative",
-              progressDraggingRef.current ? "bg-red-400" : ""
+              "h-full rounded-full relative transition-colors",
+              isUpdatingProgress ? "bg-red-400" : "bg-red-500"
             )}
-            style={{
-              width: `${duration > 0 ?
-                (previewPositionRef.current !== null
-                  ? (previewPositionRef.current * 100)
-                  : (currentTime / duration) * 100)
-                : 0}%`
-            }}
-          />
-
-          {/* Time indicator tooltip - always shown, changes position during dragging */}
-          <div
-            className={cn(
-              "absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded transition-opacity duration-150",
-              progressDraggingRef.current || previewPositionRef.current !== null
-                ? "opacity-100"
-                : "opacity-0 group-hover/progress:opacity-100"
-            )}
-            style={{ 
-              left: `${previewPositionRef.current !== null 
-                ? previewPositionRef.current * 100 
-                : (currentTime / duration) * 100}%` 
-            }}
+            style={{ width: `${getProgressPercentage()}%` }}
           >
-            {previewPositionRef.current !== null
-              ? formatTime(previewPositionRef.current * duration)
-              : `${formatTime(currentTime)} / ${formatTime(duration)}`
-            }
           </div>
+          {/* Time indicator tooltip when dragging */}
+          {isUpdatingProgress && (
+            <div
+              className="absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded pointer-events-none"
+              style={{ left: `${getProgressPercentage()}%` }}
+            >
+              {formatTime(getDisplayTime())}
+            </div>
+          )}
         </div>
 
         {/* Controls grid layout */}
@@ -966,7 +1070,7 @@ export const Video = ({
           {/* Time display - Left section */}
           <div className={`flex ${containerWidth > 768 ? "justify-start" : "justify-center"} items-center`}>
             <div className="text-white text-sm">
-              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(getDisplayTime())}</span>
               <span className="mx-1">/</span>
               <span>{formatTime(duration)}</span>
             </div>
@@ -1042,7 +1146,7 @@ export const Video = ({
                   max="1"
                   step="0.01"
                   value={isMuted ? 0 : volume}
-                  onChange={handleVolumeChange}
+                  onChange={handleVolumeInput}
                   className="w-20 accent-red-500"
                   aria-label="Volume"
                 />
@@ -1065,7 +1169,7 @@ export const Video = ({
                   max="2"
                   step="0.1"
                   value={brightness}
-                  onChange={handleBrightnessChange}
+                  onChange={handleBrightnessInput}
                   className="w-20 accent-yellow-500"
                   aria-label="Brightness"
                 />
