@@ -1,17 +1,17 @@
-"use client";
+"use client"
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
-import { EPUBReader } from "@/components/reader";
 
-interface EpubPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError' | 'onFullScreen' | 'onToggleDirection'> {
-  /** EPUB source URL */
+interface PDFPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError'> {
+  /** PDF source URL */
+  title?: string;
   src: string;
 }
 
-
-export const EpubPreview: React.FC<EpubPreviewProps> = ({
+export const PDFPreview: React.FC<PDFPreviewProps> = ({
+  title,
   src,
   controls,
   ...restProps
@@ -22,22 +22,23 @@ export const EpubPreview: React.FC<EpubPreviewProps> = ({
   return (
     <PreviewBase
       controls={{
+        showDownload: false,
         showNavigation: false,
-        useBrowserFullscreenAPI: true,
         showFullscreen: true,
-        enableFullscreenToolbar: false,
+        useBrowserFullscreenAPI: true,
+        enableFullscreenToolbar: true,
         enableFullscreenNavigation: false,
         enableHandleKeyboard: false,
         ...controls
       }}
       callbacks={{
-        onFullScreenChange: setIsFullScreen,
+        onFullScreenChange: (isFullScreen) => setIsFullScreen(isFullScreen),
       }}
       {...restProps}
       title={""}
     >
-      <EPUBReader
-        key={`epub-reader-${isFullScreen ? 'fullscreen' : 'normal'}`}
+      <iframe
+        title={title}
         src={src}
         className={cn(
           isFullScreen ? "w-screen h-screen" : "w-[90vw] h-[90vh]"
@@ -47,4 +48,4 @@ export const EpubPreview: React.FC<EpubPreviewProps> = ({
   );
 };
 
-export default EpubPreview; 
+export default PDFPreview; 

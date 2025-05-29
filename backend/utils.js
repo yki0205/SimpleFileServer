@@ -63,7 +63,7 @@ function getFileType(extension) {
     '.lua', '.sql', '.r', '.dart', '.elm', '.ex', '.exs',
   ];
 
-  const comicExtensions = ['.cbz', '.cbr', '.cb7', '.cbt', '.cbl', '.cbrz', '.cbr7', '.cbrt', '.cblz', '.cblt'];
+  const comicExtensions = ['.cbz', '.cbr'];
 
   const pdfExtensions = ['.pdf'];
   const epubExtensions = ['.epub'];
@@ -223,14 +223,6 @@ function getContentType(extension) {
     // Comic
     '.cbz': 'application/x-cbz',
     '.cbr': 'application/x-cbr',
-    '.cb7': 'application/x-cb7',
-    '.cbt': 'application/x-cbt',
-    '.cbl': 'application/x-cbl',
-    '.cbrz': 'application/x-cbrz',
-    '.cbr7': 'application/x-cbr7',
-    '.cbrt': 'application/x-cbrt',
-    '.cblz': 'application/x-cblz',
-    '.cblt': 'application/x-cblt',
   };
 
   return contentTypes[extension] || 'application/octet-stream';

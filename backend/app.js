@@ -821,9 +821,6 @@ app.post('/api/toggle-watcher', (req, res) => {
   }
 });
 
-function getSubdirectories(dir) {
-  return utils.getSubdirectories(dir);
-}
 
 function searchFiles(dir, query, basePath) {
   let results = [];
@@ -838,10 +835,10 @@ function searchFiles(dir, query, basePath) {
       if (file.toLowerCase().includes(query.toLowerCase())) {
         results.push({
           name: file,
-          path: normalizePath(path.relative(basePath, fullPath)),
+          path: utils.normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
-          type: stats.isDirectory() ? 'directory' : getFileType(path.extname(file).toLowerCase())
+          type: stats.isDirectory() ? 'directory' : utils.getFileType(path.extname(file).toLowerCase())
         });
       }
 
@@ -870,10 +867,10 @@ function findAllImages(dir, basePath) {
         results = results.concat(findAllImages(fullPath, basePath));
       } else {
         const extension = path.extname(file).toLowerCase();
-        if (getFileType(extension) === 'image') {
+        if (utils.getFileType(extension) === 'image') {
           results.push({
             name: file,
-            path: normalizePath(path.relative(basePath, fullPath)),
+            path: utils.normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
             type: 'image'
@@ -901,10 +898,10 @@ function searchFilesInDirectory(dir, query, basePath) {
       if (!stats.isDirectory() && file.toLowerCase().includes(query.toLowerCase())) {
         results.push({
           name: file,
-          path: normalizePath(path.relative(basePath, fullPath)),
+          path: utils.normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
-          type: getFileType(path.extname(file).toLowerCase())
+          type: utils.getFileType(path.extname(file).toLowerCase())
         });
       }
     }
@@ -927,10 +924,10 @@ function findImagesInDirectory(dir, basePath) {
 
       if (!stats.isDirectory()) {
         const extension = path.extname(file).toLowerCase();
-        if (getFileType(extension) === 'image') {
+        if (utils.getFileType(extension) === 'image') {
           results.push({
             name: file,
-            path: normalizePath(path.relative(basePath, fullPath)),
+            path: utils.normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
             type: 'image'
@@ -948,7 +945,7 @@ function findImagesInDirectory(dir, basePath) {
 async function parallelSearch(dir, query, basePath) {
   if (isMainThread) {
     try {
-      const subdirs = getSubdirectories(dir);
+      const subdirs = utils.getSubdirectories(dir);
 
       if (subdirs.length === 0) {
         return searchFiles(dir, query, basePath);
@@ -980,7 +977,7 @@ async function parallelSearch(dir, query, basePath) {
 async function parallelFindImages(dir, basePath) {
   if (isMainThread) {
     try {
-      const subdirs = getSubdirectories(dir);
+      const subdirs = utils.getSubdirectories(dir);
 
       if (subdirs.length === 0) {
         return findAllImages(dir, basePath);

@@ -94,7 +94,7 @@ export const CodePreview: React.FC<CodePreviewProps> = ({
       }}
       {...restProps}
     >
-      <div className="w-[90vw] h-[90vh] overflow-hidden bg-gray-900 rounded-md shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="w-[90vw] h-[90vh] overflow-hidden bg-gray-900 rounded-md flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header with file info */}
         {fileName && (
           <div className="sticky top-0 bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">

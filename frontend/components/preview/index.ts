@@ -5,3 +5,4 @@ export { default as AudioPreview } from './AudioPreview';
 export { default as CodePreview } from './CodePreview';
 export { default as ComicPreview } from './ComicPreview';
 export { default as EpubPreview } from './EPUBPreview';
+export { default as PDFPreview } from './PDFPreview';

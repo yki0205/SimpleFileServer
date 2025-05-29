@@ -196,9 +196,10 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
     return createPortal(
       <div 
         className={cn(
-          "max-sm:hidden",
+          "w-full h-full",
           "rounded-lg shadow-xl overflow-hidden border border-border",
-          "pointer-events-auto" // Enable interactions with this element
+          "max-sm:hidden",
+          "pointer-events-auto",
         )}
         style={{
           position: 'fixed',
@@ -210,7 +211,7 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
       >
         {isPreviewLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
-            <RotateCw className="h-6 w-6 animate-spin text-white" />
+            <RotateCw className="h-6 w-6 text-white animate-spin" />
             <p className="text-sm text-white">Loading...</p>
           </div>
         )}
@@ -219,6 +220,7 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
           src={imgSrc}
           alt={alt}
           className={cn(
+            "w-full h-full",
             "object-contain",
             isPreviewLoading ? "opacity-0" : "opacity-100"
           )}
@@ -233,13 +235,13 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
         />
         <button
           onClick={handleDownload}
-          className="absolute top-2 right-11 bg-black/50 hover:bg-black/70 text-white px-2 py-1 rounded-md"
+          className="absolute top-2 right-11 px-2 py-1 rounded-md bg-black/50 hover:bg-black/70 text-white"
         >
           <Download className="h-4 w-4" />
         </button>
         <button
           onClick={handleClose}
-          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-red-500 px-2 py-1 rounded-md"
+          className="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/50 hover:bg-black/70 text-red-500"
         >
           <X className="h-4 w-4" />
         </button>
@@ -252,19 +254,27 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
     <div 
       ref={containerRef}
       className={cn(
-        "relative transition-all duration-300 flex items-center justify-center",
+        "w-full h-full",
+        "relative flex items-center justify-center",
+        "cursor-pointer select-none",
+        "text-primary bg-transparent",
+        "transition-all duration-300",
         className
       )}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       {isError ? (
-        <div className="flex flex-col items-center justify-center p-4 bg-muted rounded-md h-full w-full">
-          <ImageOff className="h-8 w-8 text-muted-foreground mb-2" />
-          <p className="text-sm text-muted-foreground">Failed to load image</p>
+        <div className={cn(
+          "w-full h-full",
+          "flex flex-col items-center justify-center gap-2",
+          "text-muted-foreground"
+        )}>
+          <ImageOff className="h-8 w-8" />
+          <p className="text-sm text-red-500">Failed to load image</p>
           <button 
             onClick={handleRetry}
-            className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline group"
+            className="flex items-center justify-center gap-1 text-xs hover:underline group"
           >
             <RefreshCw className="h-3 w-3 group-hover:animate-spin" /> Retry
           </button>
@@ -272,8 +282,8 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
       ) : (
         <>
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-              <RotateCw className="h-6 w-6 animate-spin text-primary" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <RotateCw className="h-6 w-6 animate-spin" />
             </div>
           )}
           
@@ -288,8 +298,8 @@ export function ImageItem({ src, alt, thumbnail, onClick, className, disablePrev
               fit === 'fill' && "object-fill",
               fit === 'none' && "object-none",
               fit === 'scale-down' && "object-scale-down",
-              "transition-all duration-300",
-              isLoading ? "opacity-0" : "opacity-100"
+              isLoading ? "opacity-0" : "opacity-100",
+              "transition-all duration-300"
             )}
             loading={loading}
             onLoad={handleImageLoad}

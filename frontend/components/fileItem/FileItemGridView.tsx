@@ -39,13 +39,10 @@ export function FileItemGridView(
   return (
     <Card
       className={cn(
+        "relative flex flex-col items-center justify-center",
         "w-full h-full",
-        // "min-w-[150px] min-h-[150px]",
-        // "max-w-[250px] max-h-[250px]",
-        "flex flex-col items-center justify-center",
-        "cursor-pointer hover:bg-accent transition-colors",
-        "relative overflow-hidden",
-        "select-none",
+        "cursor-pointer select-none",
+        "text-primary bg-accent",
         className
       )}
       onClick={onClick}
@@ -60,18 +57,18 @@ export function FileItemGridView(
             loading="lazy"
           />
           {/* Overlay to ensure content is visible */}
-          <div className="absolute inset-0 bg-background/40 backdrop-blur-[2px]"></div>
+          <div className="absolute inset-0 bg-background/40 backdrop-blur-[2px]" />
         </div>
       )}
 
       <div className={`flex-1 flex items-center justify-center ${cover ? 'z-10' : ''}`}>
-        <Icon size={48} className={cover ? "text-foreground/90" : ""} />
+        <Icon size={48} />
       </div>
-      <div className={`w-full mt-2 p-2 ${cover ? 'z-10' : ''}`}>
+      <div className={`w-full p-1 ${cover ? 'z-10' : ''}`}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="text-center truncate text-sm font-medium">{name}</div>
+              <div className="text-xs sm:text-sm md:text-base text-center truncate">{name}</div>
             </TooltipTrigger>
             <TooltipContent>
               <p>{name}</p>
@@ -79,7 +76,7 @@ export function FileItemGridView(
           </Tooltip>
         </TooltipProvider>
         {type !== 'directory' && (
-          <div className="text-center text-xs text-muted-foreground">
+          <div className="text-xs sm:text-sm text-center text-muted-foreground">
             {"size: " + formatFileSize(size)}
             <br />
             {"modified: " + date}

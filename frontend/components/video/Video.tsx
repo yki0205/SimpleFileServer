@@ -5,7 +5,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
   SkipBack, SkipForward, Settings, X, Download,
-  Sun, ChevronLeft, ChevronRight, Monitor
+  Sun, ChevronLeft, ChevronRight, Monitor, HelpCircle
 } from 'lucide-react';
 
 interface VideoProps {
@@ -34,12 +34,12 @@ export const Video = ({
   // Core video refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const controlLayerRef = useRef<HTMLDivElement>(null);
 
   // Core video state
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
   // Pending progress system
@@ -55,6 +55,7 @@ export const Video = ({
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPictureInPicture, setIsPictureInPicture] = useState(false);
+  const [isMouseOverControls, setIsMouseOverControls] = useState(false);
 
   // Video adjustments state
   const [volume, setVolume] = useState(1);
@@ -100,6 +101,10 @@ export const Video = ({
   // Container width state for responsive layout
   const [containerWidth, setContainerWidth] = useState(0);
   const controlsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcuts state and refs
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+  const keyboardShortcutsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Format time in MM:SS format
   const formatTime = (seconds: number) => {
@@ -222,7 +227,9 @@ export const Video = ({
       // console.log('newTime', newTime);
 
       if (showIndicator && seconds !== 0) {
-        const direction = seconds > 0 ? 'forward' : 'backward';
+        const direction = isNewTime ?
+          (newTime > currentTime ? 'forward' : 'backward') :
+          (seconds > 0 ? 'forward' : 'backward');
         const absSeconds = Math.abs(seconds);
 
         if (cumulativeSkipRef.current && cumulativeSkipRef.current.direction === direction) {
@@ -370,8 +377,8 @@ export const Video = ({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    if (containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
+    if (controlLayerRef.current) {
+      const containerRect = controlLayerRef.current.getBoundingClientRect();
       const mouseX = e.clientX;
       const containerWidth = containerRect.width;
       const mousePosition = (mouseX - containerRect.left) / containerWidth;
@@ -390,7 +397,7 @@ export const Video = ({
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    const containerRect = containerRef.current?.getBoundingClientRect();
+    const containerRect = controlLayerRef.current?.getBoundingClientRect();
 
     if (containerRect) {
       // Check if click is in the controls area (bottom 20% of the container)
@@ -434,7 +441,7 @@ export const Video = ({
     // setShowControls(!showControls);
     setShowControls(true);
 
-    if (isPlaying && !isUpdatingProgress) {
+    if (isPlaying && !isUpdatingProgress && !isMouseOverControls) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000);
@@ -451,7 +458,7 @@ export const Video = ({
     } else {
       resetControlsTimeout();
     }
-  }, [isUpdatingProgress, isPlaying]);
+  }, [isUpdatingProgress, isPlaying, isMouseOverControls]);
 
   // Event listeners
   useEffect(() => {
@@ -497,14 +504,6 @@ export const Video = ({
       setIsFullscreen(!!document.fullscreenElement);
     };
 
-    const onWaiting = () => {
-      setIsBuffering(true);
-    };
-
-    const onPlaying = () => {
-      setIsBuffering(false);
-    };
-
     const onEnterpictureinpicture = () => {
       setIsPictureInPicture(true);
     };
@@ -526,8 +525,6 @@ export const Video = ({
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('volumechange', onVolumeChange);
-    video.addEventListener('waiting', onWaiting);
-    video.addEventListener('playing', onPlaying);
     video.addEventListener('enterpictureinpicture', onEnterpictureinpicture);
     video.addEventListener('leavepictureinpicture', onLeavepictureinpicture);
     video.addEventListener('seeked', onSeeked);
@@ -541,8 +538,6 @@ export const Video = ({
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('volumechange', onVolumeChange);
-      video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('playing', onPlaying);
       video.removeEventListener('enterpictureinpicture', onEnterpictureinpicture);
       video.removeEventListener('leavepictureinpicture', onLeavepictureinpicture);
       video.removeEventListener('seeked', onSeeked);
@@ -676,6 +671,9 @@ export const Video = ({
       if (progressTimeoutRef.current) {
         clearTimeout(progressTimeoutRef.current);
       }
+      if (keyboardShortcutsTimeoutRef.current) {
+        clearTimeout(keyboardShortcutsTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -700,7 +698,7 @@ export const Video = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // console.log('handleMouseDown');
+    console.log('handleMouseDown');
     e.preventDefault();
     e.stopPropagation();
     isMouseDraggingRef.current = true;
@@ -711,7 +709,7 @@ export const Video = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    // console.log('handleMouseMove');
+    console.log('handleMouseMove');
     e.preventDefault();
     e.stopPropagation();
     resetControlsTimeout();
@@ -727,7 +725,7 @@ export const Video = ({
         if (Math.abs(deltaXFromStart) > Math.abs(deltaYFromStart) * 2 && Math.abs(deltaXFromStart) > 10) {
           mouseGestureTypeRef.current = 'seek';
         } else if (Math.abs(deltaYFromStart) > Math.abs(deltaXFromStart) * 2 && Math.abs(deltaYFromStart) > 10) {
-          const containerRect = containerRef.current?.getBoundingClientRect();
+          const containerRect = controlLayerRef.current?.getBoundingClientRect();
           if (containerRect) {
             const position = (e.clientX - containerRect.left) / containerRect.width;
             if (position < 0.5) {
@@ -756,10 +754,10 @@ export const Video = ({
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
-    // console.log('handleMouseUp');
-    e.preventDefault();
-    e.stopPropagation();
+  const handleMouseUp = (e?: React.MouseEvent) => {
+    console.log('handleMouseUp');
+    e?.preventDefault();
+    e?.stopPropagation();
     if (isMouseDraggingRef.current) {
       if (mouseGestureTypeRef.current === 'seek') {
         applyPendingTime();
@@ -806,7 +804,7 @@ export const Video = ({
         if (Math.abs(deltaXFromStart) > Math.abs(deltaYFromStart) * 2 && Math.abs(deltaXFromStart) > 10) {
           touchGestureTypeRef.current = 'seek';
         } else if (Math.abs(deltaYFromStart) > Math.abs(deltaXFromStart) * 2 && Math.abs(deltaYFromStart) > 10) {
-          const containerRect = containerRef.current?.getBoundingClientRect();
+          const containerRect = controlLayerRef.current?.getBoundingClientRect();
           if (containerRect) {
             const position = (touch.clientX - containerRect.left) / containerRect.width;
             if (position < 0.5) {
@@ -834,10 +832,10 @@ export const Video = ({
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchEnd = (e?: React.TouchEvent) => {
     // console.log('handleTouchEnd');
-    // e.preventDefault();
-    e.stopPropagation();
+    // e?.preventDefault();
+    e?.stopPropagation();
     if (isTouchingRef.current) {
       if (touchGestureTypeRef.current === 'seek') {
         applyPendingTime();
@@ -855,9 +853,10 @@ export const Video = ({
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // console.log('handleProgressClick');
+    console.log('handleProgressClick');
     e.preventDefault();
     e.stopPropagation();
+    if (!showControls) return;
     if (progressRef.current && duration > 0) {
       const rect = progressRef.current.getBoundingClientRect();
       const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -868,14 +867,14 @@ export const Video = ({
   }
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // console.log('handleProgressMouseDown');
+    console.log('handleProgressMouseDown');
     e.preventDefault();
     e.stopPropagation();
     isMouseDraggingProgressRef.current = true;
   }
 
   const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    // console.log('handleProgressMouseMove');
+    console.log('handleProgressMouseMove');
     e.preventDefault();
     e.stopPropagation();
     if (isMouseDraggingProgressRef.current && progressRef.current && duration > 0) {
@@ -887,8 +886,13 @@ export const Video = ({
   }
 
   const handleProgressMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    console.log('handleProgressMouseUp');
     e.preventDefault();
-    // Handle this event to the parent to give a better user experience
+    e.stopPropagation();
+    if (isMouseDraggingProgressRef.current) {
+      applyPendingTime();
+      isMouseDraggingProgressRef.current = false;
+    }
   }
 
   const handleProgressTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -916,23 +920,50 @@ export const Video = ({
     // We don't need to handle this event here, it will be handled by the parent
   }
 
+  // Global mouse up / touch end handler
+  useEffect(() => {
+
+    const handleGlobalMouseUp = () => {
+      if (isMouseDraggingRef.current) {
+        handleMouseUp();
+      }
+    }
+
+    const handleGlobalTouchEnd = () => {
+      if (isTouchDraggingRef.current) {
+        handleTouchEnd();
+      }
+    }
+
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('touchend', handleGlobalTouchEnd);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('touchend', handleGlobalMouseUp);
+    }
+  }, []);
+
+  // Function to show/hide keyboard shortcuts
+  const showKeyboardShortcutsHelp = () => {
+    setShowKeyboardShortcuts(true);
+    
+    if (keyboardShortcutsTimeoutRef.current) {
+      clearTimeout(keyboardShortcutsTimeoutRef.current);
+    }
+    
+    keyboardShortcutsTimeoutRef.current = setTimeout(() => {
+      setShowKeyboardShortcuts(false);
+    }, 5000); // Hide after 5 seconds
+  };
 
   return (
     <div
       ref={containerRef}
-      onWheel={handleWheel}
-      onDoubleClick={handleDoubleClick}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       className={cn(
         "select-none",
         "relative group",
         "flex flex-col items-center justify-center",
-        isFullscreen ? "fixed inset-0 z-50 bg-black" : "",
+        "text-white text-sm",
         className
       )}
     >
@@ -944,16 +975,23 @@ export const Video = ({
         style={{ filter: `brightness(${brightness})` }}
       />
 
-      {/* Buffering indicator */}
-      {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      )}
+      {/* Control layer */}
+      <div
+        ref={controlLayerRef}
+        onWheel={handleWheel}
+        onDoubleClick={handleDoubleClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="absolute inset-0 z-10"
+      />
 
       {/* Seek cancel hint */}
       {showSeekCancelHint && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/70 rounded-lg p-3 text-white pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/70 rounded-lg p-2 z-40">
           Release to cancel seeking
         </div>
       )}
@@ -961,61 +999,63 @@ export const Video = ({
       {/* Skip indicators */}
       {skipIndicator && (
         <div className={cn(
-          "absolute top-1/2 -translate-y-1/2 bg-black/70 rounded-full h-20 w-20 flex flex-col items-center justify-center text-white pointer-events-none transition-opacity duration-300 opacity-90",
-          skipIndicator.direction === 'forward' ? "right-8" : "left-8"
+          "absolute top-1/2 -translate-y-1/2 z-40",
+          skipIndicator.direction === 'forward' ? "right-8" : "left-8",
+          "flex flex-col items-center justify-center gap-2",
+          "bg-black/70 rounded-full h-20 w-20",
         )}>
           {skipIndicator.direction === 'forward' ? (
             <SkipForward size={32} />
           ) : (
             <SkipBack size={32} />
           )}
-          <span className="text-lg font-semibold mt-1">{formatTime2(skipIndicator.seconds)}</span>
+          {formatTime2(skipIndicator.seconds)}
         </div>
       )}
 
       {/* Volume indicator at top */}
       {showVolumeIndicator && (
-        <div className="absolute top-6 left-0 right-0 px-6 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/70 rounded-full px-4 py-2 flex items-center gap-2">
-            {isMuted ? <VolumeX size={20} className="text-white" /> : <Volume2 size={20} className="text-white" />}
+        <div className="absolute top-6 left-0 right-0 px-6 flex items-center justify-center z-40">
+          <div className="bg-black/70 rounded-full p-2 flex items-center justify-center gap-2">
+            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
             <div className="w-40 h-2 bg-gray-600 rounded-full">
               <div
                 className="h-full bg-white rounded-full"
                 style={{ width: `${isMuted ? 0 : volume * 100}%` }}
-              ></div>
+              />
             </div>
-            <span className="text-white text-xs">{Math.round(volume * 100)}%</span>
+            {Math.round(volume * 100)}%
           </div>
         </div>
       )}
 
       {/* Brightness indicator at top */}
       {showBrightnessIndicator && (
-        <div className="absolute top-6 left-0 right-0 px-6 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/70 rounded-full px-4 py-2 flex items-center gap-2">
-            <Sun size={20} className="text-white" />
+        <div className="absolute top-6 left-0 right-0 px-6 flex items-center justify-center z-40">
+          <div className="bg-black/70 rounded-full p-2 flex items-center justify-center gap-2">
+            <Sun size={20} />
             <div className="w-40 h-2 bg-gray-600 rounded-full">
               <div
                 className="h-full bg-yellow-500 rounded-full"
                 style={{ width: `${Math.min(brightness * 50, 100)}%` }}
-              ></div>
+              />
             </div>
-            <span className="text-white text-xs">{Math.round(brightness * 50)}%</span>
+            {Math.round(brightness * 50)}%
           </div>
         </div>
       )}
 
       {/* Play/Pause button in center when paused */}
       {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center z-40">
           <div
-            className="bg-black/40 rounded-full p-5 cursor-pointer hover:bg-black/60 transition-colors"
+            className="bg-black/40 rounded-full p-5 cursor-pointer hover:bg-black/70 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               togglePlay();
             }}
           >
-            <Play size={40} className="text-white" />
+            <Play size={40} />
           </div>
         </div>
       )}
@@ -1023,11 +1063,22 @@ export const Video = ({
       {/* Custom controls - positioned absolutely at the bottom */}
       <div
         ref={controlsContainerRef}
+        onMouseEnter={() => setIsMouseOverControls(true)}
+        onMouseLeave={() => {
+          setIsMouseOverControls(false);
+          resetControlsTimeout();
+        }}
+        // Add mouse / touch end events here to handle the case where the touch bar is dragged and the mouse / touch end event is missed
+        onMouseUp={handleMouseUp}
+        onTouchEnd={handleTouchEnd}
         className={cn(
-          "absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-16 pb-4 transition-opacity duration-300 controls",
-          "flex flex-col",
-          showControls ? "opacity-100" : "opacity-0 pointer-events-none",
-          isFullscreen ? "pb-8" : ""
+          "controls",
+          "absolute bottom-0 left-0 right-0 z-40",
+          "flex flex-col items-center justify-center gap-2",
+          "px-4 pt-16 pb-4",
+          "bg-gradient-to-t from-black/80 to-transparent",
+          "transition-opacity duration-300",
+          showControls ? "opacity-100" : "opacity-0",
         )}
       >
         {/* Progress bar */}
@@ -1041,14 +1092,17 @@ export const Video = ({
           onTouchMove={handleProgressTouchMove}
           onTouchEnd={handleProgressTouchEnd}
           className={cn(
-            "w-full h-2 bg-gray-600/60 rounded-full mb-4 cursor-pointer relative group/progress",
-            isUpdatingProgress ? "h-4 transition-all duration-150" : ""
+            "relative group/progress",
+            "bg-gray-600 w-full rounded-full",
+            "transition-all duration-150",
+            isUpdatingProgress ? "h-4" : "h-2",
+            showControls ? "cursor-pointer" : "cursor-default"
           )}
         >
           {/* Background bar */}
           <div
             className={cn(
-              "h-full rounded-full relative transition-colors",
+              "relative h-full rounded-full transition-colors",
               isUpdatingProgress ? "bg-red-400" : "bg-red-500"
             )}
             style={{ width: `${getProgressPercentage()}%` }}
@@ -1057,7 +1111,7 @@ export const Video = ({
           {/* Time indicator tooltip when dragging */}
           {isUpdatingProgress && (
             <div
-              className="absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded pointer-events-none"
+              className="absolute top-0 transform -translate-y-full -translate-x-1/2 bg-black/70 text-xs p-2 rounded-full"
               style={{ left: `${getProgressPercentage()}%` }}
             >
               {formatTime(getDisplayTime())}
@@ -1069,11 +1123,7 @@ export const Video = ({
         <div className={`grid ${getLayoutClass()} gap-y-4 items-center w-full`}>
           {/* Time display - Left section */}
           <div className={`flex ${containerWidth > 768 ? "justify-start" : "justify-center"} items-center`}>
-            <div className="text-white text-sm">
-              <span>{formatTime(getDisplayTime())}</span>
-              <span className="mx-1">/</span>
-              <span>{formatTime(duration)}</span>
-            </div>
+            {formatTime(getDisplayTime())} / {formatTime(duration)}
           </div>
 
           {/* Playback controls - Center section */}
@@ -1081,7 +1131,7 @@ export const Video = ({
             {/* Skip backward button */}
             <button
               onClick={() => skip(-10)}
-              className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+              className="hover:text-gray-300 transition-colors rounded-full p-1"
               aria-label="Skip backward 10 seconds"
             >
               <SkipBack size={18} />
@@ -1091,7 +1141,7 @@ export const Video = ({
             {onPrev && (
               <button
                 onClick={onPrev}
-                className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+                className="hover:text-gray-300 transition-colors rounded-full p-1"
                 aria-label="Previous video"
               >
                 <ChevronLeft size={18} />
@@ -1101,7 +1151,7 @@ export const Video = ({
             {/* Play/Pause button */}
             <button
               onClick={togglePlay}
-              className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+              className="hover:text-gray-300 transition-colors rounded-full p-1"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? <Pause size={18} /> : <Play size={18} />}
@@ -1111,7 +1161,7 @@ export const Video = ({
             {onNext && (
               <button
                 onClick={onNext}
-                className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+                className="hover:text-gray-300 transition-colors rounded-full p-1"
                 aria-label="Next video"
               >
                 <ChevronRight size={18} />
@@ -1121,7 +1171,7 @@ export const Video = ({
             {/* Skip forward button */}
             <button
               onClick={() => skip(10)}
-              className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+              className="hover:text-gray-300 transition-colors rounded-full p-1"
               aria-label="Skip forward 10 seconds"
             >
               <SkipForward size={18} />
@@ -1134,7 +1184,7 @@ export const Video = ({
             <div className="flex items-center group/volume">
               <button
                 onClick={toggleMute}
-                className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+                className="hover:text-gray-300 transition-colors rounded-full p-1"
                 aria-label={isMuted ? "Unmute" : "Mute"}
               >
                 {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -1147,6 +1197,8 @@ export const Video = ({
                   step="0.01"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeInput}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                   className="w-20 accent-red-500"
                   aria-label="Volume"
                 />
@@ -1157,7 +1209,7 @@ export const Video = ({
             <div className="flex items-center group/brightness">
               <button
                 onClick={() => setBrightness(brightness === 1 ? 1.5 : 1)}
-                className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+                className="hover:text-gray-300 transition-colors rounded-full p-1"
                 aria-label="Adjust brightness"
               >
                 <Sun size={18} />
@@ -1170,6 +1222,8 @@ export const Video = ({
                   step="0.1"
                   value={brightness}
                   onChange={handleBrightnessInput}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                   className="w-20 accent-yellow-500"
                   aria-label="Brightness"
                 />
@@ -1179,7 +1233,7 @@ export const Video = ({
             {/* Fullscreen button */}
             <button
               onClick={toggleFullscreen}
-              className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+              className="hover:text-gray-300 transition-colors rounded-full p-1"
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
               {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
@@ -1189,7 +1243,7 @@ export const Video = ({
             <button
               onClick={togglePictureInPicture}
               className={cn(
-                "text-white hover:text-gray-300 transition-colors rounded-full p-1",
+                "hover:text-gray-300 transition-colors rounded-full p-1",
                 isPictureInPicture ? "text-blue-400 hover:text-blue-300" : "",
                 isFullscreen ? "hidden" : ""
               )}
@@ -1202,18 +1256,27 @@ export const Video = ({
             {onDownload && (
               <button
                 onClick={onDownload}
-                className="text-white hover:text-gray-300 transition-colors rounded-full p-1"
+                className="hover:text-gray-300 transition-colors rounded-full p-1"
                 aria-label="Download video"
               >
                 <Download size={18} />
               </button>
             )}
 
+            {/* Help button - Add before Settings */}
+            <button
+              onClick={showKeyboardShortcutsHelp}
+              className="hover:text-gray-300 transition-colors rounded-full p-1"
+              aria-label="Keyboard shortcuts"
+            >
+              <HelpCircle size={18} />
+            </button>
+
             {/* Settings */}
             <div className="relative" ref={settingsRef}>
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="text-white hover:text-gray-300 transition-colors hidden sm:inline-block rounded-full p-1"
+                className="hover:text-gray-300 transition-colors hidden sm:inline-block rounded-full p-1"
                 aria-label="Settings"
               >
                 <Settings size={18} />
@@ -1221,16 +1284,16 @@ export const Video = ({
 
               {showSettings && (
                 <div
-                  className="absolute bottom-full right-0 mb-2 bg-black/90 border-0 text-white min-w-[150px] p-2 rounded-md shadow-lg z-10"
+                  className="absolute bottom-full right-0 mb-2 bg-black/90 border-0 min-w-[150px] p-2 rounded-md z-10"
                 >
                   <div className="text-sm mb-2 font-medium px-2">Playback Speed</div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-2">
                     {[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map(rate => (
                       <button
                         key={rate}
                         onClick={() => changePlaybackRate(rate)}
                         className={cn(
-                          "text-left px-2 py-1 rounded hover:bg-gray-700 text-sm transition-colors cursor-pointer",
+                          "text-left p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer",
                           playbackRate === rate ? "bg-gray-700" : ""
                         )}
                       >
@@ -1253,7 +1316,7 @@ export const Video = ({
             onClose();
           }}
           className={cn(
-            "absolute top-4 right-4 text-white bg-black/50 p-2 rounded-full hover:bg-black/70 transition-opacity duration-300",
+            "absolute top-4 right-4 z-40 bg-black/50 p-2 rounded-full hover:bg-black/70 transition-opacity duration-300",
             showControls ? "opacity-100" : "opacity-0 pointer-events-none"
           )}
           aria-label="Close video"
@@ -1262,16 +1325,41 @@ export const Video = ({
         </button>
       )}
 
-      {/* Keyboard shortcuts info - only shown in fullscreen */}
-      {isFullscreen && showControls && (
-        <div className="absolute top-4 left-4 bg-black/50 text-white text-xs p-2 rounded">
+      {/* Keyboard shortcuts info */}
+      {showKeyboardShortcuts && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-xs p-3 rounded-lg z-40 shadow-lg">
           <div className="flex flex-col gap-2">
-            <div className="text-white text-xs">Space: Play/Pause</div>
-            <div className="text-white text-xs">←→: Skip 10s</div>
-            <div className="text-white text-xs">F: Fullscreen</div>
-            <div className="text-white text-xs">M: Mute</div>
-            <div className="text-white text-xs">P: PiP</div>
-            <div className="text-white text-xs">&lt;&gt;: Speed</div>
+            <div className="text-center font-medium text-sm mb-1">Keyboard Shortcuts</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">Space</span>
+                <span>Play/Pause</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">←→</span>
+                <span>Skip 10s</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">↑↓</span>
+                <span>Volume</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">Ctrl+↑↓</span>
+                <span>Brightness</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">F</span>
+                <span>Fullscreen</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">M</span>
+                <span>Mute</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-gray-700 px-2 py-1 rounded mr-2">,/.</span>
+                <span>Speed -/+</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

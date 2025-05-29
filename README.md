@@ -67,6 +67,8 @@ npm start
 5. Access the application
 Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
+## Features
+
 ## License
 
 [MIT](LICENSE)

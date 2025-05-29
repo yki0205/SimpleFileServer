@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from "react";
+import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 import { ComicReader } from "@/components/reader/ComicReader";
 
@@ -23,7 +24,6 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
     <PreviewBase
       title={""}
       controls={{
-        useFullScreen: isFullScreen,
         showClose: false,
         showDownload: false,
         showNavigation: false,
@@ -31,6 +31,10 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         enableFullscreenToolbar: false,
         enableFullscreenNavigation: false,
         enableHandleKeyboard: false,
+        preventBrowserZoom: true,
+        preventPinchZoom: true,
+        preventContextMenu: true,
+        preventPullToRefresh: true,
         ...controls
       }}
       {...restProps}
@@ -41,8 +45,12 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
         onClose={controls?.onClose}
         onNext={controls?.onNext}
         onPrev={controls?.onPrev}
+        onDownload={controls?.onDownload}
         onFullScreenChange={setIsFullScreen}
-        className="rounded-md overflow-hidden"
+        className={cn(
+          "rounded-md overflow-hidden",
+          isFullScreen ? "w-screen h-screen" : "w-[90vw] h-[90vh]"
+        )}
       />
     </PreviewBase>
   );

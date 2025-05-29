@@ -17,6 +17,15 @@ module.exports = {
 
   thumbnailCacheDir: process.env.THUMBNAIL_CACHE_DIR || path.join(os.tmpdir(), 'simple-file-server-thumbnails'),
   
+  // User authentication settings
+  // Format: 'username|password|rw' where 'rw' indicates read and write permissions
+  // Examples: 'admin|admin123|rw' (full access), 'guest|guest123|r' (read-only access)
+  // If empty array, authentication is disabled
+  userRules: [
+    'admin|admin123|rw',
+    'guest|guest123|r'
+  ],
+  
   // File indexing options
   // useFileIndex: process.env.USE_FILE_INDEX === 'true' || false,
   useFileIndex: true,

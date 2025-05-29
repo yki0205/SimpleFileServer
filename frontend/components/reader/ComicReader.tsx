@@ -8,20 +8,21 @@ import { Toggle } from '@/components/ui/toggle';
 import { Loading } from '@/components/status/Loading';
 import { Error } from '@/components/status/Error';
 import { NotFound } from '@/components/status/NotFound';
-import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize, Minimize } from 'lucide-react';
+import { X, Book, ArrowRightLeft, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize, Minimize, Download } from 'lucide-react';
 
 interface ComicReaderProps {
   title?: string;
   src: string;
   className?: string;
   onClose?: () => void;
+  onDownload?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
   // Fallback
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
-export function ComicReader({ title, src, className, onClose, onNext, onPrev, onFullScreenChange }: ComicReaderProps) {
+export function ComicReader({ title, src, className, onClose, onDownload, onNext, onPrev, onFullScreenChange }: ComicReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -67,9 +68,66 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   const [lastTapPosition, setLastTapPosition] = useState({ x: 0, y: 0 });
   const doubleTapDelay = 500; // increased from 300ms to 500ms
   const doubleTapDistance = 50; // increased from 30px to 50px
-  
-  // Add state for visual feedback
-  const [showDoubleTapFeedback, setShowDoubleTapFeedback] = useState(false);
+
+  // Add these state variables near the other state declarations
+  const [showNextChapterConfirm, setShowNextChapterConfirm] = useState(false);
+  const [showPrevChapterConfirm, setShowPrevChapterConfirm] = useState(false);
+  const confirmTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // EXPERIMENTAL: Auto enable double page mode on width > AUTO_DOUBLE_PAGE_THRESHOLD
+  const [hasAutoEnabledDoublePage, setHasAutoEnabledDoublePage] = useState(true);
+  const AUTO_DOUBLE_PAGE_THRESHOLD = 1200; // Width in pixels to trigger auto double page mode
+
+  const [mouseSwipeStartX, setMouseSwipeStartX] = useState<number | null>(null);
+  const [mouseSwipeAmount, setMouseSwipeAmount] = useState(0);
+  const [isMouseSwiping, setIsMouseSwiping] = useState(false);
+  const MOUSE_SWIPE_THRESHOLD = 100; // Minimum distance to trigger page change
+
+  const handleImageLoad = () => {
+    if (imageRef.current) {
+      const { naturalWidth, naturalHeight } = imageRef.current;
+      setImageSize({ width: naturalWidth, height: naturalHeight });
+    }
+  };
+
+  const handleFullScreenChange = (isFullScreen: boolean) => {
+    if (isFullScreen) {
+      if (containerRef.current && !document.fullscreenElement) {
+        containerRef.current.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      }
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(err => {
+          console.error(`Error attempting to exit fullscreen: ${err.message}`);
+        });
+      }
+    }
+
+    setUseFullScreen(isFullScreen);
+    if (onFullScreenChange) {
+      onFullScreenChange(isFullScreen);
+    }
+  };
+
+  const toggleControls = () => {
+    setShowControls(prev => !prev);
+
+    // Clear any existing timeout
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+
+    // Set a new timeout to hide controls
+    if (!showControls) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000); // Hide after 3 seconds
+    }
+  };
+
+
 
   const nextPage = useCallback(() => {
     if (zoom > 1) return;
@@ -81,18 +139,48 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
         // Handle case when there's only one page left
         setCurrentPage(currentPage + 1);
       } else if (onNext) {
-        // If we're at the last page and onNext is provided, call it
-        onNext();
+        // If we're at the last page and onNext is provided
+        if (showNextChapterConfirm) {
+          // If confirmation is showing and clicked again, navigate
+          setCurrentPage(0);
+          onNext();
+          setShowNextChapterConfirm(false);
+        } else {
+          // First click - show confirmation
+          setShowNextChapterConfirm(true);
+          // Auto-hide confirmation after 3 seconds
+          if (confirmTimeoutRef.current) {
+            clearTimeout(confirmTimeoutRef.current);
+          }
+          confirmTimeoutRef.current = setTimeout(() => {
+            setShowNextChapterConfirm(false);
+          }, 3000);
+        }
       }
     } else {
       if (currentPage < totalPages - 1) {
         setCurrentPage(currentPage + 1);
       } else if (onNext) {
-        // If we're at the last page and onNext is provided, call it
-        onNext();
+        // If we're at the last page and onNext is provided
+        if (showNextChapterConfirm) {
+          // If confirmation is showing and clicked again, navigate
+          setCurrentPage(0);
+          onNext();
+          setShowNextChapterConfirm(false);
+        } else {
+          // First click - show confirmation
+          setShowNextChapterConfirm(true);
+          // Auto-hide confirmation after 3 seconds
+          if (confirmTimeoutRef.current) {
+            clearTimeout(confirmTimeoutRef.current);
+          }
+          confirmTimeoutRef.current = setTimeout(() => {
+            setShowNextChapterConfirm(false);
+          }, 3000);
+        }
       }
     }
-  }, [currentPage, totalPages, zoom, isDoublePage, onNext]);
+  }, [currentPage, totalPages, zoom, isDoublePage, onNext, showNextChapterConfirm]);
 
   const prevPage = useCallback(() => {
     if (zoom > 1) return;
@@ -104,18 +192,48 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
         // Handle case when we're at page 1 to go back to page 0
         setCurrentPage(0);
       } else if (onPrev) {
-        // If we're at the first page and onPrev is provided, call it
-        onPrev();
+        // If we're at the first page and onPrev is provided
+        if (showPrevChapterConfirm) {
+          // If confirmation is showing and clicked again, navigate
+          onPrev();
+          setCurrentPage(totalPages - 1);
+          setShowPrevChapterConfirm(false);
+        } else {
+          // First click - show confirmation
+          setShowPrevChapterConfirm(true);
+          // Auto-hide confirmation after 3 seconds
+          if (confirmTimeoutRef.current) {
+            clearTimeout(confirmTimeoutRef.current);
+          }
+          confirmTimeoutRef.current = setTimeout(() => {
+            setShowPrevChapterConfirm(false);
+          }, 3000);
+        }
       }
     } else {
       if (currentPage > 0) {
         setCurrentPage(currentPage - 1);
       } else if (onPrev) {
-        // If we're at the first page and onPrev is provided, call it
-        onPrev();
+        // If we're at the first page and onPrev is provided
+        if (showPrevChapterConfirm) {
+          // If confirmation is showing and clicked again, navigate
+          onPrev();
+          setCurrentPage(totalPages - 1);
+          setShowPrevChapterConfirm(false);
+        } else {
+          // First click - show confirmation
+          setShowPrevChapterConfirm(true);
+          // Auto-hide confirmation after 3 seconds
+          if (confirmTimeoutRef.current) {
+            clearTimeout(confirmTimeoutRef.current);
+          }
+          confirmTimeoutRef.current = setTimeout(() => {
+            setShowPrevChapterConfirm(false);
+          }, 3000);
+        }
       }
     }
-  }, [currentPage, zoom, isDoublePage, onPrev]);
+  }, [currentPage, zoom, isDoublePage, onPrev, showPrevChapterConfirm]);
 
   const debouncedNextPage = useCallback(() => {
     const now = Date.now();
@@ -169,7 +287,66 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     }
   }, [zoom, debouncedNextPage, debouncedPrevPage]);
 
+  // Set up wheel event listener
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleWheel]);
+
+
+
+  const zoomIn = () => {
+    setZoom(prevZoom => Math.min(prevZoom + 0.25, 5));
+  };
+
+  const zoomOut = () => {
+    setZoom(prevZoom => Math.max(prevZoom - 0.25, 0.1));
+  };
+
+  const resetZoom = () => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const handleDoubleClick = () => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  // Reset position when zoom changes to 1 or less
+  useEffect(() => {
+    if (zoom > 1) {
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [zoom])
+
+  // Reset zoom and position when page changes
+  useEffect(() => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
+  }, [currentPage]);
+
+
+
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
+    // Record start position for potential swipe if not zoomed in
+    if (zoom <= 1) {
+      setMouseSwipeStartX(e.clientX);
+      setIsMouseSwiping(true);
+      setMouseSwipeAmount(0);
+    }
+
     if (zoom > 1) {
       setIsDragging(true);
       setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
@@ -178,6 +355,15 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
+    // Handle mouse swipe when not zoomed in
+    if (zoom <= 1 && isMouseSwiping && mouseSwipeStartX !== null) {
+      const deltaX = e.clientX - mouseSwipeStartX;
+      setMouseSwipeAmount(deltaX);
+      e.preventDefault();
+    }
+
     if (isDragging && zoom > 1) {
       const newX = e.clientX - dragStart.x;
       const newY = e.clientY - dragStart.y;
@@ -187,6 +373,37 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
+    // Handle mouse swipe for page navigation
+    if (zoom <= 1 && isMouseSwiping && mouseSwipeStartX !== null) {
+      const deltaX = e.clientX - mouseSwipeStartX;
+      
+      // If swiped far enough, change page
+      if (Math.abs(deltaX) >= MOUSE_SWIPE_THRESHOLD) {
+        if (deltaX > 0) {
+          // Swiped right
+          isRightToLeft ? debouncedNextPage() : debouncedPrevPage();
+        } else {
+          // Swiped left
+          isRightToLeft ? debouncedPrevPage() : debouncedNextPage();
+        }
+        
+        // Prevent the click from triggering other actions
+        e.preventDefault();
+        e.stopPropagation();
+        setMouseSwipeStartX(null);
+        setIsMouseSwiping(false);
+        setMouseSwipeAmount(0);
+        return;
+      }
+    }
+
+    // Reset mouse swipe state
+    setMouseSwipeStartX(null);
+    setIsMouseSwiping(false);
+    setMouseSwipeAmount(0);
+
     if (isDragging) {
       setIsDragging(false);
       e.preventDefault();
@@ -235,31 +452,20 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     }
   }, [showControls]);
 
-  const handleDoubleClick = () => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
-  };
+  // Apply global listeners for mouse movement
+  useEffect(() => {
+    if (showControls) {
+      // Skip attaching mousemove for touch devices to prevent immediate control hiding
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-  const handleFullScreenChange = (isFullScreen: boolean) => {
-    setUseFullScreen(isFullScreen);
-    if (onFullScreenChange) {
-      onFullScreenChange(isFullScreen);
+      if (!isTouchDevice) {
+        window.addEventListener('mousemove', handleMouseMove2);
+        return () => window.removeEventListener('mousemove', handleMouseMove2);
+      }
     }
-  };
+  }, [showControls, handleMouseMove2]);
 
-  // Zoom control functions
-  const zoomIn = () => {
-    setZoom(prevZoom => Math.min(prevZoom + 0.25, 5));
-  };
 
-  const zoomOut = () => {
-    setZoom(prevZoom => Math.max(prevZoom - 0.25, 0.1));
-  };
-
-  const resetZoom = () => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
-  };
 
   // getTouchDistance is used to get the distance between the two fingers
   const getTouchDistance = (e: React.TouchEvent) => {
@@ -271,9 +477,9 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   const handleTouchMove = (e: React.TouchEvent) => {
     // Check if the touch event occurs in the image area
     const target = e.target as HTMLElement;
-    const isImageArea = target.tagName === 'IMG' || 
-                        target.classList.contains('image-container');
-    
+    const isImageArea = target.tagName === 'IMG' ||
+      target.classList.contains('image-container');
+
     // Always prevent default behavior in the image area
     if (isImageArea || e.touches.length === 2 || (zoom > 1 && isDragging)) {
       e.preventDefault();
@@ -305,9 +511,9 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   const handleTouchStart = (e: React.TouchEvent) => {
     // Check if the touch event occurs in the image area
     const target = e.target as HTMLElement;
-    const isImageArea = target.tagName === 'IMG' || 
-                        target.classList.contains('image-container');
-    
+    const isImageArea = target.tagName === 'IMG' ||
+      target.classList.contains('image-container');
+
     // Only prevent default behavior in the image area
     if (isImageArea) {
       e.preventDefault();
@@ -319,27 +525,24 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
       const currentTime = Date.now();
       const x = touch.clientX;
       const y = touch.clientY;
-      
+
       // Calculate distance from last tap
       const dx = x - lastTapPosition.x;
       const dy = y - lastTapPosition.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       // If double tap detected (within time and distance threshold)
       if (zoom !== 1 && currentTime - lastTapTime < doubleTapDelay && distance < doubleTapDistance) {
-        // Visual feedback that double-tap was detected
-        setShowDoubleTapFeedback(true);
-        setTimeout(() => setShowDoubleTapFeedback(false), 300);
-        
+
         // Reset zoom and position (same as double click)
         setZoom(1);
         setPosition({ x: 0, y: 0 });
-        
+
         // Reset tap tracking to prevent triple-tap issues
         setLastTapTime(0);
         return;
       }
-      
+
       // Store info for potential next tap
       setLastTapTime(currentTime);
       setLastTapPosition({ x, y });
@@ -462,28 +665,30 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     }
   };
 
-  const handleImageLoad = () => {
-    if (imageRef.current) {
-      const { naturalWidth, naturalHeight } = imageRef.current;
-      setImageSize({ width: naturalWidth, height: naturalHeight });
-    }
-  };
 
-  const toggleControls = () => {
-    setShowControls(prev => !prev);
-
-    // Clear any existing timeout
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
+  // Global mouse up / touch end handler
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+      setMouseSwipeStartX(null);
+      setIsMouseSwiping(false);
+      setMouseSwipeAmount(0);
     }
 
-    // Set a new timeout to hide controls
-    if (!showControls) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000); // Hide after 3 seconds
+    const handleGlobalTouchEnd = () => {
+      setTouchStartX(null);
+      setTouchStartY(null);
+      setTouchStartTime(null);
     }
-  };
+
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('touchend', handleGlobalTouchEnd);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('touchend', handleGlobalTouchEnd);
+    }
+  }, []);
+
 
   // Handle page input
   const handlePageClick = () => {
@@ -504,6 +709,7 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   };
 
   const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     if (e.key === 'Enter') {
       handlePageInputBlur();
     } else if (e.key === 'Escape') {
@@ -530,6 +736,7 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   };
 
   const handleZoomInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     if (e.key === 'Enter') {
       handleZoomInputBlur();
     } else if (e.key === 'Escape') {
@@ -537,10 +744,7 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     }
   };
 
-  useEffect(() => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
-  }, [currentPage]);
+
 
   // Load comic book
   useEffect(() => {
@@ -567,13 +771,6 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     loadComic();
   }, [src]);
 
-  // Reset position when zoom changes to 1 or less
-  useEffect(() => {
-    if (zoom > 1) {
-      setPosition({ x: 0, y: 0 });
-    }
-  }, [zoom])
-
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -595,7 +792,7 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
             handleFullScreenChange(false);
           } else {
             // Otherwise close the reader
-          onClose?.();
+            onClose?.();
           }
           break;
         case 'Enter':
@@ -613,78 +810,44 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [zoom, isRightToLeft, onClose, debouncedNextPage, debouncedPrevPage, useFullScreen, handleFullScreenChange]);
 
-  // Set up wheel event listener
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [handleWheel]);
-
   // Clear timeout when component unmounts
   useEffect(() => {
     return () => {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
       }
+      if (confirmTimeoutRef.current) {
+        clearTimeout(confirmTimeoutRef.current);
+      }
     };
   }, []);
 
-  // Apply global listeners for mouse movement
   useEffect(() => {
-    if (showControls) {
-      // Skip attaching mousemove for touch devices to prevent immediate control hiding
-      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const handleFullscreenChange = () => {
+      const isInFullscreen = !!document.fullscreenElement;
+      setUseFullScreen(isInFullscreen);
 
-      if (!isTouchDevice) {
-        window.addEventListener('mousemove', handleMouseMove2);
-        return () => window.removeEventListener('mousemove', handleMouseMove2);
-      }
-    }
-  }, [showControls, handleMouseMove2]);
-
-  // Apply to window to capture mouse events even outside the component
-  useEffect(() => {
-    const handleMouseUpGlobal = () => {
-      setIsDragging(false);
-    };
-
-    window.addEventListener('mouseup', handleMouseUpGlobal);
-    return () => window.removeEventListener('mouseup', handleMouseUpGlobal);
-  }, []);
-
-  useEffect(() => {
-    // prevent double-finger zoom and pull-down refresh
-    const preventDefaultTouchAction = (e: TouchEvent) => {
-      // prevent default behavior in the reader range
-      if (containerRef.current?.contains(e.target as Node)) {
-        // check if the touch event occurs in the toolbar
-        const target = e.target as HTMLElement;
-        const isControlsArea = target.closest('.reader-controls');
-        
-        // if not in the control area, prevent default behavior
-        if (!isControlsArea) {
-          e.preventDefault();
-        }
+      if (onFullScreenChange) {
+        onFullScreenChange(isInFullscreen);
       }
     };
 
-    // add passive: false to ensure preventDefault works
-    document.addEventListener('touchstart', preventDefaultTouchAction, { passive: false });
-    document.addEventListener('touchmove', preventDefaultTouchAction, { passive: false });
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
-      document.removeEventListener('touchstart', preventDefaultTouchAction);
-      document.removeEventListener('touchmove', preventDefaultTouchAction);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [onFullScreenChange]);
+
+  // Add a useEffect to monitor container width and automatically set double page mode once
+  useEffect(() => {
+
+    const curClientWidth = containerRef.current?.clientWidth;
+    if (curClientWidth && curClientWidth >= AUTO_DOUBLE_PAGE_THRESHOLD && hasAutoEnabledDoublePage) {
+      setIsDoublePage(true);
+    }
+
+  }, [containerRef.current?.clientWidth]);
 
   if (loading) {
     return <Loading message="Loading comic book..." className="text-white" />;
@@ -703,24 +866,15 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
   const nextPageIndex = currentPage + 1 < totalPages ? currentPage + 1 : -1;
 
   return (
-    <div 
-      ref={containerRef} 
-      className={cn("relative flex flex-col", className)}
-      style={{ 
+    <div
+      ref={containerRef}
+      className={cn("relative flex flex-col select-none", className)}
+      style={{
         touchAction: 'none', // prevent default touch behavior
         overscrollBehavior: 'none', // prevent pull-down refresh
         WebkitOverflowScrolling: 'touch' // improve scrolling performance on iOS
       }}
     >
-      {/* Double-tap visual feedback */}
-      {showDoubleTapFeedback && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-          <div className="bg-white/30 rounded-full w-16 h-16 flex items-center justify-center animate-pulse">
-            <div className="bg-white/60 rounded-full w-8 h-8"></div>
-          </div>
-        </div>
-      )}
-
       {/* Controls - only show when showControls is true */}
       <div
         className={`absolute top-0 left-0 right-0 z-10 flex justify-between items-center p-2 bg-black/60 transition-opacity duration-300 ease-in-out reader-controls ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -737,8 +891,8 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
               autoFocus
             />
           ) : (
-            <span 
-              className="text-white cursor-pointer hover:text-white/80 select-none"
+            <span
+              className="text-white cursor-pointer hover:text-white/80"
               onClick={handlePageClick}
             >
               {currentPage + 1} / {totalPages}
@@ -765,8 +919,8 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                 autoFocus
               />
             ) : (
-              <span 
-                className="text-white mx-2 cursor-pointer hover:text-white/80 select-none"
+              <span
+                className="text-white mx-2 cursor-pointer hover:text-white/80"
                 onClick={handleZoomClick}
               >
                 {Math.round(zoom * 100)}%
@@ -829,6 +983,15 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
             <Book size={18} />
           </Toggle>
 
+          {onDownload && <Button
+            variant="ghost"
+            size="icon"
+            onClick={onDownload}
+            className="text-white hover:text-white/80 bg-transparent hover:bg-white/20"
+          >
+            <Download size={18} />
+          </Button>}
+
           <Button
             variant="ghost"
             size="icon"
@@ -859,9 +1022,25 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
         </>
       )}
 
+      {/* Chapter navigation confirmation */}
+      {showNextChapterConfirm && (
+        <div className={cn("absolute bottom-1/4 bg-black/80 text-white px-4 py-2 rounded-lg z-20",
+          isRightToLeft ? "left-4" : "right-4"
+        )}>
+          Tap again to go to next chapter
+        </div>
+      )}
+      {showPrevChapterConfirm && (
+        <div className={cn("absolute bottom-1/4 bg-black/80 text-white px-4 py-2 rounded-lg z-20",
+          isRightToLeft ? "right-4" : "left-4"
+        )}>
+          Tap again to go to previous chapter
+        </div>
+      )}
+
       {/* Comic page display */}
       <div
-        className="flex items-center justify-center bg-black image-container"
+        className="w-full h-full flex items-center justify-center bg-black/70 image-container"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -872,20 +1051,18 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
         onDoubleClick={handleDoubleClick}
         style={{
           cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-          padding: zoom > 1 ? '10%' : 0,
           transition: 'padding 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           touchAction: 'manipulation', // Allow taps but prevent zooming
         }}
       >
         {isDoublePage ? (
           <div
-            className="relative flex items-center justify-center"
+            className="w-full h-full relative flex items-center justify-center"
             style={{
               transform: `scale(${zoom})`,
               transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              margin: zoom > 1 ? '-10%' : 0,
-              maxWidth: useFullScreen ? '100vw' : '95vw',
-              maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 80px)',
+              maxWidth: '100%',
+              maxHeight: '100%',
               display: 'flex',
               flexDirection: 'row',
               alignItems: 'center',
@@ -900,8 +1077,8 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                 src={pages[nextPageIndex]}
                 alt={`Page ${nextPageIndex + 1}`}
                 style={{
-                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
-                  maxWidth: useFullScreen ? '48vw' : '45vw',
+                  maxHeight: '100%',
+                  maxWidth: '50%',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -910,7 +1087,6 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                   willChange: 'transform',
                   transformOrigin: 'center center',
                 }}
-                className="select-none"
                 draggable={false}
                 onLoad={handleImageLoad}
               />
@@ -920,8 +1096,8 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                 src={pages[currentPageIndex]}
                 alt={`Page ${currentPageIndex + 1}`}
                 style={{
-                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
-                  maxWidth: useFullScreen ? '48vw' : '45vw',
+                  maxHeight: '100%',
+                  maxWidth: '50%',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -930,7 +1106,6 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                   willChange: 'transform',
                   transformOrigin: 'center center',
                 }}
-                className="select-none"
                 onLoad={handleImageLoad}
                 draggable={false}
               />
@@ -943,8 +1118,8 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                 src={pages[isRightToLeft ? currentPageIndex : nextPageIndex]}
                 alt={`Page ${(isRightToLeft ? currentPageIndex : nextPageIndex) + 1}`}
                 style={{
-                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 100px)',
-                  maxWidth: useFullScreen ? '48vw' : '45vw',
+                  maxHeight: '100%',
+                  maxWidth: '50%',
                   width: 'auto',
                   height: 'auto',
                   objectFit: "contain",
@@ -953,7 +1128,6 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                   willChange: 'transform',
                   transformOrigin: 'center center',
                 }}
-                className="select-none"
                 onLoad={handleImageLoad}
                 draggable={false}
               />
@@ -961,11 +1135,10 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
           </div>
         ) : (
           <div
-            className="relative flex items-center justify-center"
+            className="w-full h-full relative flex items-center justify-center"
             style={{
               transform: `scale(${zoom})`,
               transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              margin: zoom > 1 ? '-10%' : 0,
             }}
           >
             {pages[currentPage] && (
@@ -974,21 +1147,37 @@ export function ComicReader({ title, src, className, onClose, onNext, onPrev, on
                 src={pages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
                 style={{
-                  maxWidth: useFullScreen ? '100vw' : '95vw',
-                  maxHeight: useFullScreen ? '100vh' : 'calc(100vh - 80px)',
-                  width: 'auto',
-                  height: 'auto',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
                   objectFit: "contain",
                   transform: `translate(${position.x / zoom}px, ${position.y / zoom}px)`,
                   transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   willChange: 'transform',
                   transformOrigin: 'center center',
                 }}
-                className="select-none"
                 onLoad={handleImageLoad}
                 draggable={false}
               />
             )}
+          </div>
+        )}
+
+        {/* Add visual indicators for mouse swipe */}
+        {isMouseSwiping && mouseSwipeAmount !== 0 && (
+          <div 
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          >
+            <div 
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 rounded-full p-2 text-white",
+                mouseSwipeAmount > 0 ? "left-8" : "right-8"
+              )}
+            >
+              {mouseSwipeAmount > 0 ? 
+                (isRightToLeft ? <ChevronLeft size={32} /> : <ChevronRight size={32} />) : 
+                (isRightToLeft ? <ChevronRight size={32} /> : <ChevronLeft size={32} />)
+              }
+            </div>
           </div>
         )}
       </div>

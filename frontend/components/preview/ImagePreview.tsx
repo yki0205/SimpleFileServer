@@ -42,76 +42,15 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   const cachedImagesRef = useRef<Set<string>>(new Set());
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Track image dimensions
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
 
   // Internal loading and error states
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  // Calculate bounds for the image based on zoom level and dimensions
-  const getBounds = useCallback(() => {
-    if (!imageRef.current || !containerRef.current) {
-      return { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity };
-    }
-
-    const img = imageRef.current;
-    const container = containerRef.current;
-
-    // Calculate the scaled dimensions of the image
-    const scaledWidth = img.naturalWidth * zoom;
-    const scaledHeight = img.naturalHeight * zoom;
-    
-    // Get container dimensions
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    
-    // If the image is smaller than the container (even with zoom), center it
-    if (scaledWidth <= containerWidth) {
-      // No horizontal movement allowed, just keep it centered
-      const centerX = 0;
-      return {
-        minX: centerX,
-        maxX: centerX,
-        minY: -Math.max(0, (scaledHeight - containerHeight) / 2),
-        maxY: Math.max(0, (scaledHeight - containerHeight) / 2)
-      };
-    } else {
-      // Allow horizontal movement within bounds
-      const horizontalExcess = (scaledWidth - containerWidth) / 2;
-      const verticalExcess = Math.max(0, (scaledHeight - containerHeight) / 2);
-      
-      return {
-        minX: -horizontalExcess,
-        maxX: horizontalExcess,
-        minY: -verticalExcess,
-        maxY: verticalExcess
-      };
-    }
-  }, [zoom]);
-
-  // Constrain position within bounds
-  const constrainPosition = useCallback((pos: {x: number, y: number}) => {
-    const bounds = getBounds();
-    return {
-      x: Math.min(Math.max(pos.x, bounds.minX), bounds.maxX),
-      y: Math.min(Math.max(pos.y, bounds.minY), bounds.maxY)
-    };
-  }, [getBounds]);
-
   // Handle image load event
   const handleImageLoad = useCallback(() => {
     cachedImagesRef.current.add(src);
     setIsLoading(false);
-    
-    // Update image dimensions when it loads
-    if (imageRef.current) {
-      setImageDimensions({
-        width: imageRef.current.naturalWidth,
-        height: imageRef.current.naturalHeight
-      });
-    }
   }, [src]);
 
   // Handle image error event
@@ -119,6 +58,57 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     setIsLoading(false);
     setHasError(true);
   }, []);
+
+  // Track current src and cached images
+  useEffect(() => {
+    currentSrcRef.current = src;
+
+    const checkIfCached = () => {
+      if (cachedImagesRef.current.has(src)) {
+        setIsLoading(false);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        cachedImagesRef.current.add(src);
+        setIsLoading(false);
+      };
+      img.onerror = () => {
+        setIsLoading(true);
+      };
+
+      // Set src to trigger load check - this will use browser cache if available
+      img.src = src;
+
+      // If image is complete already (instant load from cache), 
+      // onload might not fire in some browsers
+      if (img.complete) {
+        cachedImagesRef.current.add(src);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+    };
+
+    checkIfCached();
+    setHasError(false);
+    setZoom(initialZoom);
+    setPosition({ x: 0, y: 0 });
+    setIsDragging(false);
+  }, [src, initialZoom]);
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        console.log('Image load timeout, forcing state update');
+        setIsLoading(false);
+      }
+    }, 5000); // 5 second timeout
+
+    return () => clearTimeout(timeoutId);
+  }, [src, isLoading]);
 
 
   // Zoom handlers
@@ -135,6 +125,55 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     setPosition({ x: 0, y: 0 });
   }, []);
 
+  // Calculate bounds for the image based on zoom level and dimensions
+  const getBounds = useCallback(() => {
+    if (!imageRef.current || !containerRef.current) {
+      return { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity };
+    }
+
+    const img = imageRef.current;
+    const container = containerRef.current;
+
+    // Calculate the scaled dimensions of the image
+    const scaledWidth = img.naturalWidth * zoom;
+    const scaledHeight = img.naturalHeight * zoom;
+
+    // Get container dimensions
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    // If the image is smaller than the container (even with zoom), center it
+    if (scaledWidth <= containerWidth) {
+      // No horizontal movement allowed, just keep it centered
+      const centerX = 0;
+      return {
+        minX: centerX,
+        maxX: centerX,
+        minY: -Math.max(0, (scaledHeight - containerHeight) / 2),
+        maxY: Math.max(0, (scaledHeight - containerHeight) / 2)
+      };
+    } else {
+      // Allow horizontal movement within bounds
+      const horizontalExcess = (scaledWidth - containerWidth) / 2;
+      const verticalExcess = Math.max(0, (scaledHeight - containerHeight) / 2);
+
+      return {
+        minX: -horizontalExcess,
+        maxX: horizontalExcess,
+        minY: -verticalExcess,
+        maxY: verticalExcess
+      };
+    }
+  }, [zoom]);
+
+  // Constrain position within bounds
+  const constrainPosition = useCallback((pos: { x: number, y: number }) => {
+    const bounds = getBounds();
+    return {
+      x: Math.min(Math.max(pos.x, bounds.minX), bounds.maxX),
+      y: Math.min(Math.max(pos.y, bounds.minY), bounds.maxY)
+    };
+  }, [getBounds]);
 
   // Handle inertia animation
   const applyInertia = useCallback(() => {
@@ -207,7 +246,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       x: e.clientX - dragStartPosition.current.x,
       y: e.clientY - dragStartPosition.current.y
     };
-    
+
     setPosition(constrainPosition(rawPosition));
     e.preventDefault();
   }, [isDragging, constrainPosition]);
@@ -226,7 +265,6 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       }
     }
   }, [isDragging, applyInertia, zoom]);
-
 
   // Handle touch events for dragging
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
@@ -267,7 +305,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       x: touch.clientX - dragStartPosition.current.x,
       y: touch.clientY - dragStartPosition.current.y
     };
-    
+
     setPosition(constrainPosition(rawPosition));
     e.preventDefault();
   }, [isDragging, constrainPosition]);
@@ -280,91 +318,14 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     handleImageMouseUp();
   }, [handleImageMouseUp]);
 
-
-  // Handle fullscreen change from PreviewBase
   const handleFullScreenChange = useCallback((fullScreenState: boolean) => {
     setIsFullScreen(fullScreenState);
-    
+
     // Recalculate position constraints when going fullscreen
     if (zoom > 1) {
       setPosition(prev => constrainPosition(prev));
     }
   }, [zoom, constrainPosition]);
-
-  const getImageStyles = () => {
-    const safeZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
-
-    return {
-      transform: `scale(${safeZoom})`,
-      translate: `${position.x}px ${position.y}px`,
-      // Apply smooth transitions only for zoom, not for position when using inertia
-      transition: isDragging || animationRef.current
-        ? 'transform 0.2s ease' // Only zoom transitions when dragging or inertia is active
-        : 'transform 0.2s ease, translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' // Smooth easing for manual positioning
-    };
-  };
-
-
-  // Track current src and cached images
-  useEffect(() => {
-    currentSrcRef.current = src;
-
-    const checkIfCached = () => {
-      if (cachedImagesRef.current.has(src)) {
-        setIsLoading(false);
-        return;
-      }
-
-      const img = new Image();
-      img.onload = () => {
-        cachedImagesRef.current.add(src);
-        setIsLoading(false);
-        
-        // Update dimensions from this loaded image
-        setImageDimensions({
-          width: img.naturalWidth,
-          height: img.naturalHeight
-        });
-      };
-      img.onerror = () => {
-        setIsLoading(true);
-      };
-
-      // Set src to trigger load check - this will use browser cache if available
-      img.src = src;
-
-      // If image is complete already (instant load from cache), 
-      // onload might not fire in some browsers
-      if (img.complete) {
-        cachedImagesRef.current.add(src);
-        setIsLoading(false);
-        setImageDimensions({
-          width: img.naturalWidth, 
-          height: img.naturalHeight
-        });
-      } else {
-        setIsLoading(true);
-      }
-    };
-
-    checkIfCached();
-    setHasError(false);
-    setZoom(initialZoom);
-    setPosition({ x: 0, y: 0 });
-    setIsDragging(false);
-  }, [src, initialZoom]);
-
-  // Add a timeout to prevent infinite loading
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (isLoading) {
-        console.log('Image load timeout, forcing state update');
-        setIsLoading(false);
-      }
-    }, 5000); // 5 second timeout
-
-    return () => clearTimeout(timeoutId);
-  }, [src, isLoading]);
 
   // Reset position when zoom changes to 1 or less
   useEffect(() => {
@@ -413,6 +374,18 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     };
   }, []);
 
+  const getImageStyles = () => {
+    const safeZoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+
+    return {
+      transform: `scale(${safeZoom})`,
+      translate: `${position.x}px ${position.y}px`,
+      // Apply smooth transitions only for zoom, not for position when using inertia
+      transition: isDragging || animationRef.current
+        ? 'transform 0.2s ease' // Only zoom transitions when dragging or inertia is active
+        : 'transform 0.2s ease, translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' // Smooth easing for manual positioning
+    };
+  };
 
   return (
     <PreviewBase

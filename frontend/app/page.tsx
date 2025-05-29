@@ -25,7 +25,7 @@ import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
 import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog } from "@/components/dialog";
 
-import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview, EpubPreview } from "@/components/preview";
+import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
 
 
 interface FileData {
@@ -372,6 +372,14 @@ function getButtonStyles(btnCountBefore: number, index: number) {
   return cn(base, positions[Math.min(index, positions.length - 1, btnCountBefore)]);
 }
 
+function generateUniqueId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 15);
+}
+
 
 const previewSupported: Record<string, boolean> = {
   'image': true,
@@ -380,7 +388,7 @@ const previewSupported: Record<string, boolean> = {
   'code': true,
   'document': true,
   'comic': true,
-  'pdf': false,
+  'pdf': true,
   'epub': true
 }
 
@@ -656,6 +664,7 @@ function FileExplorerContent() {
   }, []);
 
   const navigatePreview = (direction: 'next' | 'prev') => {
+    // TODO
     if (preview.currentIndex === undefined) return;
 
     if (viewMode === 'imageOnly') {
@@ -726,7 +735,7 @@ function FileExplorerContent() {
 
       // Prepare files for tracking
       const uploadList = Array.from(files).map(file => ({
-        id: crypto.randomUUID(),
+        id: generateUniqueId(),
         name: file.name,
         size: file.size,
         progress: 0,
@@ -1511,7 +1520,7 @@ function FileExplorerContent() {
                 <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
                   <ImageIcon size={18} /> Image Only
                 </Button> */}
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowUploadDialog(true)}>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
                   <Upload size={18} /> Upload Files
                 </Button>
                 {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
@@ -1524,7 +1533,7 @@ function FileExplorerContent() {
                   <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
                 </Button>
                 <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
-                  <Eye size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
+                  <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
                 </Button>
               </div>
             </PopoverContent>
@@ -1671,6 +1680,19 @@ function FileExplorerContent() {
               content={previewContent}
               isLoading={contentLoading}
               hasError={!!contentError}
+              controls={{
+                onClose: closePreview,
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+              }}
+            />
+          )}
+
+          {/* PDF preview */}
+          {preview.type === 'pdf' && (
+            <PDFPreview
+              isOpen={preview.isOpen}
+              title={preview.path.split('/').pop()}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
               controls={{
                 onClose: closePreview,
                 onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),

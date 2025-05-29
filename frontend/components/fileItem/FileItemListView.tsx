@@ -36,29 +36,34 @@ export function FileItemListView(
 
   return (
     <div
-      className={cn("flex items-center p-2 rounded-md cursor-pointer select-none", className)}
+      className={cn(
+        "w-full",
+        "p-2 rounded-md",
+        "flex items-center",
+        "cursor-pointer select-none",
+        "text-primary bg-transparent", 
+        className
+      )}
       onClick={onClick}
     >
       <div className="mr-2">
         <Icon size={24} />
       </div>
-      <div className="flex-1 min-w-0">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="text-sm sm:text-base font-medium truncate">{name}</div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{name}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex-1 min-w-0 truncate text-xs sm:text-sm md:text-base">{name}</div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{name}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       {isSearching && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="text-xs sm:text-sm text-muted-foreground w-80 text-right truncate">
+              <div className="w-80 truncate text-right text-xs sm:text-sm text-muted-foreground">
                 {path}
               </div>
             </TooltipTrigger>
@@ -68,10 +73,10 @@ export function FileItemListView(
           </Tooltip>
         </TooltipProvider>
       )}
-      <div className="hidden md:block text-xs sm:text-sm text-muted-foreground w-24 text-right">
+      <div className="w-24 hidden md:block text-right text-xs sm:text-sm text-muted-foreground">
         {type !== 'directory' && formatFileSize(size)}
       </div>
-      <div className="hidden md:block text-xs sm:text-sm text-muted-foreground w-32 text-right">
+      <div className="w-32 hidden md:block text-right text-xs sm:text-sm text-muted-foreground">
         {date}
       </div>
     </div>
