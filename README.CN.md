@@ -8,7 +8,7 @@
 
 - 关于支持格式：
 
-> 在项目中，我在判断文件类型时使用了js的[mime](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
+> 在项目中，我在判断文件类型时使用了js的[mime-magic](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
 
 ## Comic Preview
 

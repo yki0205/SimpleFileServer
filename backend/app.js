@@ -19,6 +19,9 @@ const indexer = require('./indexer');
 // watcher
 const watcher = require('./watcher');
 
+// auth
+const { authMiddleware, writePermissionMiddleware } = require('./auth');
+
 // worker threads
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
@@ -27,6 +30,7 @@ const PORT = config.port;
 
 app.use(cors());
 app.use(express.json());
+app.use(authMiddleware);
 
 if (config.useFileIndex) {
   console.log('Initializing file indexer...');
@@ -62,6 +66,15 @@ if (config.useFileWatcher) {
     console.log('File watcher initialized');
   }
 }
+
+
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: '1.0.0',
+    username: req.user?.username,
+    permissions: req.user?.permissions || 'none'
+  });
+});
 
 app.get('/api/files', async (req, res) => {
   const { dir = '', cover = 'false' } = req.query;
@@ -107,7 +120,7 @@ app.get('/api/files', async (req, res) => {
               return { subFile, mimeType };
             })
           );
-          
+
           const imageFiles = imageFilesPromises
             .filter(({ mimeType }) => mimeType.startsWith('image/'))
             .map(({ subFile }) => subFile)
@@ -371,209 +384,6 @@ app.get('/api/thumbnail', async (req, res) => {
   }
 });
 
-app.post('/api/upload', (req, res) => {
-  const { dir = '' } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const uploadPath = path.join(basePath, dir);
-
-  if (!uploadPath.startsWith(basePath)) {
-    return res.status(403).json({ error: "Access denied" });
-  }
-
-  if (!fs.existsSync(uploadPath)) {
-    try {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    } catch (error) {
-      return res.status(500).json({ error: `Failed to create directory: ${error.message}` });
-    }
-  }
-
-  // Configure multer storage
-  const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, uploadPath);
-    },
-    filename: function (req, file, cb) {
-      const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      cb(null, decodedName);
-    }
-  });
-
-  // File filter to reject unwanted files
-  const fileFilter = (req, file, cb) => {
-    // You can add file type restrictions here if needed
-    cb(null, true);
-  };
-
-  const upload = multer({
-    storage: storage,
-    fileFilter: fileFilter,
-    limits: {
-      fileSize: config.uploadSizeLimit
-    }
-  }).array('files', config.uploadCountLimit);
-
-  upload(req, res, function (err) {
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: `Upload error: ${err.message}` });
-    } else if (err) {
-      return res.status(500).json({ error: `Server error: ${err.message}` });
-    }
-
-    const uploadedFiles = req.files.map(file => ({
-      name: file.originalname,
-      path: path.join(dir, file.originalname).replace(/\\/g, '/'),
-      size: file.size,
-      mimetype: file.mimetype
-    }));
-
-    res.status(200).json({
-      message: 'Files uploaded successfully',
-      files: uploadedFiles
-    });
-  });
-})
-
-app.post('/api/mkdir', (req, res) => {
-  const { path: dirPath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, dirPath);
-
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    fs.mkdirSync(fullPath, { recursive: true });
-    res.status(200).json({ message: 'Directory created successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
-app.post('/api/rmdir', (req, res) => {
-  const { path: dirPath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, dirPath);
-
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    fs.rmdirSync(fullPath, { recursive: true });
-    res.status(200).json({ message: 'Directory removed successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
-app.post('/api/rename', (req, res) => {
-  const { path: filePath, newName } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, filePath);
-  const newPath = path.join(basePath, newName);
-
-  if (!fullPath.startsWith(basePath) || !newPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    fs.renameSync(fullPath, newPath);
-    res.status(200).json({ message: 'File renamed successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
-app.delete('/api/delete', (req, res) => {
-  const { path: filePath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, filePath);
-
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  if (fs.statSync(fullPath).isDirectory()) {
-    return res.status(400).json({ error: 'Cannot delete a directory' });
-  }
-
-  try {
-    fs.unlinkSync(fullPath);
-    res.status(200).json({ message: 'File deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
-app.post('/api/clone', (req, res) => {
-  const { source, destination } = req.body;
-  const basePath = path.resolve(config.baseDirectory);
-  const sourcePath = path.join(basePath, source);
-  const destPath = path.join(basePath, destination);
-
-  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    // Check if source exists
-    if (!fs.existsSync(sourcePath)) {
-      return res.status(404).json({ error: 'Source file or directory not found' });
-    }
-
-    // Check if destination parent directory exists
-    const destDir = path.dirname(destPath);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-
-    const stats = fs.statSync(sourcePath);
-    if (stats.isDirectory()) {
-      // Clone directory recursively
-      copyFolderRecursiveSync(sourcePath, destPath);
-      res.status(200).json({ message: 'Directory cloned successfully' });
-    } else {
-      // Clone file
-      fs.copyFileSync(sourcePath, destPath);
-      res.status(200).json({ message: 'File cloned successfully' });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
-app.post('/api/move', (req, res) => {
-  const { source, destination } = req.body;
-  const basePath = path.resolve(config.baseDirectory);
-  const sourcePath = path.join(basePath, source);
-  const destPath = path.join(basePath, destination);
-
-  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    // Check if source exists
-    if (!fs.existsSync(sourcePath)) {
-      return res.status(404).json({ error: 'Source file or directory not found' });
-    }
-
-    // Check if destination parent directory exists
-    const destDir = path.dirname(destPath);
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-
-    // Move file or directory
-    fs.renameSync(sourcePath, destPath);
-    res.status(200).json({ message: 'File or directory moved successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-})
-
 app.get('/api/content', async (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -765,11 +575,214 @@ app.get('/api/comic', async (req, res) => {
   }
 });
 
+app.post('/api/upload', writePermissionMiddleware, (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const uploadPath = path.join(basePath, dir);
+
+  if (!uploadPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  if (!fs.existsSync(uploadPath)) {
+    try {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    } catch (error) {
+      return res.status(500).json({ error: `Failed to create directory: ${error.message}` });
+    }
+  }
+
+  // Configure multer storage
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+      const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      cb(null, decodedName);
+    }
+  });
+
+  // File filter to reject unwanted files
+  const fileFilter = (req, file, cb) => {
+    // You can add file type restrictions here if needed
+    cb(null, true);
+  };
+
+  const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: config.uploadSizeLimit
+    }
+  }).array('files', config.uploadCountLimit);
+
+  upload(req, res, function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    } else if (err) {
+      return res.status(500).json({ error: `Server error: ${err.message}` });
+    }
+
+    const uploadedFiles = req.files.map(file => ({
+      name: file.originalname,
+      path: path.join(dir, file.originalname).replace(/\\/g, '/'),
+      size: file.size,
+      mimetype: file.mimetype
+    }));
+
+    res.status(200).json({
+      message: 'Files uploaded successfully',
+      files: uploadedFiles
+    });
+  });
+})
+
+app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
+  const { path: dirPath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, dirPath);
+
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.mkdirSync(fullPath, { recursive: true });
+    res.status(200).json({ message: 'Directory created successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/rmdir', writePermissionMiddleware, (req, res) => {
+  const { path: dirPath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, dirPath);
+
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.rmdirSync(fullPath, { recursive: true });
+    res.status(200).json({ message: 'Directory removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/rename', writePermissionMiddleware, (req, res) => {
+  const { path: filePath, newName } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, filePath);
+  const newPath = path.join(basePath, newName);
+
+  if (!fullPath.startsWith(basePath) || !newPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    fs.renameSync(fullPath, newPath);
+    res.status(200).json({ message: 'File renamed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
+  const { path: filePath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, filePath);
+
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (fs.statSync(fullPath).isDirectory()) {
+    return res.status(400).json({ error: 'Cannot delete a directory' });
+  }
+
+  try {
+    fs.unlinkSync(fullPath);
+    res.status(200).json({ message: 'File deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/clone', writePermissionMiddleware, (req, res) => {
+  const { source, destination } = req.body;
+  const basePath = path.resolve(config.baseDirectory);
+  const sourcePath = path.join(basePath, source);
+  const destPath = path.join(basePath, destination);
+
+  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    // Check if source exists
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source file or directory not found' });
+    }
+
+    // Check if destination parent directory exists
+    const destDir = path.dirname(destPath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    const stats = fs.statSync(sourcePath);
+    if (stats.isDirectory()) {
+      // Clone directory recursively
+      copyFolderRecursiveSync(sourcePath, destPath);
+      res.status(200).json({ message: 'Directory cloned successfully' });
+    } else {
+      // Clone file
+      fs.copyFileSync(sourcePath, destPath);
+      res.status(200).json({ message: 'File cloned successfully' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/move', writePermissionMiddleware, (req, res) => {
+  const { source, destination } = req.body;
+  const basePath = path.resolve(config.baseDirectory);
+  const sourcePath = path.join(basePath, source);
+  const destPath = path.join(basePath, destination);
+
+  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    // Check if source exists
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source file or directory not found' });
+    }
+
+    // Check if destination parent directory exists
+    const destDir = path.dirname(destPath);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    // Move file or directory
+    fs.renameSync(sourcePath, destPath);
+    res.status(200).json({ message: 'File or directory moved successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
 app.get('/api/index-status', (req, res) => {
   if (!config.useFileIndex) {
     return res.json({ enabled: false });
   }
-  
+
   const stats = indexer.getIndexStats();
   res.json({
     enabled: true,
@@ -777,16 +790,16 @@ app.get('/api/index-status', (req, res) => {
   });
 });
 
-app.post('/api/rebuild-index', (req, res) => {
+app.post('/api/rebuild-index', writePermissionMiddleware, (req, res) => {
   if (!config.useFileIndex) {
     return res.status(400).json({ error: "File indexing is not enabled" });
   }
-  
+
   const stats = indexer.getIndexStats();
   if (stats.isBuilding) {
     return res.status(409).json({ error: "Index is already being built", progress: stats.progress });
   }
-  
+
   // Start rebuilding index in background
   indexer.buildIndex(config.baseDirectory)
     .then(result => {
@@ -795,7 +808,7 @@ app.post('/api/rebuild-index', (req, res) => {
     .catch(error => {
       console.error('Error rebuilding index:', error);
     });
-  
+
   res.json({ message: "Index rebuild started", progress: indexer.getIndexStats().progress });
 });
 
@@ -803,7 +816,7 @@ app.get('/api/watcher-status', (req, res) => {
   if (!config.useFileWatcher) {
     return res.json({ enabled: false });
   }
-  
+
   const status = watcher.getStatus();
   res.json({
     enabled: true,
@@ -811,21 +824,21 @@ app.get('/api/watcher-status', (req, res) => {
   });
 });
 
-app.post('/api/toggle-watcher', (req, res) => {
+app.post('/api/toggle-watcher', writePermissionMiddleware, (req, res) => {
   if (!config.useFileWatcher) {
     return res.status(400).json({ error: "File watching is not enabled in config" });
   }
-  
+
   const status = watcher.getStatus();
-  
+
   if (status.active) {
     watcher.stopWatching();
     return res.json({ message: "File watcher stopped", active: false });
   } else {
     const started = watcher.startWatching(config.baseDirectory);
-    return res.json({ 
-      message: started ? "File watcher started" : "Failed to start file watcher", 
-      active: started 
+    return res.json({
+      message: started ? "File watcher started" : "Failed to start file watcher",
+      active: started
     });
   }
 });

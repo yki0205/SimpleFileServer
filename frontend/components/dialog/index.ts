@@ -5,6 +5,7 @@ import { UploadDialog } from "./UploadDialog";
 import { DownloadDialog } from "./DownloadDialog";
 import { IndexSettingsDialog } from "./IndexSettingsDialog";
 import { WatcherSettingsDialog } from "./WatcherSettingsDialog";
+import { LoginDialog } from "./LoginDialog";
 
 export { ConfirmDialog };
 export { InputDialog };
@@ -13,3 +14,4 @@ export { UploadDialog };
 export { DownloadDialog };
 export { IndexSettingsDialog };
 export { WatcherSettingsDialog };
+export { LoginDialog };

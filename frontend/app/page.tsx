@@ -17,15 +17,16 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
-  Info, Database, Eye, MoreHorizontal, TestTube2
+  Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
 import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
-import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog } from "@/components/dialog";
+import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog, LoginDialog } from "@/components/dialog";
 
 import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
+import { useAuth } from '@/context/auth-context';
 
 
 interface FileData {
@@ -1325,7 +1326,8 @@ function FileExplorerContent() {
     );
   }, [useMasonry, gridDirection, sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
-
+  const { isAuthenticated, username, permissions, logout } = useAuth();
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -1535,6 +1537,36 @@ function FileExplorerContent() {
               </div>
             </PopoverContent>
           </Popover>
+        </div>
+
+        <div className="flex items-center ml-2">
+          {isAuthenticated ? (
+            <>
+              <span className="text-sm mr-2 hidden md:inline-block">
+                <User className="inline-block w-4 h-4 mr-1" />
+                {username} ({permissions})
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="ml-2 hidden md:inline-block">Logout</span>
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsLoginDialogOpen(true)}
+              title="Login"
+            >
+              <LogIn className="w-4 h-4" />
+              <span className="ml-2 hidden md:inline-block">Login</span>
+            </Button>
+          )}
         </div>
       </header>
 
@@ -1868,6 +1900,11 @@ function FileExplorerContent() {
       <WatcherSettingsDialog
         open={showWatcherDialog}
         setOpen={setShowWatcherDialog}
+      />
+      {/* Login dialog */}
+      <LoginDialog
+        open={isLoginDialogOpen}
+        setOpen={setIsLoginDialogOpen}
       />
     </main>
   );

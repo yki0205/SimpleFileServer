@@ -6,8 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const TMP_DIR = path.join(os.tmpdir(), 'simple-file-server');
-const BASE_DIR = process.env.BASE_DIRECTORY || 'H:/ACGN';
-// base direcory hash
+const BASE_DIR = process.env.BASE_DIRECTORY || 'D:/Temp';
 const DB_NAME = crypto.createHash('sha256').update(BASE_DIR).digest('hex') + '.db';
 
 if (!fs.existsSync(TMP_DIR)) {

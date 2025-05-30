@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertCircle, CheckCircle, Database, RefreshCw } from "lucide-react";
 
@@ -40,17 +41,31 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
     }
   };
 
+  // Calculate progress percentage
+  const getProgressPercentage = () => {
+    if (!indexStatus?.progress?.total) return 0;
+    return Math.min(
+      100, 
+      Math.round((indexStatus.progress.processed / indexStatus.progress.total) * 100)
+    );
+  };
+
+  // Format large numbers with commas
+  const formatNumber = (num: number) => {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
   // Fetch status on open
   useEffect(() => {
     if (open) {
       fetchStatus();
       
-      // If index is building, poll for updates
+      // If index is building, poll for updates more frequently
       const intervalId = setInterval(() => {
         if (indexStatus?.isBuilding) {
           fetchStatus();
         }
-      }, 2000);
+      }, 1000); // Poll every second during active building
       
       return () => clearInterval(intervalId);
     }
@@ -58,7 +73,7 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Database size={18} />
@@ -110,15 +125,68 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
               
               <div className="flex justify-between items-center">
                 <span>Files Indexed:</span>
-                <span className="font-medium">{indexStatus.fileCount || 0}</span>
+                <span className="font-medium">{formatNumber(indexStatus.fileCount || 0)}</span>
               </div>
               
-              {indexStatus.lastBuilt && (
+              {indexStatus.lastBuilt && !indexStatus.isBuilding && (
                 <div className="flex justify-between items-center">
                   <span>Last Updated:</span>
                   <span className="font-medium">
                     {new Date(indexStatus.lastBuilt).toLocaleString()}
                   </span>
+                </div>
+              )}
+
+              {/* Show progress during building */}
+              {indexStatus.isBuilding && indexStatus.progress && (
+                <div className="space-y-2 mt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Indexing Progress:</span>
+                    <span>{getProgressPercentage()}%</span>
+                  </div>
+                  <Progress value={getProgressPercentage()} className="h-2" />
+                  <div className="flex justify-between text-sm text-muted-foreground mt-1">
+                    <span>Processed: {formatNumber(indexStatus.progress.processed || 0)}</span>
+                    <span>Total: {formatNumber(indexStatus.progress.total || 0)}</span>
+                  </div>
+                  
+                  {indexStatus.progress.lastUpdated && (
+                    <div className="text-xs text-muted-foreground text-right mt-1">
+                      Last update: {new Date(indexStatus.progress.lastUpdated).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Show speed estimate if we have enough data */}
+              {indexStatus.isBuilding && 
+               indexStatus.progress && 
+               indexStatus.progress.processed > 0 && 
+               indexStatus.progress.lastUpdated && (
+                <div className="border rounded p-3 bg-muted/30 mt-2">
+                  <h4 className="text-sm font-medium mb-2">Processing Information</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Files/second:</span>
+                      <span className="ml-2 font-medium">
+                        {indexStatus.progress.filesPerSecond 
+                          ? formatNumber(indexStatus.progress.filesPerSecond)
+                          : formatNumber(Math.round(indexStatus.progress.processed / 
+                            ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000)))}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Estimated time:</span>
+                      <span className="ml-2 font-medium">
+                        {indexStatus.progress.processed > 0 ? 
+                          formatEstimatedTime((indexStatus.progress.total - indexStatus.progress.processed) / 
+                            (indexStatus.progress.filesPerSecond || 
+                              (indexStatus.progress.processed / 
+                                ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000)))) :
+                          'Calculating...'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -155,4 +223,16 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
       </DialogContent>
     </Dialog>
   );
+}
+
+// Helper function to format estimated time
+function formatEstimatedTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
+  
+  if (seconds < 60) return `${Math.round(seconds)} seconds`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+  return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
 } 
