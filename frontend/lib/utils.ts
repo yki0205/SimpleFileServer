@@ -15,3 +15,26 @@ export function formatFileSize(bytes: number): string {
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+export function getPreviewType(mimeType: string) {
+
+  const mainType = mimeType.split('/')[0];
+
+  switch (mainType) {
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'text':
+      return mainType;
+    case 'application':
+      if (mimeType === 'application/pdf') {
+        return 'pdf';
+      } else if (mimeType === 'application/epub') {
+        return 'epub';
+      } else if (mimeType === 'application/cbz' || mimeType === 'application/cbr') {
+        return 'comic';
+      } 
+    default:
+      return 'other'
+  }
+}

@@ -1,24 +1,26 @@
 import { cn } from "@/lib/utils";
-import { formatFileSize } from "@/lib/utils";
+import { formatFileSize, getPreviewType } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Folder, FolderOpen, File, FileText, FileArchive, Image, Music, Video, FileCode, BookOpen } from "lucide-react";
+import { Folder, FolderOpen, File, FileText, FileArchive, Image, Music, Video, BookOpen } from "lucide-react";
 
 interface FileItemProps {
   name: string;
   path: string;
   size: number;
   mtime: string;
-  type: string;
+  isDirectory: boolean;
+  mimeType?: string;
   cover?: string;
   onClick: () => void;
   className?: string;
 }
 
 export function FileItemGridView(
-  { name, path, size, mtime, type, cover, onClick, className }: FileItemProps
+  { name, path, size, mtime, isDirectory, mimeType, cover, onClick, className }: FileItemProps
 ) {
   const date = new Date(mtime).toLocaleDateString();
+  const type = isDirectory ? 'directory' : getPreviewType(mimeType || 'application/octet-stream');
 
   const getIconComponent = () => {
     switch (type) {
@@ -26,9 +28,8 @@ export function FileItemGridView(
       case 'image': return Image;
       case 'video': return Video;
       case 'audio': return Music;
-      case 'document': return FileText;
+      case 'text': case 'pdf': case 'epub': return FileText;
       case 'archive': return FileArchive;
-      case 'code': return FileCode;
       case 'comic': return BookOpen;
       default: return File;
     }
@@ -75,7 +76,7 @@ export function FileItemGridView(
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        {type !== 'directory' && (
+        {!isDirectory && (
           <div className="text-xs sm:text-sm text-center text-muted-foreground">
             {"size: " + formatFileSize(size)}
             <br />

@@ -7,12 +7,9 @@ const indexer = require('./indexer');
 let watchers = [];
 let isWatching = false;
 let watchedDirs = new Set();
-let pendingChanges = {};
 let debounceTimers = {};
 
-/**
- * Initialize the watcher
- */
+
 function initialize() {
   if (!config.useFileWatcher) {
     console.log('File watcher is disabled in config');
@@ -23,10 +20,6 @@ function initialize() {
   return true;
 }
 
-/**
- * Start watching the specified base directory
- * @param {string} baseDir - The base directory to watch
- */
 function startWatching(baseDir) {
   if (!config.useFileWatcher || isWatching) return;
   
@@ -46,9 +39,6 @@ function startWatching(baseDir) {
   }
 }
 
-/**
- * Stop all file watchers
- */
 function stopWatching() {
   if (!isWatching) return;
   
@@ -76,11 +66,7 @@ function stopWatching() {
   console.log('File watchers stopped');
 }
 
-/**
- * Watch a directory and its subdirectories up to the configured depth
- * @param {string} dirPath - Directory to watch
- * @param {number} currentDepth - Current recursion depth
- */
+
 function watchDirectory(dirPath, currentDepth) {
   if (watchedDirs.has(dirPath)) return;
   
@@ -113,11 +99,6 @@ function watchDirectory(dirPath, currentDepth) {
   }
 }
 
-/**
- * Check if a path should be ignored based on config patterns
- * @param {string} filePath - Path to check
- * @returns {boolean} - True if should ignore
- */
 function shouldIgnore(filePath) {
   if (!config.watchIgnorePatterns || !config.watchIgnorePatterns.length) {
     return false;
@@ -135,11 +116,7 @@ function shouldIgnore(filePath) {
   return false;
 }
 
-/**
- * Handle file change events
- * @param {string} eventType - The type of event ('rename' or 'change')
- * @param {string} filePath - The path of the changed file
- */
+
 function handleFileChange(eventType, filePath) {
   if (shouldIgnore(filePath)) return;
   
@@ -158,11 +135,6 @@ function handleFileChange(eventType, filePath) {
   }, config.watchDebounceInterval);
 }
 
-/**
- * Process a file change after debounce
- * @param {string} eventType - The type of event ('rename' or 'change')
- * @param {string} filePath - The path of the changed file
- */
 function processFileChange(eventType, filePath) {
   try {
     // Check if the file/directory still exists
@@ -187,12 +159,7 @@ function processFileChange(eventType, filePath) {
   }
 }
 
-/**
- * Handle file addition or modification
- * @param {string} filePath - Path to the file
- * @param {fs.Stats} stats - File stats
- */
-function handleFileAddOrModify(filePath, stats) {
+async function handleFileAddOrModify(filePath, stats) {
   if (!config.useFileIndex || !indexer.isIndexBuilt()) {
     return;
   }
@@ -205,30 +172,27 @@ function handleFileAddOrModify(filePath, stats) {
   const relativePath = path.relative(basePath, filePath);
   const normalizedPath = utils.normalizePath(relativePath);
   const fileName = path.basename(filePath);
-  const extension = path.extname(fileName).toLowerCase();
-  const directoryPath = utils.normalizePath(path.dirname(relativePath));
   
   console.log(`File changed: ${normalizedPath}`);
   
-  // Create file record
-  const fileRecord = {
-    name: fileName,
-    path: normalizedPath,
-    size: stats.size,
-    mtime: stats.mtime.toISOString(),
-    type: utils.getFileType(extension),
-    extension: extension,
-    directory_path: directoryPath
-  };
-  
-  // Update the index
-  indexer.saveFileBatch([fileRecord]);
+  try {
+    // Create file record
+    const fileRecord = {
+      name: fileName,
+      path: normalizedPath,
+      size: stats.size,
+      mtime: stats.mtime.toISOString(),
+      mimeType: await utils.getFileType(filePath),
+      isDirectory: stats.isDirectory()
+    };
+    
+    // Update the index
+    indexer.saveFileBatch([fileRecord]);
+  } catch (error) {
+    console.error(`Error updating index for ${filePath}:`, error);
+  }
 }
 
-/**
- * Handle file deletion
- * @param {string} filePath - Path to the deleted file
- */
 function handleFileDeletion(filePath) {
   if (!config.useFileIndex || !indexer.isIndexBuilt()) {
     return;
@@ -248,10 +212,6 @@ function handleFileDeletion(filePath) {
   }
 }
 
-/**
- * Handle directory change (created or renamed)
- * @param {string} dirPath - Path to the directory
- */
 function handleDirectoryChange(dirPath) {
   // If this is a new directory, start watching it
   if (!watchedDirs.has(dirPath)) {
@@ -268,10 +228,7 @@ function handleDirectoryChange(dirPath) {
   }
 }
 
-/**
- * Get watcher status
- * @returns {Object} Watcher status
- */
+
 function getStatus() {
   return {
     enabled: config.useFileWatcher,

@@ -63,7 +63,7 @@ if (config.useFileWatcher) {
   }
 }
 
-app.get('/api/files', (req, res) => {
+app.get('/api/files', async (req, res) => {
   const { dir = '', cover = 'false' } = req.query;
   const basePath = path.resolve(config.baseDirectory)
   const fullPath = path.join(basePath, dir)
@@ -80,30 +80,38 @@ app.get('/api/files', (req, res) => {
     }
 
     const files = fs.readdirSync(fullPath)
-    const fileDetails = files.map(file => {
+    const fileDetailsPromises = files.map(async file => {
       const filePath = path.join(fullPath, file);
       const fileStats = fs.statSync(filePath);
       const isDirectory = fileStats.isDirectory();
-      const extension = path.extname(file).toLowerCase();
 
       const fileDetail = {
         name: file,
         path: utils.normalizePath(path.join(dir, file)),
         size: fileStats.size,
         mtime: fileStats.mtime,
-        type: isDirectory ? 'directory' : utils.getFileType(extension)
+        isDirectory,
       };
 
-      // If cover is requested and this is a directory, find a cover image
+      if (!isDirectory) {
+        fileDetail.mimeType = await utils.getFileType(filePath);
+      }
+
       if (cover === 'true' && isDirectory) {
         try {
           const subFiles = fs.readdirSync(filePath);
-          const imageFiles = subFiles
-            .filter(subFile => {
-              const ext = path.extname(subFile).toLowerCase();
-              return utils.getFileType(ext) === 'image';
+          const imageFilesPromises = await Promise.all(
+            subFiles.map(async subFile => {
+              const subFilePath = path.join(filePath, subFile);
+              const mimeType = await utils.getFileType(subFilePath);
+              return { subFile, mimeType };
             })
-            .sort(); // Sort alphabetically
+          );
+          
+          const imageFiles = imageFilesPromises
+            .filter(({ mimeType }) => mimeType.startsWith('image/'))
+            .map(({ subFile }) => subFile)
+            .sort();
 
           if (imageFiles.length > 0) {
             const coverImage = imageFiles[0];
@@ -115,8 +123,9 @@ app.get('/api/files', (req, res) => {
       }
 
       return fileDetail;
-    })
+    });
 
+    const fileDetails = await Promise.all(fileDetailsPromises);
     res.json({ files: fileDetails })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -230,21 +239,21 @@ app.get('/api/raw', (req, res) => {
     } else {
       const fileName = path.basename(fullPath);
       const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
-
-      const extension = path.extname(fullPath).toLowerCase();
-      const contentType = utils.getContentType(extension);
-
-      res.setHeader('Content-Type', contentType);
-      // res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
-      res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
-      res.sendFile(fullPath);
+      utils.getFileType(fullPath).then(mimeType => {
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+        res.sendFile(fullPath);
+      }).catch(error => {
+        console.error('Error getting mime type:', error);
+        res.status(500).json({ error: error.message });
+      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/thumbnail', (req, res) => {
+app.get('/api/thumbnail', async (req, res) => {
   const { path: requestedPath, width = 300, height, quality = 80 } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, requestedPath);
@@ -264,10 +273,9 @@ app.get('/api/thumbnail', (req, res) => {
       return res.status(400).json({ error: 'Cannot generate thumbnail for directory' });
     }
 
-    // Check file type
-    const extension = path.extname(fullPath).toLowerCase();
-    if (utils.getFileType(extension) === 'image') {
-      if (extension === '.bmp') {
+    const mimeType = await utils.getFileType(fullPath);
+    if (mimeType.startsWith('image/')) {
+      if (mimeType === 'image/bmp') {
         // Cause sharp cannot handle bmp files, I return the original file directly
         res.setHeader('Content-Type', 'image/bmp');
         return fs.createReadStream(fullPath).pipe(res);
@@ -281,12 +289,11 @@ app.get('/api/thumbnail', (req, res) => {
 
       // Create cache filename (based on original path, width, height and quality)
       const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
-      const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
+      const cachePath = path.join(cacheDir, `${cacheKey}.jpg`);
 
       // If cache exists, return cached thumbnail directly
       if (fs.existsSync(cachePath)) {
-        const contentType = utils.getContentType(extension);
-        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Type', 'image/jpeg');
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
         return fs.createReadStream(cachePath).pipe(res);
       }
@@ -314,7 +321,7 @@ app.get('/api/thumbnail', (req, res) => {
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'public, max-age=31536000');
       transformer.pipe(res);
-    } else if (utils.getFileType(extension) === 'video') {
+    } else if (mimeType.startsWith('video/')) {
 
       // Cache mechanism: generate cache path
       const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
@@ -324,12 +331,11 @@ app.get('/api/thumbnail', (req, res) => {
 
       // Create cache filename (based on original path, width, height and quality)
       const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
-      const cachePath = path.join(cacheDir, `${cacheKey}${extension}`);
+      const cachePath = path.join(cacheDir, `${cacheKey}.jpg`);
 
       // If cache exists, return cached thumbnail directly
       if (fs.existsSync(cachePath)) {
-        const contentType = utils.getContentType(extension);
-        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Type', 'image/jpeg');
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
         return fs.createReadStream(cachePath).pipe(res);
       }
@@ -568,7 +574,7 @@ app.post('/api/move', (req, res) => {
   }
 })
 
-app.get('/api/content', (req, res) => {
+app.get('/api/content', async (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, requestedPath);
@@ -591,10 +597,13 @@ app.get('/api/content', (req, res) => {
       return res.status(413).json({ error: 'File too large to display' });
     }
 
+    const contentType = await utils.getFileType(fullPath);
+    if (!contentType.startsWith('text/')) {
+      return res.status(400).json({ error: 'Cannot show content of a non-text file' });
+    }
     const content = fs.readFileSync(fullPath, 'utf8');
-    const extension = path.extname(fullPath).toLowerCase();
 
-    res.setHeader('Content-Type', utils.getContentType(extension));
+    res.setHeader('Content-Type', contentType);
     res.send(content);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -822,7 +831,7 @@ app.post('/api/toggle-watcher', (req, res) => {
 });
 
 
-function searchFiles(dir, query, basePath) {
+async function searchFiles(dir, query, basePath) {
   let results = [];
 
   try {
@@ -833,17 +842,23 @@ function searchFiles(dir, query, basePath) {
       const stats = fs.statSync(fullPath);
 
       if (file.toLowerCase().includes(query.toLowerCase())) {
-        results.push({
+        const fileDetail = {
           name: file,
           path: utils.normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
-          type: stats.isDirectory() ? 'directory' : utils.getFileType(path.extname(file).toLowerCase())
-        });
+          isDirectory: stats.isDirectory(),
+        }
+
+        if (!stats.isDirectory()) {
+          fileDetail.mimeType = await utils.getFileType(fullPath);
+        }
+
+        results.push(fileDetail);
       }
 
       if (stats.isDirectory()) {
-        results = results.concat(searchFiles(fullPath, query, basePath));
+        results = results.concat(await searchFiles(fullPath, query, basePath));
       }
     }
   } catch (error) {
@@ -853,7 +868,7 @@ function searchFiles(dir, query, basePath) {
   return results;
 }
 
-function findAllImages(dir, basePath) {
+async function findAllImages(dir, basePath) {
   let results = [];
 
   try {
@@ -864,16 +879,17 @@ function findAllImages(dir, basePath) {
       const stats = fs.statSync(fullPath);
 
       if (stats.isDirectory()) {
-        results = results.concat(findAllImages(fullPath, basePath));
+        results = results.concat(await findAllImages(fullPath, basePath));
       } else {
-        const extension = path.extname(file).toLowerCase();
-        if (utils.getFileType(extension) === 'image') {
+        const mimeType = await utils.getFileType(fullPath);
+        if (mimeType.startsWith('image/')) {
           results.push({
             name: file,
             path: utils.normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
-            type: 'image'
+            mimeType: mimeType,
+            isDirectory: false
           });
         }
       }
@@ -885,7 +901,7 @@ function findAllImages(dir, basePath) {
   return results;
 }
 
-function searchFilesInDirectory(dir, query, basePath) {
+async function searchFilesInDirectory(dir, query, basePath) {
   let results = [];
 
   try {
@@ -896,12 +912,14 @@ function searchFilesInDirectory(dir, query, basePath) {
       const stats = fs.statSync(fullPath);
 
       if (!stats.isDirectory() && file.toLowerCase().includes(query.toLowerCase())) {
+        const mimeType = await utils.getFileType(fullPath);
         results.push({
           name: file,
           path: utils.normalizePath(path.relative(basePath, fullPath)),
           size: stats.size,
           mtime: stats.mtime,
-          type: utils.getFileType(path.extname(file).toLowerCase())
+          mimeType: mimeType,
+          isDirectory: false
         });
       }
     }
@@ -912,7 +930,7 @@ function searchFilesInDirectory(dir, query, basePath) {
   return results;
 }
 
-function findImagesInDirectory(dir, basePath) {
+async function findImagesInDirectory(dir, basePath) {
   let results = [];
 
   try {
@@ -923,14 +941,15 @@ function findImagesInDirectory(dir, basePath) {
       const stats = fs.statSync(fullPath);
 
       if (!stats.isDirectory()) {
-        const extension = path.extname(file).toLowerCase();
-        if (utils.getFileType(extension) === 'image') {
+        const mimeType = await utils.getFileType(fullPath);
+        if (mimeType.startsWith('image/')) {
           results.push({
             name: file,
             path: utils.normalizePath(path.relative(basePath, fullPath)),
             size: stats.size,
             mtime: stats.mtime,
-            type: 'image'
+            mimeType: mimeType,
+            isDirectory: false
           });
         }
       }
@@ -1042,21 +1061,35 @@ if (!isMainThread) {
   const { task, directories, query, basePath } = workerData;
 
   if (task === 'search') {
-    let results = [];
+    (async () => {
+      let results = [];
 
-    for (const dir of directories) {
-      results = results.concat(searchFiles(dir, query, basePath));
-    }
+      for (const dir of directories) {
+        try {
+          const searchResults = await searchFiles(dir, query, basePath);
+          results = results.concat(searchResults);
+        } catch (error) {
+          console.error(`Error searching in directory ${dir}:`, error);
+        }
+      }
 
-    parentPort.postMessage(results);
+      parentPort.postMessage(results);
+    })();
   } else if (task === 'findImages') {
-    let results = [];
+    (async () => {
+      let results = [];
 
-    for (const dir of directories) {
-      results = results.concat(findAllImages(dir, basePath));
-    }
+      for (const dir of directories) {
+        try {
+          const imageResults = await findAllImages(dir, basePath);
+          results = results.concat(imageResults);
+        } catch (error) {
+          console.error(`Error finding images in directory ${dir}:`, error);
+        }
+      }
 
-    parentPort.postMessage(results);
+      parentPort.postMessage(results);
+    })();
   }
 }
 

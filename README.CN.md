@@ -1,5 +1,15 @@
 # 功能
 
+## 说在前面
+
+- 什么是导航？（Navigation）
+
+> 我这里提到的导航，大多数情况下是指在同一文件夹下，同类型文件预览的切换。
+
+- 关于支持格式：
+
+> 在项目中，我在判断文件类型时使用了js的[mime](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
+
 ## Comic Preview
 
 ### 支持格式
@@ -65,9 +75,7 @@
 
 - [x] .mp4
 - [x] .mkv
-  - [ ] 有时候视频播放无声，未找到具体BUG源，猜测是音轨问题。
-- [ ] 其余格式待测（.avi, .mov, .wmv, .flv, .webm, .m4v, .mpg, .mpeg, .3gp, .ts）
-- [ ] .m3u8
+- [ ] .m3u8（特殊格式，待实现）
 
 ### 功能实现
 
@@ -133,6 +141,10 @@
 
 - 右键菜单
 
+### BUG
+
+- [ ] 有时候视频播放无声，未找到具体BUG源，猜测是音轨问题。
+
 ## Image Preview
 
 ### 支持格式
@@ -192,6 +204,38 @@
 - 默认的触摸延迟
 
 
-## Code Preview
+## Text Preview
 
 ### 支持格式
+
+- [x] text类型文件
+
+### 功能实现
+
+- [ ] ~~全屏模式~~（直接用响应式了）
+
+- [x] 代码高亮（基于[react-syntax-highlighter](https://github.com/react-syntax-highlighter/react-syntax-highlighter)）
+
+- [x] 控制部分：
+  - [x] 下载按钮
+  - [x] 关闭预览按钮
+
+### 示例
+
+![Text Preview](./example/text-preview-1.png)
+
+![Text Preview](./example/text-preview-2.png)
+
+### Text Preview 下禁用的浏览器默认行为
+
+无
+
+## EPUB Preview
+
+### 支持格式
+
+- [x] .epub
+
+### 功能实现
+
+### 示例

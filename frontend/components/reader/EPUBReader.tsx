@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ReactReader } from 'react-reader';
+import { ReactReader, ReactReaderStyle, type IReactReaderStyle } from 'react-reader';
 import { cn } from "@/lib/utils";
 import { Settings, ArrowRightToLine, ArrowLeftToLine } from 'lucide-react';
 
@@ -17,7 +17,8 @@ export const EPUBReader = ({
   const [location, setLocation] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isRTL, setIsRTL] = useState(false);
-  
+  const [darkMode, setDarkMode] = useState(true);
+
   const handleLocationChanged = (loc: string) => {
     setLocation(loc);
     localStorage.setItem(`epub-${src}`, loc);
@@ -44,7 +45,7 @@ export const EPUBReader = ({
 
   return (
     <div className={cn("h-full w-full relative", className)}>
-      <div className="h-full bg-white">
+      <div className="h-full">
         <ReactReader
           url={src}
           location={location}
@@ -54,12 +55,21 @@ export const EPUBReader = ({
             manager: "default"
           }}
           epubInitOptions={{
-            openAs: 'epub'
+            openAs: 'epub',
           }}
           isRTL={isRTL}
-          getRendition={(rendition) => {}}
-          tocChanged={() => {}}
           loadingView={<div>Loading...</div>}
+          readerStyles={ darkMode ? darkReaderTheme : lightReaderTheme}
+          getRendition={rendition => {
+            if (darkMode) {
+              rendition.themes.override('color', '#fff')
+              rendition.themes.override('background', '#000')
+            } else {
+              rendition.themes.override('color', '#000')
+              rendition.themes.override('background', '#fff')
+            }
+          }}
+          tocChanged={() => {}}
         />
       </div>
       
@@ -88,5 +98,51 @@ export const EPUBReader = ({
     </div>
   );
 };
+
+const lightReaderTheme: IReactReaderStyle = {
+  ...ReactReaderStyle,
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    transition: undefined,
+  },
+}
+
+const darkReaderTheme: IReactReaderStyle = {
+  ...ReactReaderStyle,
+  arrow: {
+    ...ReactReaderStyle.arrow,
+    color: 'white',
+  },
+  arrowHover: {
+    ...ReactReaderStyle.arrowHover,
+    color: '#ccc',
+  },
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    backgroundColor: '#000',
+    transition: undefined,
+  },
+  titleArea: {
+    ...ReactReaderStyle.titleArea,
+    color: '#ccc',
+  },
+  tocArea: {
+    ...ReactReaderStyle.tocArea,
+    background: '#111',
+  },
+  tocButtonExpanded: {
+    ...ReactReaderStyle.tocButtonExpanded,
+    background: '#222',
+  },
+  tocButtonBar: {
+    ...ReactReaderStyle.tocButtonBar,
+    background: '#fff',
+  },
+  tocButton: {
+    ...ReactReaderStyle.tocButton,
+    color: 'white',
+  },
+}
+
 
 export default EPUBReader;

@@ -1,23 +1,25 @@
 import { cn } from "@/lib/utils";
-import { formatFileSize } from "@/lib/utils";
+import { formatFileSize, getPreviewType } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Folder, File, FileText, FileArchive, Image, Music, Video, FileCode } from "lucide-react";
+import { Folder, File, FileText, FileArchive, Image, Music, Video } from "lucide-react";
 
 interface FileItemProps {
   name: string;
   path: string;
   size: number;
   mtime: string;
-  type: string;
+  isDirectory: boolean;
+  mimeType?: string;
   isSearching: boolean;
   onClick: () => void;
   className?: string;
 }
 
 export function FileItemListView(
-  { name, path, size, mtime, type, isSearching, onClick, className }: FileItemProps
+  { name, path, size, mtime, isDirectory, mimeType, isSearching, onClick, className }: FileItemProps
 ) {
   const date = new Date(mtime).toLocaleDateString();
+  const type = isDirectory ? 'directory' : getPreviewType(mimeType || 'application/octet-stream');
 
   const getIconComponent = () => {
     switch (type) {
@@ -25,9 +27,9 @@ export function FileItemListView(
       case 'image': return Image;
       case 'video': return Video;
       case 'audio': return Music;
-      case 'document': return FileText;
+      case 'text': case 'pdf': case 'epub': return FileText;
       case 'archive': return FileArchive;
-      case 'code': return FileCode;
+      case 'comic': return FileArchive;
       default: return File;
     }
   };
@@ -74,7 +76,7 @@ export function FileItemListView(
         </TooltipProvider>
       )}
       <div className="w-24 hidden md:block text-right text-xs sm:text-sm text-muted-foreground">
-        {type !== 'directory' && formatFileSize(size)}
+        {!isDirectory && formatFileSize(size)}
       </div>
       <div className="w-32 hidden md:block text-right text-xs sm:text-sm text-muted-foreground">
         {date}

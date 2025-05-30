@@ -30,15 +30,14 @@ function initializeDatabase() {
         path TEXT NOT NULL UNIQUE,
         size INTEGER NOT NULL,
         mtime TEXT NOT NULL,
-        type TEXT NOT NULL,
-        extension TEXT,
-        directory_path TEXT NOT NULL
+        mimeType TEXT NOT NULL,
+        isDirectory INTEGER NOT NULL
       );
       
       CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
       CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
-      CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
-      CREATE INDEX IF NOT EXISTS idx_files_directory ON files(directory_path);
+      CREATE INDEX IF NOT EXISTS idx_files_mimeType ON files(mimeType);
+      CREATE INDEX IF NOT EXISTS idx_files_isDirectory ON files(isDirectory);
     `);
     
     // Add metadata table if it doesn't exist
@@ -216,8 +215,8 @@ function saveFileBatch(files) {
   if (!db) return 0;
   
   const insert = db.prepare(`
-    INSERT OR REPLACE INTO files (name, path, size, mtime, type, extension, directory_path) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO files (name, path, size, mtime, mimeType, isDirectory) 
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   
   const insertMany = db.transaction((filesList) => {
@@ -228,9 +227,8 @@ function saveFileBatch(files) {
         file.path,
         file.size,
         file.mtime,
-        file.type,
-        file.extension,
-        file.directory_path
+        file.mimeType,
+        file.isDirectory ? 1 : 0
       );
       count++;
     }
@@ -293,14 +291,18 @@ function searchIndex(query, directory = '') {
     const dirPath = directory ? `${directory}%` : '%';
     
     const results = db.prepare(`
-      SELECT name, path, size, mtime, type 
+      SELECT name, path, size, mtime, mimeType, isDirectory 
       FROM files 
       WHERE (name LIKE ? OR path LIKE ?) 
-        AND (? = '%' OR path LIKE ? OR directory_path = ?)
+        AND (? = '%' OR path LIKE ?)
       LIMIT 1000
-    `).all(searchTerm, searchTerm, dirPath, dirPath, directory);
+    `).all(searchTerm, searchTerm, dirPath, dirPath);
     
-    return results;
+    // Convert isDirectory from integer to boolean
+    return results.map(file => ({
+      ...file,
+      isDirectory: !!file.isDirectory
+    }));
   } catch (error) {
     console.error('Error searching index:', error);
     return [];
@@ -314,14 +316,18 @@ function findImagesInIndex(directory = '') {
     const dirPath = directory ? `${directory}%` : '%';
     
     const results = db.prepare(`
-      SELECT name, path, size, mtime, type 
+      SELECT name, path, size, mtime, mimeType, isDirectory 
       FROM files 
-      WHERE type = 'image' 
-        AND (? = '%' OR path LIKE ? OR directory_path = ?)
+      WHERE mimeType LIKE 'image/%'
+        AND (? = '%' OR path LIKE ?)
       LIMIT 5000
-    `).all(dirPath, dirPath, directory);
+    `).all(dirPath, dirPath);
     
-    return results;
+    // Convert isDirectory from integer to boolean
+    return results.map(file => ({
+      ...file,
+      isDirectory: !!file.isDirectory
+    }));
   } catch (error) {
     console.error('Error finding images in index:', error);
     return [];
@@ -335,15 +341,17 @@ if (!isMainThread) {
   if (task === 'indexFiles') {
     const files = [];
     
-    for (const dir of directories) {
-      try {
-        indexFilesInDirectory(dir, basePath, files);
-      } catch (error) {
-        console.error(`Error indexing directory ${dir}:`, error);
+    (async () => {
+      for (const dir of directories) {
+        try {
+          await indexFilesInDirectory(dir, basePath, files);
+        } catch (error) {
+          console.error(`Error indexing directory ${dir}:`, error);
+        }
       }
-    }
-    
-    parentPort.postMessage(files);
+      
+      parentPort.postMessage(files);
+    })();
   } 
   else if (task === 'countFiles') {
     let count = 0;
@@ -389,7 +397,7 @@ function countFilesInDirectory(directory) {
 }
 
 // Index files in a directory recursively
-function indexFilesInDirectory(directory, basePath, results) {
+async function indexFilesInDirectory(directory, basePath, results) {
   try {
     const files = fs.readdirSync(directory);
     
@@ -398,23 +406,23 @@ function indexFilesInDirectory(directory, basePath, results) {
       
       try {
         const stats = fs.statSync(fullPath);
+        const isDir = stats.isDirectory();
         
-        if (stats.isDirectory()) {
-          indexFilesInDirectory(fullPath, basePath, results);
+        if (isDir) {
+          await indexFilesInDirectory(fullPath, basePath, results);
         } else {
-          const extension = path.extname(file).toLowerCase();
           const relativePath = path.relative(basePath, fullPath);
           const normalizedPath = utils.normalizePath(relativePath);
-          const directoryPath = utils.normalizePath(path.relative(basePath, directory));
+          
+          const mimeType = await utils.getFileType(fullPath);
           
           results.push({
             name: file,
             path: normalizedPath,
             size: stats.size,
             mtime: stats.mtime.toISOString(),
-            type: utils.getFileType(extension),
-            extension: extension,
-            directory_path: directoryPath
+            mimeType: mimeType,
+            isDirectory: false
           });
         }
       } catch (error) {

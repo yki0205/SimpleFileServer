@@ -1,7 +1,7 @@
 "use client";
 
 import "./scrollbar.css";
-import { cn } from "@/lib/utils";
+import { cn, getPreviewType } from "@/lib/utils";
 import axios from "axios";
 import React, { Suspense, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
-  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout, 
+  Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2
 } from "lucide-react";
 
@@ -25,7 +25,7 @@ import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
 import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog } from "@/components/dialog";
 
-import { ImagePreview, VideoPreview, AudioPreview, CodePreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
+import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
 
 
 interface FileData {
@@ -33,7 +33,8 @@ interface FileData {
   path: string;
   size: number;
   mtime: string;
-  type: string;
+  isDirectory: boolean;
+  mimeType?: string;
   cover?: string;
 }
 
@@ -65,7 +66,7 @@ interface FileRowProps {
   data: {
     files: FileData[];
     isSearching: boolean;
-    onFileClick: (path: string, type: string) => void;
+    onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
@@ -83,7 +84,7 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
           <FileItemListView
             {...file}
             isSearching={isSearching}
-            onClick={() => onFileClick(file.path, file.type)}
+            onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
             className="text-white hover:text-black hover:bg-accent"
           />
         </ContextMenuTrigger>
@@ -113,7 +114,7 @@ interface FileCellProps {
   data: {
     files: FileData[];
     columnCount: number;
-    onFileClick: (path: string, type: string) => void;
+    onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
@@ -134,7 +135,7 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
           <FileItemGridView
             {...file}
             cover=""
-            onClick={() => onFileClick(file.path, file.type)}
+            onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
             className="text-black hover:text-gray-600 hover:bg-accent"
           />
         </ContextMenuTrigger>
@@ -164,7 +165,7 @@ interface ImageCellProps {
   data: {
     files: FileData[];
     columnCount: number;
-    onFileClick: (path: string, type: string) => void;
+    onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
@@ -178,7 +179,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
 
   const file = files[index];
 
-  if (file.type === 'image') {
+  if (file.mimeType?.startsWith('image/')) {
     return (
       <div style={style} className="p-1">
         <ContextMenu>
@@ -187,7 +188,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               src={`/api/raw?path=${encodeURIComponent(file.path)}`}
               thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
               alt={file.name}
-              onClick={() => onFileClick(file.path, file.type)}
+              onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="w-full h-full object-cover rounded-md cursor-pointer"
               loading="eager"
             />
@@ -209,7 +210,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
         </ContextMenu>
       </div>
     );
-  } else if (file.type === 'video') {
+  } else if (file.mimeType?.startsWith('video/')) {
     return (
       <div style={style} className="p-1">
         <ContextMenu>
@@ -217,7 +218,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             <VideoItem
               alt={file.name}
               thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
-              onClick={() => onFileClick(file.path, file.type)}
+              onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="w-full h-full object-cover rounded-md cursor-pointer"
               loading="eager"
             />
@@ -247,7 +248,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             <FileItemGridView
               {...file}
               cover={file.cover ? `/api/thumbnail?path=${encodeURIComponent(file.cover)}&width=300&quality=80` : undefined}
-              onClick={() => onFileClick(file.path, file.type)}
+              onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="text-black hover:text-gray-600 hover:bg-accent"
             />
           </ContextMenuTrigger>
@@ -279,7 +280,7 @@ interface MasonryCellProps {
     columnCount: number;
     columnWidth: number;
     direction: 'ltr' | 'rtl';
-    onFileClick: (path: string, type: string) => void;
+    onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
@@ -316,7 +317,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
                 src={`/api/raw?path=${encodeURIComponent(file.path)}`}
                 thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
                 alt={file.name}
-                onClick={() => onFileClick(file.path, file.type)}
+                onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
                 className="w-full h-auto rounded-md"
                 loading="lazy"
               />
@@ -376,7 +377,7 @@ function generateUniqueId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  
+
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 15);
 }
 
@@ -385,11 +386,13 @@ const previewSupported: Record<string, boolean> = {
   'image': true,
   'video': true,
   'audio': true,
-  'code': true,
-  'document': true,
-  'comic': true,
+  'text': true,
+  'application': false,
   'pdf': true,
-  'epub': true
+  'epub': true,
+  'comic': true,
+  'archive': false,
+  'other': false,
 }
 
 
@@ -427,7 +430,7 @@ function FileExplorerContent() {
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // EXPERIMENTAL FEATURE FOR IMAGE VIEW
-  const [showDirectoryCovers, setShowDirectoryCovers] = useState(true);
+  const [showDirectoryCovers, setShowDirectoryCovers] = useState(false);
 
   // Create refs for the virtualized lists/grids
   const listRef = useRef<List>(null);
@@ -494,7 +497,7 @@ function FileExplorerContent() {
   const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreview } = useQuery({
     queryKey: ['fileContent', preview.path],
     queryFn: async () => {
-      if (!preview.isOpen || (preview.type !== 'code' && preview.type !== 'document')) {
+      if (!preview.isOpen || (preview.type !== 'text')) {
         return null;
       }
 
@@ -511,7 +514,7 @@ function FileExplorerContent() {
         return `Error loading file: ${error.message || 'Unknown error'}`;
       }
     },
-    enabled: preview.isOpen && (preview.type === 'code' || preview.type === 'document'),
+    enabled: preview.isOpen && (preview.type === 'text'),
     retry: false,
     refetchOnWindowFocus: false
   });
@@ -538,8 +541,8 @@ function FileExplorerContent() {
     }
 
     return [...files].sort((a, b) => {
-      if (a.type === 'directory' && b.type !== 'directory') return -1;
-      if (a.type !== 'directory' && b.type === 'directory') return 1;
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
       if (sortBy === 'name') {
         const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
         return sortOrder === 'asc'
@@ -594,23 +597,13 @@ function FileExplorerContent() {
   }
 
   const scrollToTop = () => {
-    console.log("Scrolling to top", { viewMode, useMasonry });
-    console.log("Refs:", {
-      list: listRef.current,
-      grid: gridRef.current,
-      imageGrid: imageGridRef.current,
-      masonry: masonryRef.current
-    });
-
     if (viewMode === 'list') {
       if (listRef.current) {
-        console.log("Scrolling list to top");
         // For Lists, scrollToItem is the most reliable method
         listRef.current.scrollToItem(0, "start");
       }
     } else if (viewMode === 'grid') {
       if (gridRef.current) {
-        console.log("Scrolling grid to top");
         // For Grids, scrollToItem with columnIndex and rowIndex
         gridRef.current.scrollToItem({
           columnIndex: 0,
@@ -620,7 +613,6 @@ function FileExplorerContent() {
       }
     } else if (viewMode === 'image' || (viewMode === 'imageOnly' && !useMasonry)) {
       if (imageGridRef.current) {
-        console.log("Scrolling image grid to top");
         // For Image Grids, same as regular grids
         imageGridRef.current.scrollToItem({
           columnIndex: 0,
@@ -629,7 +621,6 @@ function FileExplorerContent() {
         });
       }
     } else if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
-      console.log("Scrolling masonry to top");
       masonryRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -640,7 +631,7 @@ function FileExplorerContent() {
 
 
 
-  const openPreview = useCallback((path: string, type: string) => {
+  const openPreview = useCallback((path: string, mimeType: string) => {
     const currentIndex = sortedFiles.findIndex(file => file.path === path);
     if (currentIndex === -1) {
       console.error('File not found in sortedFiles:', path);
@@ -650,7 +641,7 @@ function FileExplorerContent() {
     setPreview({
       isOpen: true,
       path,
-      type,
+      type: getPreviewType(mimeType),
       currentIndex
     });
   }, [sortedFiles]);
@@ -675,11 +666,14 @@ function FileExplorerContent() {
       } else {
         newIndex = (preview.currentIndex - 1 + sortedFiles.length) % sortedFiles.length;
       }
-      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].type);
+      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].mimeType || '');
       return;
     }
 
-    const sameTypeFiles = sortedFiles.filter(file => file.type === preview.type);
+    const sameTypeFiles = sortedFiles.filter(file => {
+      const previewType = getPreviewType(file.mimeType || '');
+      return previewType === preview.type;
+    });
     if (sameTypeFiles.length <= 1) return;
     const currentIndex = sameTypeFiles.findIndex(file => file.path === preview.path);
 
@@ -690,17 +684,20 @@ function FileExplorerContent() {
       newIndex = (currentIndex - 1 + sameTypeFiles.length) % sameTypeFiles.length;
     }
 
-    openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].type);
+    openPreview(sameTypeFiles[newIndex].path, sameTypeFiles[newIndex].mimeType || '');
   }
 
-  const handleFileClick = useCallback((path: string, type: string) => {
-    if (type === 'directory') {
+  const handleFileClick = useCallback((path: string, mimeType: string, isDirectory: boolean) => {
+    console.log("Handling file click for", { path, mimeType, isDirectory });
+    if (isDirectory) {
       navigateTo(path, '');
-    } else if (previewSupported[type as keyof typeof previewSupported]) {
-      openPreview(path, type);
     } else {
-      setFileToDownload(path);
-      setDownloadComfirmDialogOpen(true);
+      if (previewSupported[getPreviewType(mimeType)]) {
+        openPreview(path, mimeType);
+      } else {
+        setFileToDownload(path);
+        setDownloadComfirmDialogOpen(true);
+      }
     }
   }, [openPreview]);
 
@@ -1671,9 +1668,9 @@ function FileExplorerContent() {
             />
           )}
 
-          {/* Code preview & Document preview */}
-          {(preview.type === 'code' || preview.type === 'document') && (
-            <CodePreview
+          {/* Text preview */}
+          {(preview.type === 'text') && (
+            <TextPreview
               isOpen={preview.isOpen}
               fileName={preview.path.split('/').pop()}
               fileExtension={getFileExtension(preview.path)}

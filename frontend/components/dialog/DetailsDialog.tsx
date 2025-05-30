@@ -1,15 +1,16 @@
 import { cn } from "@/lib/utils"
-import { formatFileSize } from "@/lib/utils"
+import { formatFileSize, getPreviewType } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Folder, File, FileText, FileArchive, Image, Music, Video, FileCode } from "lucide-react"
+import { Folder, File, FileText, FileArchive, Image, Music, Video, BookOpen } from "lucide-react"
 
 interface FileData {
   name: string;
   path: string;
   size: number;
   mtime: string;
-  type: string;
+  isDirectory: boolean;
+  mimeType?: string;
   cover?: string;
 }
 
@@ -22,16 +23,17 @@ interface DetailsDialogProps {
 
 export function DetailsDialog({ open, setOpen, file, className }: DetailsDialogProps) {
   const date = new Date(file.mtime).toLocaleString();
+  const type = file.isDirectory ? 'directory' : getPreviewType(file.mimeType || 'application/octet-stream');
 
   const getIconComponent = () => {
-    switch (file.type) {
+    switch (type) {
       case 'directory': return Folder;
       case 'image': return Image;
       case 'video': return Video;
       case 'audio': return Music;
-      case 'document': return FileText;
+      case 'text': case 'pdf': case 'epub': return FileText;
       case 'archive': return FileArchive;
-      case 'code': return FileCode;
+      case 'comic': return BookOpen;
       default: return File;
     }
   };
@@ -58,12 +60,12 @@ export function DetailsDialog({ open, setOpen, file, className }: DetailsDialogP
         
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mt-4">
           <div className="text-white/60">Type:</div>
-          <div className="text-white font-medium text-ellipsis">{file.type}</div>
+          <div className="text-white font-medium text-ellipsis">{type}</div>
           
           <div className="text-white/60">Location:</div>
           <div className="text-white font-medium break-all hyphens-auto">{file.path}</div>
           
-          {file.type !== 'directory' && (
+          {!file.isDirectory && (
             <>
               <div className="text-white/60">Size:</div>
               <div className="text-white font-medium text-ellipsis">{formatFileSize(file.size)}</div>
