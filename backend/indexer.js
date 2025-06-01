@@ -31,29 +31,31 @@ const SQL = {
       value TEXT
     );
   `,
-  COUNT_FILES: 'SELECT COUNT(*) as count FROM files',
+
   GET_LAST_BUILT: "SELECT value FROM metadata WHERE key = 'last_built'",
-  DELETE_ALL_FILES: 'DELETE FROM files',
-  INSERT_FILE: `
-    INSERT OR REPLACE INTO files (name, path, size, mtime, mimeType, isDirectory) 
-    VALUES (?, ?, ?, ?, ?, ?)
-  `,
   UPDATE_METADATA: 'INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)',
+
+  COUNT_FILES: 'SELECT COUNT(*) as count FROM files',
+  INSERT_FILE: `
+  INSERT OR REPLACE INTO files (name, path, size, mtime, mimeType, isDirectory) 
+  VALUES (?, ?, ?, ?, ?, ?)
+  `,
   SEARCH_FILES: `
-    SELECT name, path, size, mtime, mimeType, isDirectory 
-    FROM files 
-    WHERE (name LIKE ? OR path LIKE ?) 
-      AND (? = '%' OR path LIKE ?)
-    LIMIT 1000
+  SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE (name LIKE ? OR path LIKE ?) 
+  AND (? = '%' OR path LIKE ?)
+  LIMIT 1000
   `,
   FIND_IMAGES: `
-    SELECT name, path, size, mtime, mimeType, isDirectory 
-    FROM files 
-    WHERE mimeType LIKE 'image/%'
-      AND (? = '%' OR path LIKE ?)
-    LIMIT 5000
+  SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE mimeType LIKE 'image/%'
+  AND (? = '%' OR path LIKE ?)
+  LIMIT 5000
   `,
-  DELETE_FILE: 'DELETE FROM files WHERE path = ?'
+  DELETE_FILE: 'DELETE FROM files WHERE path = ?',
+  DELETE_ALL_FILES: 'DELETE FROM files',
 };
 
 let db = null;
@@ -61,9 +63,9 @@ let isIndexBuilding = false;
 let indexProgress = {
   total: 0,
   processed: 0,
-  lastUpdated: null,
+  errors: 0,
   startTime: null,
-  filesPerSecond: 0
+  lastUpdated: null,
 };
 
 function initializeDatabase() {
@@ -138,207 +140,22 @@ function clearIndex() {
   }
 }
 
-async function buildIndex(basePath) {
-  if (isIndexBuilding) {
-    return { 
-      success: false, 
-      message: 'Index build already in progress' 
-    };
-  }
-  
-  isIndexBuilding = true;
-  const now = new Date().toISOString();
-  indexProgress = {
-    total: 0,
-    processed: 0,
-    lastUpdated: now,
-    startTime: now,
-    filesPerSecond: 0
-  };
+function deleteFromIndex(filePath) {
+  if (!db) return false;
   
   try {
-    clearIndex();
+    const result = db.prepare(SQL.DELETE_FILE).run(filePath);
     
-    console.log('Counting files in', basePath);
-    const fileCount = await countFiles(basePath);
-    indexProgress.total = fileCount;
-    console.log(`Found ${fileCount} files to index`);
-    
-    const cpuCount = os.cpus().length;
-    const workerCount = Math.max(2, cpuCount * 2); 
-    
-    console.log(`Starting indexing with ${workerCount} workers`);
-    
-    const allDirectories = await collectDirectories(basePath);
-    
-    allDirectories.sort((a, b) => {
-      const depthA = a.split(path.sep).length;
-      const depthB = b.split(path.sep).length;
-      return depthA - depthB;
-    });
-    
-    const workerDirectories = Array(workerCount).fill().map(() => []);
-    
-    for (let i = 0; i < allDirectories.length; i++) {
-      const workerIndex = i % workerCount;
-      workerDirectories[workerIndex].push(allDirectories[i]);
+    if (result.changes > 0) {
+      console.log(`Removed ${filePath} from index`);
+      return true;
     }
     
-    const workerPromises = workerDirectories.map(dirs => 
-      createIndexWorker(dirs, basePath)
-    );
-    
-    const workerResults = await Promise.all(workerPromises);
-    
-    let totalIndexed = 0;
-    
-    if (!db) initializeDatabase();
-    
-    const finalTransaction = db.transaction(() => {
-      for (const filesList of workerResults) {
-        const count = saveFileBatch(filesList);
-        totalIndexed += count;
-        console.log(`Saved batch of ${count} files, total: ${totalIndexed}`);
-      }
-      
-      const completionTime = new Date().toISOString();
-      db.prepare(SQL.UPDATE_METADATA).run('last_built', completionTime);
-      
-      return totalIndexed;
-    });
-    
-    totalIndexed = finalTransaction();
-    
-    console.log(`Indexing complete. Indexed ${totalIndexed} files.`);
-    
-    db.pragma('wal_checkpoint(FULL)');
-    
-    isIndexBuilding = false;
-    indexProgress = {
-      total: fileCount,
-      processed: fileCount,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    return { 
-      success: true, 
-      stats: { 
-        fileCount: totalIndexed,
-        lastBuilt: now 
-      } 
-    };
+    return false;
   } catch (error) {
-    console.error('Error building index:', error);
-    isIndexBuilding = false;
-    return { 
-      success: false, 
-      message: error.message 
-    };
+    console.error('Error deleting file from index:', error);
+    return false;
   }
-}
-
-function saveFileBatch(files) {
-  if (!db) {
-    console.error('Database not initialized in saveFileBatch');
-    return 0;
-  }
-  
-  const insert = db.prepare(SQL.INSERT_FILE);
-  
-  const insertMany = db.transaction((filesList) => {
-    let count = 0;
-    for (const file of filesList) {
-      try {
-        insert.run(
-          file.name,
-          file.path,
-          file.size,
-          file.mtime,
-          file.mimeType,
-          file.isDirectory ? 1 : 0
-        );
-        count++;
-      } catch (error) {
-        console.error(`Error inserting file ${file.path}:`, error.message);
-      }
-    }
-    return count;
-  });
-  
-  try {
-    const count = insertMany(files);
-    
-    indexProgress.processed += count;
-    indexProgress.lastUpdated = new Date().toISOString();
-    
-    if (indexProgress.startTime) {
-      const elapsedSeconds = (new Date() - new Date(indexProgress.startTime)) / 1000;
-      if (elapsedSeconds > 0) {
-        indexProgress.filesPerSecond = Math.round(indexProgress.processed / elapsedSeconds);
-      }
-    }
-    
-    return count;
-  } catch (error) {
-    console.error('Error saving file batch:', error);
-    return 0;
-  }
-}
-
-async function countFiles(directory) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(__filename, {
-      workerData: { task: 'countFiles', directory }
-    });
-    
-    worker.on('message', resolve);
-    worker.on('error', reject);
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Worker stopped with exit code ${code}`));
-      }
-    });
-  });
-}
-
-function createIndexWorker(directories, basePath) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(__filename, {
-      workerData: { 
-        task: 'indexFiles', 
-        directories, 
-        basePath,
-        batchSize: 1000
-      }
-    });
-    
-    let allFiles = [];
-    
-    worker.on('message', (message) => {
-      if (message.type === 'batch') {
-        allFiles = allFiles.concat(message.files);
-        
-        indexProgress.processed += message.files.length;
-        indexProgress.lastUpdated = new Date().toISOString();
-        
-        if (indexProgress.startTime) {
-          const elapsedSeconds = (new Date() - new Date(indexProgress.startTime)) / 1000;
-          if (elapsedSeconds > 0) {
-            indexProgress.filesPerSecond = Math.round(indexProgress.processed / elapsedSeconds);
-          }
-        }
-      } else if (message.type === 'complete') {
-        resolve(allFiles);
-      }
-    });
-    
-    worker.on('error', reject);
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Worker stopped with exit code ${code}`));
-      }
-    });
-  });
 }
 
 function searchIndex(query, directory = '') {
@@ -378,8 +195,211 @@ function findImagesInIndex(directory = '') {
   }
 }
 
+function saveFileBatch(files) {
+  if (!db) {
+    console.error('Database not initialized in saveFileBatch');
+    return 0;
+  }
+  
+  const insert = db.prepare(SQL.INSERT_FILE);
+  
+  const insertMany = db.transaction((filesList) => {
+    let count = 0;
+    for (const file of filesList) {
+      try {
+        insert.run(
+          file.name,
+          file.path,
+          file.size,
+          file.mtime,
+          file.mimeType,
+          file.isDirectory ? 1 : 0
+        );
+        count++;
+      } catch (error) {
+        console.error(`Error inserting file ${file.path}:`, error.message);
+      }
+    }
+    return count;
+  });
+  
+  try {
+    const count = insertMany(files);
+    
+    indexProgress.lastUpdated = new Date().toISOString();
+    
+    return count;
+  } catch (error) {
+    console.error('Error saving file batch:', error);
+    return 0;
+  }
+}
+
+
+
+async function countFiles(directory) {
+  let count = 0;
+  
+  try {
+    const files = await fs.promises.readdir(directory);
+    
+    const batchSize = config.countFilesBatchSize || 100;
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const counts = await Promise.all(batch.map(async (file) => {
+        const fullPath = path.join(directory, file);
+        
+        try {
+          const stats = await fs.promises.stat(fullPath);
+          
+          if (stats.isDirectory()) {
+            return await countFiles(fullPath);
+          } else {
+            return 1;
+          }
+        } catch (error) {
+          console.error(`Error accessing ${fullPath}:`, error.message);
+          return 0;
+        }
+      }));
+      
+      count += counts.reduce((sum, c) => sum + c, 0);
+    }
+  } catch (error) {
+    console.error(`Error reading directory ${directory}:`, error.message);
+  }
+  
+  return count;
+}
+
+async function createCountWorker(directory) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { task: 'countFiles', directory }
+    });
+    
+    worker.on('message', resolve);
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
+}
+
+
+
+const mimeTypeCache = new Map();
+
+async function indexFiles(directory, basePath, results, batchSize, workerIndex = 0, workerCount = 1) {
+  try {
+    const files = await fs.promises.readdir(directory);
+    
+    const processBatch = async (batch) => {
+      return Promise.all(batch.map(async (file) => {
+        const fullPath = path.join(directory, file);
+        
+        try {
+          const stats = await fs.promises.stat(fullPath);
+          const isDir = stats.isDirectory();
+          
+          if (isDir) {
+            await indexFiles(fullPath, basePath, results, batchSize, workerIndex, workerCount);
+          } else {
+            // Partition files among workers using a simple hash to ensure each file is processed by only one worker
+            const fileHash = Math.abs(fullPath.split('').reduce((hash, char) => {
+              return ((hash << 5) - hash) + char.charCodeAt(0);
+            }, 0));
+            
+            // Only process this file if its hash modulo workerCount equals this worker's index
+            if (fileHash % workerCount === workerIndex) {
+              const relativePath = path.relative(basePath, fullPath);
+              const normalizedPath = utils.normalizePath(relativePath);
+              const fileExt = path.extname(file).toLowerCase();
+              
+              let mimeType;
+              if (fileExt && mimeTypeCache.has(fileExt)) {
+                mimeType = mimeTypeCache.get(fileExt);
+              } else {
+                mimeType = await utils.getFileType(fullPath);
+                if (fileExt) {
+                  mimeTypeCache.set(fileExt, mimeType);
+                }
+              }
+              
+              results.push({
+                name: file,
+                path: normalizedPath,
+                size: stats.size,
+                mtime: stats.mtime.toISOString(),
+                mimeType: mimeType,
+                isDirectory: false
+              });
+              
+              if (results.length >= batchSize) {
+                const batch = [...results];
+                results.length = 0;
+                
+                parentPort.postMessage({
+                  type: 'batch',
+                  files: batch
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error accessing ${fullPath}:`, error.message);
+        }
+      }));
+    };
+    
+    const processingBatchSize = 100;
+    for (let i = 0; i < files.length; i += processingBatchSize) {
+      const batch = files.slice(i, i + processingBatchSize);
+      await processBatch(batch);
+    }
+  } catch (error) {
+    console.error(`Error reading directory ${directory}:`, error.message);
+  }
+}
+
+function createIndexWorker(directories, basePath, workerIndex, workerCount) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { 
+        task: 'indexFiles', 
+        directories, 
+        basePath,
+        batchSize: config.indexBatchSize || 100,
+        workerIndex,
+        workerCount
+      }
+    });
+    
+    let allFiles = [];
+    
+    worker.on('message', (message) => {
+      if (message.type === 'batch') {
+        allFiles = allFiles.concat(message.files);
+        indexProgress.processed += message.files.length;
+      } else if (message.type === 'complete') {
+        resolve(allFiles);
+      }
+    });
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
+}
+
+
+
 if (!isMainThread) {
-  const { task, directories, basePath, directory, batchSize = 1000 } = workerData;
+  const { task, directories, basePath, directory, batchSize = 1000, workerIndex = 0, workerCount = 1 } = workerData;
   
   if (task === 'indexFiles') {
     const taskQueue = [...directories];
@@ -389,7 +409,7 @@ if (!isMainThread) {
       while (taskQueue.length > 0) {
         const dir = taskQueue.shift();
         try {
-          await indexFilesInDirectory(dir, basePath, currentFiles, batchSize);
+          await indexFiles(dir, basePath, currentFiles, batchSize, workerIndex, workerCount);
         } catch (error) {
           console.error(`Error indexing directory ${dir}:`, error);
         }
@@ -412,7 +432,7 @@ if (!isMainThread) {
       let count = 0;
       
       try {
-        count = await countFilesInDirectoryAsync(directory);
+        count = await countFiles(directory);
       } catch (error) {
         console.error(`Error counting files in ${directory}:`, error);
       }
@@ -422,190 +442,102 @@ if (!isMainThread) {
   }
 }
 
-async function countFilesInDirectoryAsync(directory) {
-  let count = 0;
-  
-  try {
-    const files = await fs.promises.readdir(directory);
-    
-    const batchSize = 100;
-    for (let i = 0; i < files.length; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
-      const counts = await Promise.all(batch.map(async (file) => {
-        const fullPath = path.join(directory, file);
-        
-        try {
-          const stats = await fs.promises.stat(fullPath);
-          
-          if (stats.isDirectory()) {
-            return await countFilesInDirectoryAsync(fullPath);
-          } else {
-            return 1;
-          }
-        } catch (error) {
-          console.error(`Error accessing ${fullPath}:`, error.message);
-          return 0;
-        }
-      }));
-      
-      count += counts.reduce((sum, c) => sum + c, 0);
-    }
-  } catch (error) {
-    console.error(`Error reading directory ${directory}:`, error.message);
-  }
-  
-  return count;
-}
 
-function countFilesInDirectory(directory) {
-  let count = 0;
-  
-  try {
-    const files = fs.readdirSync(directory);
-    
-    for (const file of files) {
-      const fullPath = path.join(directory, file);
-      
-      try {
-        const stats = fs.statSync(fullPath);
-        
-        if (stats.isDirectory()) {
-          count += countFilesInDirectory(fullPath);
-        } else {
-          count++;
-        }
-      } catch (error) {
-        console.error(`Error accessing ${fullPath}:`, error.message);
-      }
-    }
-  } catch (error) {
-    console.error(`Error reading directory ${directory}:`, error.message);
-  }
-  
-  return count;
-}
 
-const mimeTypeCache = new Map();
-
-async function indexFilesInDirectory(directory, basePath, results, batchSize) {
-  try {
-    const files = await fs.promises.readdir(directory);
-    
-    const processBatch = async (batch) => {
-      return Promise.all(batch.map(async (file) => {
-        const fullPath = path.join(directory, file);
-        
-        try {
-          const stats = await fs.promises.stat(fullPath);
-          const isDir = stats.isDirectory();
-          
-          if (isDir) {
-            await indexFilesInDirectory(fullPath, basePath, results, batchSize);
-          } else {
-            const relativePath = path.relative(basePath, fullPath);
-            const normalizedPath = utils.normalizePath(relativePath);
-            const fileExt = path.extname(file).toLowerCase();
-            
-            let mimeType;
-            if (fileExt && mimeTypeCache.has(fileExt)) {
-              mimeType = mimeTypeCache.get(fileExt);
-            } else {
-              mimeType = await utils.getFileType(fullPath);
-              if (fileExt) {
-                mimeTypeCache.set(fileExt, mimeType);
-              }
-            }
-            
-            results.push({
-              name: file,
-              path: normalizedPath,
-              size: stats.size,
-              mtime: stats.mtime.toISOString(),
-              mimeType: mimeType,
-              isDirectory: false
-            });
-            
-            if (results.length >= batchSize) {
-              const batch = [...results];
-              results.length = 0;
-              
-              parentPort.postMessage({
-                type: 'batch',
-                files: batch
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`Error accessing ${fullPath}:`, error.message);
-        }
-      }));
+async function buildIndex(basePath) {
+  if (isIndexBuilding) {
+    return { 
+      success: false, 
+      message: 'Index build already in progress' 
     };
-    
-    const processingBatchSize = 100;
-    for (let i = 0; i < files.length; i += processingBatchSize) {
-      const batch = files.slice(i, i + processingBatchSize);
-      await processBatch(batch);
-    }
-  } catch (error) {
-    console.error(`Error reading directory ${directory}:`, error.message);
   }
-}
-
-async function collectDirectories(directory) {
-  const directories = [directory];
+  
+  isIndexBuilding = true;
+  const now = new Date().toISOString();
+  indexProgress = {
+    total: 0,
+    processed: 0,
+    errors: 0,
+    lastUpdated: now,
+    startTime: now,
+  };
   
   try {
-    const files = await fs.promises.readdir(directory);
+    clearIndex();
     
-    for (const file of files) {
-      const fullPath = path.join(directory, file);
-      
-      try {
-        const stats = await fs.promises.stat(fullPath);
-        
-        if (stats.isDirectory()) {
-          directories.push(fullPath);
-          
-          const subDirs = await collectDirectories(fullPath);
-          directories.push(...subDirs);
-        }
-      } catch (error) {
-        console.error(`Error accessing ${fullPath}:`, error.message);
+    console.log('Counting files in', basePath);
+    const fileCount = await createCountWorker(basePath);
+    indexProgress.total = fileCount;
+    console.log(`Found ${fileCount} files to index`);
+    
+    const cpuCount = os.cpus().length;
+    const workerCount = Math.max(2, cpuCount * 2); 
+    
+    console.log(`Starting indexing with ${workerCount} workers`);
+    
+    const workerPromises = [];
+    
+    for (let i = 0; i < workerCount; i++) {
+      // Assign each worker a range of files to process
+      workerPromises.push(
+        createIndexWorker([basePath], basePath, i, workerCount)
+      );
+    }
+    
+    const workerResults = await Promise.all(workerPromises);
+    
+    let totalIndexed = 0;
+    
+    if (!db) initializeDatabase();
+    
+    const finalTransaction = db.transaction(() => {
+      for (const filesList of workerResults) {
+        const count = saveFileBatch(filesList);
+        totalIndexed += count;
+        console.log(`Saved batch of ${count} files, total: ${totalIndexed}`);
       }
-    }
+      
+      const completionTime = new Date().toISOString();
+      db.prepare(SQL.UPDATE_METADATA).run('last_built', completionTime);
+      
+      return totalIndexed;
+    });
+    
+    totalIndexed = finalTransaction();
+    
+    console.log(`Indexing complete. Indexed ${totalIndexed} files.`);
+    
+    db.pragma('wal_checkpoint(FULL)');
+    
+    isIndexBuilding = false;
+    indexProgress.processed = totalIndexed;
+    indexProgress.errors = fileCount - totalIndexed;
+    indexProgress.lastUpdated = new Date().toISOString();
+    
+    return { 
+      success: true, 
+      stats: { ...indexProgress } 
+    };
   } catch (error) {
-    console.error(`Error reading directory ${directory}:`, error.message);
+    console.error('Error building index:', error);
+    isIndexBuilding = false;
+    return { 
+      success: false, 
+      message: error.message 
+    };
   }
-  
-  return directories.filter((dir, index) => directories.indexOf(dir) === index);
 }
 
-function deleteFromIndex(filePath) {
-  if (!db) return false;
-  
-  try {
-    const result = db.prepare(SQL.DELETE_FILE).run(filePath);
-    
-    if (result.changes > 0) {
-      console.log(`Removed ${filePath} from index`);
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('Error deleting file from index:', error);
-    return false;
-  }
-}
+
 
 module.exports = {
   initializeDatabase,
-  buildIndex,
-  searchIndex,
-  findImagesInIndex,
   isIndexBuilt,
   getIndexStats,
   clearIndex,
+  deleteFromIndex,
+  searchIndex,
+  findImagesInIndex,
   saveFileBatch,
-  deleteFromIndex
+  buildIndex,
 }; 

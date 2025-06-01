@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
@@ -23,9 +24,9 @@ import {
 import { BreadcrumbNav } from "@/components/nav";
 import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
+import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
 import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog, LoginDialog } from "@/components/dialog";
 
-import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
 import { useAuth } from '@/context/auth-context';
 
 
@@ -170,11 +171,12 @@ interface ImageCellProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
+    token?: string;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, columnCount, onFileClick, onDownload, onDelete, onShowDetails } = data;
+  const { files, columnCount, onFileClick, onDownload, onDelete, onShowDetails, token } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -186,8 +188,8 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
         <ContextMenu>
           <ContextMenuTrigger>
             <ImageItem
-              src={`/api/raw?path=${encodeURIComponent(file.path)}`}
-              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+              src={`/api/raw?path=${encodeURIComponent(file.path)}${token ? `&token=${token}` : ''}`}
+              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80${token ? `&token=${token}` : ''}`}
               alt={file.name}
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="w-full h-full object-cover rounded-md cursor-pointer"
@@ -218,7 +220,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
           <ContextMenuTrigger>
             <VideoItem
               alt={file.name}
-              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+              thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80${token ? `&token=${token}` : ''}`}
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="w-full h-full object-cover rounded-md cursor-pointer"
               loading="eager"
@@ -248,7 +250,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
           <ContextMenuTrigger>
             <FileItemGridView
               {...file}
-              cover={file.cover ? `/api/thumbnail?path=${encodeURIComponent(file.cover)}&width=300&quality=80` : undefined}
+              cover={file.cover ? `/api/thumbnail?path=${encodeURIComponent(file.cover)}&width=300&quality=80${token ? `&token=${token}` : ''}` : undefined}
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className="text-black hover:text-gray-600 hover:bg-accent"
             />
@@ -285,11 +287,12 @@ interface MasonryCellProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails?: (file: FileData) => void;
+    token?: string;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, columnCount, columnWidth, direction, onFileClick, onDownload, onDelete, onShowDetails } = data;
+  const { files, columnCount, columnWidth, direction, onFileClick, onDownload, onDelete, onShowDetails, token } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -315,8 +318,8 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
             <ContextMenuTrigger>
               <ImageItem
                 {...file}
-                src={`/api/raw?path=${encodeURIComponent(file.path)}`}
-                thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80`}
+                src={`/api/raw?path=${encodeURIComponent(file.path)}${token ? `&token=${token}` : ''}`}
+                thumbnail={`/api/thumbnail?path=${encodeURIComponent(file.path)}&width=300&quality=80${token ? `&token=${token}` : ''}`}
                 alt={file.name}
                 onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
                 className="w-full h-auto rounded-md"
@@ -399,6 +402,9 @@ const previewSupported: Record<string, boolean> = {
 
 
 function FileExplorerContent() {
+  const { isAuthenticated, username, permissions, logout, token } = useAuth();
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(!isAuthenticated);
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -472,7 +478,7 @@ function FileExplorerContent() {
       const response = await axios.get('/api/files', { params: { dir: currentPath, cover: showDirectoryCovers ? 'true' : 'false' } });
       return response.data;
     },
-    enabled: !isSearching && viewMode !== 'imageOnly'
+    enabled: isAuthenticated && !isSearching && viewMode !== 'imageOnly'
   });
 
   const { data: imagesData, isLoading: imagesLoading, error: imagesError, refetch: refetchImages } = useQuery<ImagesResponse>({
@@ -481,7 +487,7 @@ function FileExplorerContent() {
       const response = await axios.get('/api/images', { params: { dir: currentPath } });
       return response.data;
     },
-    enabled: viewMode === 'imageOnly' && !isSearching
+    enabled: isAuthenticated && viewMode === 'imageOnly' && !isSearching
   });
 
   const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useQuery<SearchResponse>({
@@ -492,7 +498,7 @@ function FileExplorerContent() {
       });
       return response.data;
     },
-    enabled: isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
+    enabled: isAuthenticated && isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
   });
 
   const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreview } = useQuery({
@@ -515,7 +521,7 @@ function FileExplorerContent() {
         return `Error loading file: ${error.message || 'Unknown error'}`;
       }
     },
-    enabled: preview.isOpen && (preview.type === 'text'),
+    enabled: isAuthenticated && preview.isOpen && (preview.type === 'text'),
     retry: false,
     refetchOnWindowFocus: false
   });
@@ -1282,7 +1288,8 @@ function FileExplorerContent() {
           onFileClick: handleFileClick,
           onDownload: handleDownload,
           onDelete: handleDelete,
-          onShowDetails: handleShowDetails
+          onShowDetails: handleShowDetails,
+          token: token || undefined
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1318,7 +1325,8 @@ function FileExplorerContent() {
               onFileClick: handleFileClick,
               onDownload: handleDownload,
               onDelete: handleDelete,
-              onShowDetails: handleShowDetails
+              onShowDetails: handleShowDetails,
+              token: token || undefined
             }}
           />
         ))}
@@ -1326,8 +1334,6 @@ function FileExplorerContent() {
     );
   }, [useMasonry, gridDirection, sortedFiles, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
 
-  const { isAuthenticated, username, permissions, logout } = useAuth();
-  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
@@ -1499,6 +1505,40 @@ function FileExplorerContent() {
           >
             <ImageIcon size={18} />
           </Button>
+
+        <div className="flex items-center">
+          {isAuthenticated ? (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <User className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>
+                    <User className="w-4 h-4 mr-2" />
+                    {username} ({permissions})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={logout}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsLoginDialogOpen(true)}
+              title="Login"
+            >
+              <LogIn className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="icon" className="sm:hidden">
@@ -1539,35 +1579,6 @@ function FileExplorerContent() {
           </Popover>
         </div>
 
-        <div className="flex items-center ml-2">
-          {isAuthenticated ? (
-            <>
-              <span className="text-sm mr-2 hidden md:inline-block">
-                <User className="inline-block w-4 h-4 mr-1" />
-                {username} ({permissions})
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={logout}
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="ml-2 hidden md:inline-block">Logout</span>
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsLoginDialogOpen(true)}
-              title="Login"
-            >
-              <LogIn className="w-4 h-4" />
-              <span className="ml-2 hidden md:inline-block">Login</span>
-            </Button>
-          )}
-        </div>
       </header>
 
       <nav ref={navRef} className="mb-2">
@@ -1586,6 +1597,14 @@ function FileExplorerContent() {
           </div>
         )}
       </nav>
+
+      {!isAuthenticated && (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-sm text-muted-foreground">
+            Please login to continue
+          </div>
+        </div>
+      )}
 
       {isError ? (
         <div className="flex-1 flex flex-col items-center justify-center">
@@ -1607,7 +1626,7 @@ function FileExplorerContent() {
         </div>
       )}
 
-      {(!isLoading && !isError && !isNotFound) && (
+      {(isAuthenticated && !isLoading && !isError && !isNotFound) && (
         <>
           {/* List view */}
           {viewMode === 'list' && (
@@ -1660,10 +1679,10 @@ function FileExplorerContent() {
             <ImagePreview
               isOpen={preview.isOpen}
               title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1675,10 +1694,10 @@ function FileExplorerContent() {
             <VideoPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1690,10 +1709,10 @@ function FileExplorerContent() {
             <AudioPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
               }}
@@ -1711,7 +1730,7 @@ function FileExplorerContent() {
               hasError={!!contentError}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
               }}
             />
           )}
@@ -1721,10 +1740,10 @@ function FileExplorerContent() {
             <PDFPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
               }}
             />
           )}
@@ -1734,12 +1753,12 @@ function FileExplorerContent() {
             <ComicPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/comic?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/comic?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
                 onNext: () => navigatePreview('next'),
                 onPrev: () => navigatePreview('prev'),
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
               }}
             />
           )}
@@ -1748,10 +1767,10 @@ function FileExplorerContent() {
             <EpubPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}`}
+              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}`, '_blank'),
+                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
               }}
             />
           )}

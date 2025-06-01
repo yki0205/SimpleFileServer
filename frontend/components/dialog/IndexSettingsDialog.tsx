@@ -85,7 +85,8 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
         </DialogHeader>
 
         <div className="py-4">
-          {loading ? (
+          {/* {loading ? ( */}
+          {false ? (
             <div className="flex items-center justify-center h-40">
               <RefreshCw className="animate-spin h-8 w-8 text-primary" />
             </div>
@@ -167,22 +168,12 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
                   <h4 className="text-sm font-medium mb-2">Processing Information</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Files/second:</span>
-                      <span className="ml-2 font-medium">
-                        {indexStatus.progress.filesPerSecond 
-                          ? formatNumber(indexStatus.progress.filesPerSecond)
-                          : formatNumber(Math.round(indexStatus.progress.processed / 
-                            ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000)))}
-                      </span>
-                    </div>
-                    <div>
                       <span className="text-muted-foreground">Estimated time:</span>
                       <span className="ml-2 font-medium">
                         {indexStatus.progress.processed > 0 ? 
                           formatEstimatedTime((indexStatus.progress.total - indexStatus.progress.processed) / 
-                            (indexStatus.progress.filesPerSecond || 
-                              (indexStatus.progress.processed / 
-                                ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000)))) :
+                            (indexStatus.progress.processed / 
+                              ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000))) :
                           'Calculating...'}
                       </span>
                     </div>

@@ -1,5 +1,6 @@
 // Configuration for the file server
 // You can customize the base directory to serve files from
+require('dotenv').config();
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -7,7 +8,7 @@ const crypto = require('crypto');
 
 const TMP_DIR = path.join(os.tmpdir(), 'simple-file-server');
 const BASE_DIR = process.env.BASE_DIRECTORY || 'D:/Temp';
-const DB_NAME = crypto.createHash('sha256').update(BASE_DIR).digest('hex') + '.db';
+const DB_NAME = crypto.createHash('sha256').update(BASE_DIR.endsWith('/') ? BASE_DIR.slice(0, -1) : BASE_DIR).digest('hex') + '.db';
 
 if (!fs.existsSync(TMP_DIR)) {
   fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -31,17 +32,19 @@ module.exports = {
   // Format: 'username|password|rw' where 'rw' indicates read and write permissions
   // Examples: 'admin|admin123|rw' (full access), 'guest|guest123|r' (read-only access)
   // If empty array, authentication is disabled
-  userRules: [
+  userRules: process.env.USER_RULES ? 
+    process.env.USER_RULES.split(',').map(rule => rule.trim())
+  : [
     'admin|admin123|rw',
     'guest|guest123|r'
   ],
   
   // File indexing options
-  // useFileIndex: process.env.USE_FILE_INDEX === 'true' || false,
-  useFileIndex: true,
+  useFileIndex: process.env.USE_FILE_INDEX === 'true' || false,
   fileIndexPath: process.env.FILE_INDEX_PATH || path.join(TMP_DIR, DB_NAME),
   rebuildIndexOnStartup: process.env.REBUILD_INDEX_ON_STARTUP === 'true' || false,
-  indexBatchSize: parseInt(process.env.INDEX_BATCH_SIZE) || 1000,
+  countFilesBatchSize: parseInt(process.env.COUNT_FILES_BATCH_SIZE) || 100,
+  indexBatchSize: parseInt(process.env.INDEX_BATCH_SIZE) || 100,
   
   // File watcher options
   useFileWatcher: process.env.USE_FILE_WATCHER === 'true' || false,

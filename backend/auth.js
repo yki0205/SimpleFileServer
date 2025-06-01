@@ -52,34 +52,49 @@ function authMiddleware(req, res, next) {
     return next();
   }
 
-  // Get Authorization header
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader) {
-    // No credentials provided, return 401 and request authentication
-    res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  const token = req.query.token;
 
-  // Parse credentials
-  const credentials = parseAuthHeader(authHeader);
-  
-  if (!credentials) {
-    res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
-    return res.status(401).json({ error: 'Invalid authentication format' });
-  }
+  if (token) {
+    const credentials = Buffer.from(token, 'base64').toString('utf8');
+    const [username, password] = credentials.split(':');
 
-  // Validate user
-  const userStatus = validateUser(credentials.username, credentials.password);
-  
-  if (!userStatus.isAuthenticated) {
-    res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
+    const userStatus = validateUser(username, password);
+    if (userStatus.isAuthenticated) {
+      req.user = userStatus;
+      return next();
+    }
     return res.status(401).json({ error: 'Invalid credentials' });
-  }
 
-  // If validation is successful, save user info to request object
-  req.user = userStatus;
-  next();
+  } else {
+    // Get Authorization header
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      // No credentials provided, return 401 and request authentication
+      res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+  
+    // Parse credentials
+    const credentials = parseAuthHeader(authHeader);
+    
+    if (!credentials) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
+      return res.status(401).json({ error: 'Invalid authentication format' });
+    }
+  
+    // Validate user
+    const userStatus = validateUser(credentials.username, credentials.password);
+    
+    if (!userStatus.isAuthenticated) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Simple File Server"');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+  
+    // If validation is successful, save user info to request object
+    req.user = userStatus;
+    next();
+  }
 }
 
 // Write permission check middleware

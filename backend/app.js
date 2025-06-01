@@ -1,3 +1,15 @@
+const originalStdoutWrite = process.stdout.write;
+process.stdout.write = (chunk, encoding, callback) => {
+  const date = new Date().toISOString();
+  return originalStdoutWrite.call(process.stdout, `[${date}] ${chunk}`, encoding, callback);
+};
+
+const originalStderrWrite = process.stderr.write;
+process.stderr.write = (chunk, encoding, callback) => {
+  const date = new Date().toISOString();
+  return originalStderrWrite.call(process.stderr, `[${date}] ${chunk}`, encoding, callback);
+};
+
 const express = require('express');
 const os = require('os');
 const fs = require('fs')
@@ -42,7 +54,11 @@ if (config.useFileIndex) {
       .then(result => {
         if (result.success) {
           console.log('File index built successfully');
-          console.log(`Indexed ${result.stats.fileCount} files`);
+          console.log(`Total files count: ${result.stats.total}`);
+          console.log(`Files processed: ${result.stats.processed}`);
+          console.log(`Errors: ${result.stats.errors}`);
+          console.log(`Start time: ${result.stats.startTime}`);
+          console.log(`Duration: ${new Date(result.stats.lastUpdated).getTime() - new Date(result.stats.startTime).getTime()}ms`);
         } else {
           console.error('Failed to build file index:', result.message);
         }
@@ -71,6 +87,14 @@ if (config.useFileWatcher) {
 app.get('/api/version', (req, res) => {
   res.json({
     version: '1.0.0',
+    username: req.user?.username,
+    permissions: req.user?.permissions || 'none'
+  });
+});
+
+app.get('/api/validate-token', (req, res) => {
+  res.json({
+    isAuthenticated: true,
     username: req.user?.username,
     permissions: req.user?.permissions || 'none'
   });
@@ -278,7 +302,7 @@ app.get('/api/thumbnail', async (req, res) => {
 
   try {
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' });
+      return res.status(404).json({ error: 'File not found', fullPath });
     }
 
     const stats = fs.statSync(fullPath);

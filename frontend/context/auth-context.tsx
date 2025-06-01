@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import { kMaxLength } from 'buffer';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -31,19 +32,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Load token from localStorage on initial load
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token');
-    const storedUsername = localStorage.getItem('auth_username');
-    const storedPermissions = localStorage.getItem('auth_permissions');
-    
-    if (storedToken) {
-      setToken(storedToken);
-      setUsername(storedUsername);
-      setPermissions(storedPermissions);
-      setIsAuthenticated(true);
-      
-      // Set authorization header for all future requests
-      axios.defaults.headers.common['Authorization'] = `Basic ${storedToken}`;
+
+    const validateToken = async (token: string) => {
+      try {
+        const response = await axios.get('/api/validate-token', {
+          headers: { Authorization: `Basic ${token}` }
+        });
+        return response.data.isAuthenticated;
+      } catch {
+        return false;
+      }
     }
+
+    const initializeAuth = async () => {
+      const storedToken = localStorage.getItem('auth_token');
+      const storedUsername = localStorage.getItem('auth_username');
+      const storedPermissions = localStorage.getItem('auth_permissions');
+
+      if (storedToken) {
+        const isValid = await validateToken(storedToken);
+
+        if (isValid) {
+          setToken(storedToken);
+          setUsername(storedUsername);
+          setPermissions(storedPermissions);
+          setIsAuthenticated(true);
+          axios.defaults.headers.common['Authorization'] = `Basic ${storedToken}`;
+        } else {
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_username');
+          localStorage.removeItem('auth_permissions');
+          delete axios.defaults.headers.common['Authorization'];
+        }
+      }
+    }
+
+    initializeAuth();
   }, []);
 
   // Login function

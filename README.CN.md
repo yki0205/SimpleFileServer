@@ -10,6 +10,24 @@
 
 > 在项目中，我在判断文件类型时使用了js的[mime-magic](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
 
+## 使用文件索引
+
+通过添加环境变量`USE_FILE_INDEX`为`true`，可以启用文件索引。
+
+当使用文件索引时，后端在启动时将会自动构建基于`BASE_DIR`的文件索引，构建完成后，后端将会基于文件索引进行文件的搜索。
+
+## 使用文件监视
+
+通过添加环境变量`USE_FILE_WATCHER`为`true`，可以启用文件监视。
+
+该功能需要`USE_FILE_INDEX`为`true`，其作用为在`BASE_DIR`目录下的文件发生变化时，自动更新文件索引（若不开启，当文件发生变化时，需要手动重新构建文件索引）。
+
+## 用户认证
+
+通过添加环境变量`USER_RULES`，可以设置用户认证规则。
+
+格式为：`username|password|rw`，其中`username`为认证用户名，`password`为认证密码，`rw`为认证权限，`r`为只读，`w`为读写。
+
 ## Comic Preview
 
 ### 支持格式
