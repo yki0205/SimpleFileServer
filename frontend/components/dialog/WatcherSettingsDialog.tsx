@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertCircle, Eye, EyeOff, RefreshCw } from "lucide-react";
@@ -7,9 +8,10 @@ import { AlertCircle, Eye, EyeOff, RefreshCw } from "lucide-react";
 interface WatcherSettingsDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
+  className?: string;
 }
 
-export function WatcherSettingsDialog({ open, setOpen }: WatcherSettingsDialogProps) {
+export function WatcherSettingsDialog({ open, setOpen, className }: WatcherSettingsDialogProps) {
   const [watcherStatus, setWatcherStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,44 +58,51 @@ export function WatcherSettingsDialog({ open, setOpen }: WatcherSettingsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className={cn(
+        "bg-black/80 border-white/10",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out",
+        "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "data-[state=closed]:slide-out-to-bottom-1/2 data-[state=open]:slide-in-from-bottom-1/2",
+        className
+      )}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="text-white flex items-center gap-2">
             <Eye size={18} />
             File Watcher Settings
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-white/60">
             Configure and manage the file monitoring system
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          {loading ? (
+          {/* {loading ? ( */}
+          {false ? (
             <div className="flex items-center justify-center h-40">
-              <RefreshCw className="animate-spin h-8 w-8 text-primary" />
+              <RefreshCw className="animate-spin h-8 w-8 text-white/80" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center h-40 text-red-500 gap-2">
+            <div className="flex flex-col items-center justify-center h-40 text-red-400 gap-2">
               <AlertCircle size={32} />
               <p>{error}</p>
             </div>
           ) : !watcherStatus?.enabled ? (
-            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+            <div className="flex flex-col items-center justify-center h-40 text-white/60 gap-2">
               <AlertCircle size={32} />
               <p>File watching is not enabled on the server</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 text-white/80">
               <div className="flex justify-between items-center">
                 <span>Status:</span>
                 <span className="font-medium">
                   {watcherStatus.active ? (
-                    <span className="text-green-500 flex items-center gap-1">
+                    <span className="text-green-400 flex items-center gap-1">
                       <Eye className="h-4 w-4" />
                       Active
                     </span>
                   ) : (
-                    <span className="text-amber-500 flex items-center gap-1">
+                    <span className="text-amber-400 flex items-center gap-1">
                       <EyeOff className="h-4 w-4" />
                       Inactive
                     </span>
@@ -104,9 +113,9 @@ export function WatcherSettingsDialog({ open, setOpen }: WatcherSettingsDialogPr
               {watcherStatus.watchedDirectories && (
                 <div className="flex flex-col gap-1">
                   <span>Watched Directories:</span>
-                  <div className="bg-muted p-2 rounded text-sm">
+                  <div className="bg-black/40 p-2 rounded text-xs border border-white/10">
                     {watcherStatus.watchedDirectories.map((dir: string, index: number) => (
-                      <div key={index} className="truncate">{dir}</div>
+                      <div key={index} className="break-all">{dir}</div>
                     ))}
                   </div>
                 </div>
@@ -142,6 +151,7 @@ export function WatcherSettingsDialog({ open, setOpen }: WatcherSettingsDialogPr
           <Button 
             variant="outline" 
             onClick={() => setOpen(false)}
+            className="text-white/60 hover:text-red-500 bg-transparent border-white/20"
           >
             Close
           </Button>
@@ -150,7 +160,13 @@ export function WatcherSettingsDialog({ open, setOpen }: WatcherSettingsDialogPr
             <Button 
               onClick={handleToggleWatcher}
               disabled={loading}
-              variant={watcherStatus?.active ? "destructive" : "default"}
+              variant="outline"
+              className={cn(
+                "bg-transparent border-white/20",
+                watcherStatus?.active 
+                  ? "text-white hover:text-red-500" 
+                  : "text-white hover:text-white/80"
+              )}
             >
               {loading ? (
                 <>

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { kMaxLength } from 'buffer';
 
 interface AuthContextType {
+  isCheckingAuth: boolean;
   isAuthenticated: boolean;
   token: string | null;
   username: string | null;
@@ -12,6 +13,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
+  isCheckingAuth: true,
   isAuthenticated: false,
   token: null,
   username: null,
@@ -29,6 +31,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [username, setUsername] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Load token from localStorage on initial load
   useEffect(() => {
@@ -65,6 +68,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           delete axios.defaults.headers.common['Authorization'];
         }
       }
+      setIsCheckingAuth(false);
     }
 
     initializeAuth();
@@ -104,6 +108,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return (
     <AuthContext.Provider value={{ 
+      isCheckingAuth,
       isAuthenticated, 
       token, 
       username, 

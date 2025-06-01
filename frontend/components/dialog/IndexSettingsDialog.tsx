@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -8,9 +9,10 @@ import { AlertCircle, CheckCircle, Database, RefreshCw } from "lucide-react";
 interface IndexSettingsDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
+  className?: string;
 }
 
-export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps) {
+export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsDialogProps) {
   const [indexStatus, setIndexStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,13 +75,20 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className={cn(
+        "bg-black/80 border-white/10",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out",
+        "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "data-[state=closed]:slide-out-to-bottom-1/2 data-[state=open]:slide-in-from-bottom-1/2",
+        "sm:max-w-[500px]",
+        className
+      )}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="text-white flex items-center gap-2">
             <Database size={18} />
             File Indexing Settings
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-white/60">
             Configure and manage the file indexing system
           </DialogDescription>
         </DialogHeader>
@@ -88,35 +97,35 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
           {/* {loading ? ( */}
           {false ? (
             <div className="flex items-center justify-center h-40">
-              <RefreshCw className="animate-spin h-8 w-8 text-primary" />
+              <RefreshCw className="animate-spin h-8 w-8 text-white/80" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center h-40 text-red-500 gap-2">
+            <div className="flex flex-col items-center justify-center h-40 text-red-400 gap-2">
               <AlertCircle size={32} />
               <p>{error}</p>
             </div>
           ) : !indexStatus?.enabled ? (
-            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+            <div className="flex flex-col items-center justify-center h-40 text-white/60 gap-2">
               <AlertCircle size={32} />
               <p>File indexing is not enabled on the server</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 text-white/80">
               <div className="flex justify-between items-center">
                 <span>Status:</span>
                 <span className="font-medium">
                   {indexStatus.isBuilding ? (
-                    <span className="text-amber-500 flex items-center gap-1">
+                    <span className="text-amber-400 flex items-center gap-1">
                       <RefreshCw className="animate-spin h-4 w-4" />
                       Building
                     </span>
                   ) : indexStatus.fileCount > 0 ? (
-                    <span className="text-green-500 flex items-center gap-1">
+                    <span className="text-green-400 flex items-center gap-1">
                       <CheckCircle className="h-4 w-4" />
                       Ready
                     </span>
                   ) : (
-                    <span className="text-red-500 flex items-center gap-1">
+                    <span className="text-red-400 flex items-center gap-1">
                       <AlertCircle className="h-4 w-4" />
                       Not Built
                     </span>
@@ -145,14 +154,14 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
                     <span>Indexing Progress:</span>
                     <span>{getProgressPercentage()}%</span>
                   </div>
-                  <Progress value={getProgressPercentage()} className="h-2" />
-                  <div className="flex justify-between text-sm text-muted-foreground mt-1">
+                  <Progress value={getProgressPercentage()} className="h-2 bg-white/10" />
+                  <div className="flex justify-between text-sm text-white/50 mt-1">
                     <span>Processed: {formatNumber(indexStatus.progress.processed || 0)}</span>
                     <span>Total: {formatNumber(indexStatus.progress.total || 0)}</span>
                   </div>
                   
                   {indexStatus.progress.lastUpdated && (
-                    <div className="text-xs text-muted-foreground text-right mt-1">
+                    <div className="text-xs text-white/50 text-right mt-1">
                       Last update: {new Date(indexStatus.progress.lastUpdated).toLocaleTimeString()}
                     </div>
                   )}
@@ -164,11 +173,11 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
                indexStatus.progress && 
                indexStatus.progress.processed > 0 && 
                indexStatus.progress.lastUpdated && (
-                <div className="border rounded p-3 bg-muted/30 mt-2">
+                <div className="border border-white/10 rounded p-3 bg-black/40 mt-2">
                   <h4 className="text-sm font-medium mb-2">Processing Information</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Estimated time:</span>
+                      <span className="text-white/50">Estimated time:</span>
                       <span className="ml-2 font-medium">
                         {indexStatus.progress.processed > 0 ? 
                           formatEstimatedTime((indexStatus.progress.total - indexStatus.progress.processed) / 
@@ -188,6 +197,7 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
           <Button 
             variant="outline" 
             onClick={() => setOpen(false)}
+            className="text-white/60 hover:text-red-500 bg-transparent border-white/20"
           >
             Close
           </Button>
@@ -196,6 +206,8 @@ export function IndexSettingsDialog({ open, setOpen }: IndexSettingsDialogProps)
             <Button 
               onClick={handleRebuildIndex}
               disabled={indexStatus?.isBuilding || loading}
+              variant="outline"
+              className="text-white hover:text-white/80 bg-transparent border-white/20"
             >
               {indexStatus?.isBuilding ? (
                 <>

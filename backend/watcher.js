@@ -81,6 +81,10 @@ function watchDirectory(dirPath, currentDepth) {
     
     // Start watching this directory
     const watcher = fs.watch(dirPath, { persistent: true }, (eventType, filename) => {
+      if (filename === null) {
+        console.log(`Received null filename for event ${eventType} in ${dirPath}`);
+        return;
+      }
       handleFileChange(eventType, path.join(dirPath, filename));
     });
     
@@ -118,7 +122,7 @@ function shouldIgnore(filePath) {
 
 
 function handleFileChange(eventType, filePath) {
-  if (shouldIgnore(filePath)) return;
+  if (!filePath || shouldIgnore(filePath)) return;
   
   const resolvedPath = path.resolve(filePath);
   

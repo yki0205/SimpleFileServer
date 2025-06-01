@@ -227,16 +227,59 @@ app.get('/api/images', (req, res) => {
   }
 })
 
+app.get('/api/download', (req, res) => {
+  const { path: requestedPath, paths: requestedPaths } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+
+  if (!requestedPath && !requestedPaths) {
+    return res.status(400).json({ error: 'No path or paths provided' });
+  }
+
+  let pathList = [];
+  if (requestedPath) {
+    pathList.push(path.join(basePath, requestedPath));
+  }
+  if (requestedPaths) {
+    pathList = requestedPaths.split('|').map(p => path.join(basePath, p.trim()));
+  }
+
+  try {
+    const zip = new AdmZip();
+
+    for (const filePath of pathList) {
+
+      if (!fullPath.startsWith(basePath)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const stats = fs.statSync(filePath);
+
+      if (stats.isDirectory()) {
+        zip.addLocalFolder(filePath);
+      } else {
+        zip.addLocalFile(filePath);
+      }
+    }
+
+    const zipBuffer = zip.toBuffer();
+    // const fileName = path.basename(pathList[0]);
+    const fileName = new Date().toISOString().replace(/[-:Z]/g, '');
+    const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}.zip`);
+    res.send(zipBuffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/raw', (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
-
-  // Get normalized temp directory prefix (for Windows path consistency)
-  let tempDirBase = os.tmpdir();
-  // On Windows, make sure we consistently use forward slashes
-  if (process.platform === 'win32') {
-    tempDirBase = tempDirBase.replace(/\\/g, '/');
-  }
 
   // Detect if this is an absolute path (temp file) or relative path
   let fullPath;
@@ -290,6 +333,42 @@ app.get('/api/raw', (req, res) => {
   }
 });
 
+app.get('/api/content', async (req, res) => {
+  const { path: requestedPath } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, requestedPath);
+
+  if (!fullPath.startsWith(basePath)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      return res.status(400).json({ error: 'Cannot show content of a directory' });
+    }
+
+    if (stats.size > config.contentMaxSize) {
+      return res.status(413).json({ error: 'File too large to display' });
+    }
+
+    const contentType = await utils.getFileType(fullPath);
+    if (!contentType.startsWith('text/')) {
+      return res.status(400).json({ error: 'Cannot show content of a non-text file' });
+    }
+    const content = fs.readFileSync(fullPath, 'utf8');
+
+    res.setHeader('Content-Type', contentType);
+    res.send(content);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/thumbnail', async (req, res) => {
   const { path: requestedPath, width = 300, height, quality = 80 } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -315,6 +394,11 @@ app.get('/api/thumbnail', async (req, res) => {
       if (mimeType === 'image/bmp') {
         // Cause sharp cannot handle bmp files, I return the original file directly
         res.setHeader('Content-Type', 'image/bmp');
+        return fs.createReadStream(fullPath).pipe(res);
+      }
+      if (mimeType === 'image/x-icon') {
+        // Cause sharp cannot handle ico files, I return the original file directly
+        res.setHeader('Content-Type', 'image/x-icon');
         return fs.createReadStream(fullPath).pipe(res);
       }
 
@@ -405,42 +489,6 @@ app.get('/api/thumbnail', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
     console.log(error)
-  }
-});
-
-app.get('/api/content', async (req, res) => {
-  const { path: requestedPath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, requestedPath);
-
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  try {
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const stats = fs.statSync(fullPath);
-    if (stats.isDirectory()) {
-      return res.status(400).json({ error: 'Cannot show content of a directory' });
-    }
-
-    if (stats.size > config.contentMaxSize) {
-      return res.status(413).json({ error: 'File too large to display' });
-    }
-
-    const contentType = await utils.getFileType(fullPath);
-    if (!contentType.startsWith('text/')) {
-      return res.status(400).json({ error: 'Cannot show content of a non-text file' });
-    }
-    const content = fs.readFileSync(fullPath, 'utf8');
-
-    res.setHeader('Content-Type', contentType);
-    res.send(content);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 
@@ -599,6 +647,8 @@ app.get('/api/comic', async (req, res) => {
   }
 });
 
+
+
 app.post('/api/upload', writePermissionMiddleware, (req, res) => {
   const { dir = '' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -680,19 +730,45 @@ app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
 })
 
 app.post('/api/rmdir', writePermissionMiddleware, (req, res) => {
-  const { path: dirPath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, dirPath);
+  const { path: dirPath, paths: dirPaths } = req.query;
 
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
+  if (!dirPath && !dirPaths) {
+    return res.status(400).json({ error: 'No directory path provided' });
   }
 
-  try {
-    fs.rmdirSync(fullPath, { recursive: true });
-    res.status(200).json({ message: 'Directory removed successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (dirPath) {
+    const basePath = path.resolve(config.baseDirectory);
+    const fullPath = path.join(basePath, dirPath);
+
+    if (!fullPath.startsWith(basePath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    try {
+      fs.rmdirSync(fullPath, { recursive: true });
+      res.status(200).json({ message: 'Directory removed successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  } else {
+    const basePath = path.resolve(config.baseDirectory);
+    const fullPaths = dirPaths.split('|').map(p => path.join(basePath, p.trim()));
+
+    for (const fullPath of fullPaths) {
+      if (!fullPath.startsWith(basePath)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      try {
+        fs.rmdirSync(fullPath, { recursive: true });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+
+      fs.rmdirSync(fullPath, { recursive: true });
+    }
+
+    res.status(200).json({ message: 'Directories removed successfully' });
   }
 })
 
@@ -715,23 +791,51 @@ app.post('/api/rename', writePermissionMiddleware, (req, res) => {
 })
 
 app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
-  const { path: filePath } = req.query;
-  const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, filePath);
+  const { path: filePath, paths: filePaths } = req.query;
 
-  if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
+  if (!filePath && !filePaths) {
+    return res.status(400).json({ error: 'No file path provided' });
   }
 
-  if (fs.statSync(fullPath).isDirectory()) {
-    return res.status(400).json({ error: 'Cannot delete a directory' });
-  }
+  if (filePath) {
+    const basePath = path.resolve(config.baseDirectory);
+    const fullPath = path.join(basePath, filePath);
 
-  try {
-    fs.unlinkSync(fullPath);
-    res.status(200).json({ message: 'File deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (!fullPath.startsWith(basePath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (fs.statSync(fullPath).isDirectory()) {
+      return res.status(400).json({ error: 'Cannot delete a directory' });
+    }
+
+    try {
+      fs.unlinkSync(fullPath);
+      res.status(200).json({ message: 'File deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  } else {
+    const basePath = path.resolve(config.baseDirectory);
+    const fullPaths = filePaths.split('|').map(p => path.join(basePath, p.trim()));
+
+    for (const fullPath of fullPaths) {
+      if (!fullPath.startsWith(basePath)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      if (fs.statSync(fullPath).isDirectory()) {
+        return res.status(400).json({ error: 'Cannot delete a directory' });
+      }
+
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    }
+
+    res.status(200).json({ message: 'Files deleted successfully' });
   }
 })
 
@@ -801,6 +905,8 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
     res.status(500).json({ error: error.message });
   }
 })
+
+
 
 app.get('/api/index-status', (req, res) => {
   if (!config.useFileIndex) {
