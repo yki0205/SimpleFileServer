@@ -9,6 +9,10 @@
 
 NavigatePreview中似乎存在更新卡顿的情况，需Check
 
+## 3
+
+在PDFPreview中，若焦点被iframe获取，则无法响应键盘事件，需Check
+
 # TODO
 
 - Refresh Button
@@ -16,4 +20,4 @@ NavigatePreview中似乎存在更新卡顿的情况，需Check
 - 右键菜单中添加打开多选的选项
 - 实现rename
 - 实现mkdir
-- 实现rmdir（处于安全考虑，我将删除文件夹作为一个单独的api从delete中提取）
+- 实现rmdir（出于安全考虑，我将删除文件夹作为一个单独的api从delete中提取）

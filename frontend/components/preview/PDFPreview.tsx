@@ -1,13 +1,14 @@
 "use client"
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 
 interface PDFPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError'> {
   /** PDF source URL */
-  title?: string;
   src: string;
+  /** iframe title */
+  title?: string;
 }
 
 export const PDFPreview: React.FC<PDFPreviewProps> = ({
@@ -19,23 +20,42 @@ export const PDFPreview: React.FC<PDFPreviewProps> = ({
 
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isFullScreen) {
+          document.documentElement.requestFullscreen?.();
+        } else {
+          document.exitFullscreen?.();
+        }
+        setIsFullScreen(!isFullScreen);
+      }
+
+      if (e.key === 'Escape') {
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.();
+          setIsFullScreen(false);
+        } else {
+          controls?.onClose?.();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen, controls?.onClose]);
+
   return (
     <PreviewBase
       controls={{
+        showClose: false,
         showDownload: false,
         showNavigation: false,
-        showFullscreen: true,
-        useBrowserFullscreenAPI: true,
-        enableFullscreenToolbar: true,
-        enableFullscreenNavigation: false,
         enableHandleKeyboard: false,
         ...controls
       }}
-      callbacks={{
-        onFullScreenChange: (isFullScreen) => setIsFullScreen(isFullScreen),
-      }}
       {...restProps}
-      title={""}
     >
       <iframe
         title={title}

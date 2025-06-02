@@ -46,6 +46,7 @@ function getFileTypeByExt(extension) {
 
     // Audio
     '.mp3': 'audio/mpeg',
+    '.aac': 'audio/aac',
     '.wav': 'audio/wav',
     '.flac': 'audio/flac',
 
@@ -53,6 +54,7 @@ function getFileTypeByExt(extension) {
     '.cbz': 'application/cbz',
     '.cbr': 'application/cbr',
     '.epub': 'application/epub',
+    '.pdf': 'application/pdf',
     ...config.customContentTypes
   };
 

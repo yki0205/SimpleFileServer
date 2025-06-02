@@ -497,6 +497,10 @@ app.get('/api/thumbnail', async (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  if (!config.generateThumbnail) {
+    return res.status(400).json({ error: 'Thumbnail generation is disabled' });
+  }
+
   try {
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ error: 'File not found', fullPath });
@@ -527,7 +531,7 @@ app.get('/api/thumbnail', async (req, res) => {
       }
 
       // Create cache filename (based on original path, width, height and quality)
-      const cacheKey = `${Buffer.from(fullPath).toString('base64')}_w${width}_${height || 'auto'}_q${quality}`;
+      const cacheKey = `${Buffer.from(fullPath).toString('base64').replace(/[=]/g, '').replace(/[\\/]/g, '_')}_w${width}_${height || 'auto'}_q${quality}`;
       const cachePath = path.join(cacheDir, `${cacheKey}.jpg`);
 
       // If cache exists, return cached thumbnail directly
@@ -554,7 +558,13 @@ app.get('/api/thumbnail', async (req, res) => {
       transformer
         .clone()
         .toFile(cachePath)
-        .catch(err => console.error('Error caching thumbnail:', err));
+        .catch(err => {
+          console.error('Error caching thumbnail:', err);
+          // Delete possibly generated incomplete file
+          if (fs.existsSync(cachePath)) {
+            fs.unlinkSync(cachePath);
+          }
+        });
 
       // Send to client
       res.setHeader('Content-Type', 'image/jpeg');

@@ -1,14 +1,4 @@
-# 功能
-
-## 说在前面
-
-- 什么是导航？（Navigation）
-
-> 我这里提到的导航，大多数情况下是指在同一文件夹下，同类型文件预览的切换。
-
-- 关于支持格式：
-
-> 在项目中，我在判断文件类型时使用了js的[mime-magic](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
+# 后端
 
 ## 使用文件索引
 
@@ -27,6 +17,26 @@
 通过添加环境变量`USER_RULES`，可以设置用户认证规则。
 
 格式为：`username|password|rw`，其中`username`为认证用户名，`password`为认证密码，`rw`为认证权限，`r`为只读，`w`为读写。
+
+## 生成缩略图
+
+通过添加环境变量`GENERATE_THUMBNAIL`为`true`，可以启用缩略图生成。
+
+## 更多的配置
+
+详见[config.js](./backend/config.js)
+
+# 前端
+
+## 说在前面
+
+- 什么是导航？（Navigation）
+
+> 我这里提到的导航，大多数情况下是指在同一文件夹下，同类型文件预览的切换。
+
+- 关于支持格式：
+
+> 在项目中，我在判断文件类型时使用了js的[mime-magic](https://github.com/mimemagicrb/mimemagic)库，并且以`image`、`video`、`audio`、`text`、`application`作为分类。预览的功能基于这些类别，但我并不知道浏览器是否能够支持该类别下的所有文件类型。因此在支持格式中，我只会给出我自己进行测试过的文件类型。
 
 ## Comic Preview
 
@@ -257,3 +267,79 @@
 ### 功能实现
 
 ### 示例
+
+## PDF Preview
+
+### 支持格式
+
+- [x] .pdf
+
+### 示例
+
+![PDF Preview](./example/pdf-preview-1.png)
+
+## Audio Preview
+
+### 支持格式
+
+- [x] .mp3
+- [x] .aac
+- [x] .wav
+- [x] .flac
+
+### 功能实现
+
+### 示例
+
+
+## 四种ViewMode+masonry布局
+
+### List View
+
+### Grid View
+
+### Image View
+
+### Image Only View
+
+### Masonry View（在Image Only View的基础上开启）
+
+
+## 基本功能介绍
+
+- [x] 文件右键菜单
+- [x] 文件搜索
+- [x] 文件预览
+- [x] 文件详情
+- [x] 文件排序 
+
+- [x] 文件下载
+- [x] 批量文件下载 
+
+- [x] 文件上传
+- [x] 批量文件上传
+- [ ] 文件夹上传
+
+- [x] 文件删除
+- [x] 批量文件删除 
+
+- [x] 文件剪切（移动）
+- [x] 批量文件剪切（移动）
+
+- [x] 文件复制粘贴（克隆）
+- [x] 批量文件复制粘贴（克隆）
+
+- [ ] 文件重命名
+- [ ] 文件夹创建
+- [ ] 文件夹删除
+- [ ] 当前结果过滤
+
+
+## 其他
+
+- [x] 面包屑导航
+- [x] Index控制面板
+- [x] Watcher控制面板
+- [x] 登录
+- [ ] 刷新按钮 
+- [x] 文件夹封面（测试，当前版本会造成较大的性能损失）

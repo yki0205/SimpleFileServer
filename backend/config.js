@@ -26,6 +26,7 @@ module.exports = {
 
   contentMaxSize: process.env.CONTENT_MAX_SIZE || 5 * 1024 * 1024, // 5MB
 
+  generateThumbnail: process.env.GENERATE_THUMBNAIL === 'true' || false,
   thumbnailCacheDir: process.env.THUMBNAIL_CACHE_DIR || path.join(TMP_DIR, 'thumbnails'),
   
   // User authentication settings
