@@ -520,7 +520,7 @@ app.get('/api/thumbnail', async (req, res) => {
       }
 
       // Cache mechanism: generate cache path
-      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
+      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'thumbnails');
       if (!fs.existsSync(cacheDir)) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
@@ -562,7 +562,7 @@ app.get('/api/thumbnail', async (req, res) => {
     } else if (mimeType.startsWith('video/')) {
 
       // Cache mechanism: generate cache path
-      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'image-thumbnails');
+      const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'thumbnails');
       if (!fs.existsSync(cacheDir)) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }

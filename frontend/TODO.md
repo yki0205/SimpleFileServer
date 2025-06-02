@@ -3,6 +3,10 @@
 - 在selection状态时允许navigate可能会导致预想不到的错误，应该禁止在selection状态时navigate，或者在navigate时自动取消selection状态
 - NavigatePreview中似乎存在更新卡顿的情况，需Check
 
+
+- Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+
+
 # TODO
 
 - Refresh Button
