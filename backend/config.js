@@ -52,7 +52,26 @@ module.exports = {
   // Watch depth: 0 = only base directory, 1 = base + one level, etc., -1 = all subdirectories (may impact performance)
   watchDepth: parseInt(process.env.WATCH_DEPTH) || 1, 
   // Ignore patterns (glob patterns) for files/directories to ignore during watching
-  watchIgnorePatterns: (process.env.WATCH_IGNORE_PATTERNS || '**/.git/**,**/node_modules/**').split(','),
+  watchIgnorePatterns: (process.env.WATCH_IGNORE_PATTERNS || '**/.git/**,**/node_modules/**,**/__pycache__/**').split(','),
   // Debounce interval in ms for file change events
-  watchDebounceInterval: parseInt(process.env.WATCH_DEBOUNCE_INTERVAL) || 1000
+  watchDebounceInterval: parseInt(process.env.WATCH_DEBOUNCE_INTERVAL) || 1000,
+  // Maximum number of retries for failed watcher operations
+  watchMaxRetries: parseInt(process.env.WATCH_MAX_RETRIES) || 3,
+  // Delay in ms before retrying a failed watcher operation
+  watchRetryDelay: parseInt(process.env.WATCH_RETRY_DELAY) || 10000, // 10 seconds
+  
+  // File processing mode (parallel/sync)
+  parallelFileProcessing: process.env.PARALLEL_FILE_PROCESSING !== 'false', // default true
+
+  // Use mime-magic to detect file type (may impact performance)
+  useMimeMagic: process.env.USE_MIME_MAGIC === 'true' || false,
+
+  // Custom content types (key-value pairs) (
+  // This is used when useMimeMagic is false or when mime-magic fails to detect the file type
+  customContentTypes: process.env.CUSTOM_CONTENT_TYPES 
+    ? JSON.parse(process.env.CUSTOM_CONTENT_TYPES)
+    : {
+        // '.myext': 'application/my-custom-type',
+      },
+
 }

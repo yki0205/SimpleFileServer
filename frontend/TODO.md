@@ -5,7 +5,9 @@
 
 # TODO
 
-- 实现clone和move
+- Refresh Button
+- 全局的右键菜单
+- 右键菜单中添加打开多选的选项
 - 实现rename
 - 实现mkdir
 - 实现rmdir（处于安全考虑，我将删除文件夹作为一个单独的api从delete中提取）

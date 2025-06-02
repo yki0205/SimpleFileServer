@@ -9,6 +9,8 @@ let isWatching = false;
 let watchedDirs = new Set();
 let debounceTimers = {};
 
+const retryQueue = new Map();
+
 
 function initialize() {
   if (!config.useFileWatcher) {
@@ -52,6 +54,12 @@ function stopWatching() {
       console.error('Error closing watcher:', error);
     }
   });
+
+  // Clear retry queue
+  retryQueue.forEach((timeoutId, dirPath) => {
+    clearTimeout(timeoutId);
+  });
+  retryQueue.clear();
   
   // Clear state
   watchers = [];
@@ -67,7 +75,7 @@ function stopWatching() {
 }
 
 
-function watchDirectory(dirPath, currentDepth) {
+function watchDirectory(dirPath, currentDepth, retryCount = 0) {
   if (watchedDirs.has(dirPath)) return;
   
   // Check if we should ignore this directory
@@ -86,6 +94,31 @@ function watchDirectory(dirPath, currentDepth) {
         return;
       }
       handleFileChange(eventType, path.join(dirPath, filename));
+    });
+    
+    watcher.on('error', (error) => {
+      console.error(`Watcher error in ${dirPath}:`, error);
+      const index = watchers.indexOf(watcher);
+      if (index > -1) {
+        watchers.splice(index, 1);
+      }
+      try {
+        watcher.close();
+      } catch (closeError) {
+        console.error('Error closing faulty watcher:', closeError);
+      }
+      watchedDirs.delete(dirPath);
+
+      if (retryCount < config.watchMaxRetries) {
+        console.log(`Retrying watch for ${dirPath} in ${config.watchRetryDelay}ms`);
+        const timeoutId = setTimeout(() => {
+          watchDirectory(dirPath, currentDepth, retryCount + 1);
+        }, config.watchRetryDelay || 1000);
+
+        retryQueue.set(dirPath, timeoutId);
+      } else {
+        console.error(`Failed to watch ${dirPath} after ${config.watchMaxRetries} retries`);
+      }
     });
     
     watchers.push(watcher);

@@ -154,7 +154,7 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
                     <span>Indexing Progress:</span>
                     <span>{getProgressPercentage()}%</span>
                   </div>
-                  <Progress value={getProgressPercentage()} className="h-2 bg-white/10" />
+                  <Progress value={getProgressPercentage()} className="h-2 bg-white/10 [&>*]:bg-white/50" />
                   <div className="flex justify-between text-sm text-white/50 mt-1">
                     <span>Processed: {formatNumber(indexStatus.progress.processed || 0)}</span>
                     <span>Total: {formatNumber(indexStatus.progress.total || 0)}</span>

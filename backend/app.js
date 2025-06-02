@@ -1,3 +1,28 @@
+const express = require('express');
+const os = require('os');
+const fs = require('fs')
+const path = require('path')
+const cors = require('cors')
+const utils = require('./utils');
+const config = require('./config')
+// handle zip and rar files
+const AdmZip = require('adm-zip')
+const unrar = require('node-unrar-js');
+// handle file uploads
+const multer = require('multer')
+// indexer
+const indexer = require('./indexer');
+// watcher
+const watcher = require('./watcher');
+// auth
+const { authMiddleware, writePermissionMiddleware } = require('./auth');
+// worker threads
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+
+const pLimit = require('p-limit').default;
+const fileReadLimit = pLimit(100);
+
+
 const originalStdoutWrite = process.stdout.write;
 process.stdout.write = (chunk, encoding, callback) => {
   const date = new Date().toISOString();
@@ -10,32 +35,39 @@ process.stderr.write = (chunk, encoding, callback) => {
   return originalStderrWrite.call(process.stderr, `[${date}] ${chunk}`, encoding, callback);
 };
 
-const express = require('express');
-const os = require('os');
-const fs = require('fs')
-const path = require('path')
-const cors = require('cors')
-const utils = require('./utils');
-const config = require('./config')
+process
+  .on('uncaughtException', (error, origin) => {
+    const errorTime = new Date().toISOString();
+    const errorLog = `
+    ====== Uncaught Exception at ${errorTime} ======
+    Origin: ${origin}
+    Error: ${error}
+    Stack: ${error.stack}
+    ================================================
+    `;
 
-// handle zip and rar files
-const AdmZip = require('adm-zip')
-const unrar = require('node-unrar-js');
+    fs.appendFileSync('crash.log', errorLog);
+    console.error(`[${errorTime}] Uncaught Exception:`, error);
+    // exit if the error is not recoverable
+    if (!utils.isRecoverableError(error)) {
+      process.exit(1);
+    }
+  })
+  .on('unhandledRejection', (reason, promise) => {
+    const errorTime = new Date().toISOString();
+    const errorLog = `
+    ====== Unhandled Rejection at ${errorTime} ======
+    Promise: ${promise}
+    Reason: ${reason}
+    ${reason.stack ? `Stack: ${reason.stack}` : ''}
+    ================================================
+    `;
 
-// handle file uploads
-const multer = require('multer')
+    fs.appendFileSync('rejections.log', errorLog);
+    console.error(`[${errorTime}] Unhandled Rejection:`, reason);
+  });
 
-// indexer
-const indexer = require('./indexer');
 
-// watcher
-const watcher = require('./watcher');
-
-// auth
-const { authMiddleware, writePermissionMiddleware } = require('./auth');
-
-// worker threads
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
 const app = express();
 const PORT = config.port;
@@ -102,72 +134,157 @@ app.get('/api/validate-token', (req, res) => {
 
 app.get('/api/files', async (req, res) => {
   const { dir = '', cover = 'false' } = req.query;
-  const basePath = path.resolve(config.baseDirectory)
-  const fullPath = path.join(basePath, dir)
+  const basePath = path.resolve(config.baseDirectory);
+  const fullPath = path.join(basePath, dir);
 
   if (!fullPath.startsWith(basePath)) {
-    return res.status(403).json({ error: "Access denied" })
+    return res.status(403).json({ error: "Access denied" });
   }
 
   try {
-    const stats = fs.statSync(fullPath);
+    if (config.parallelFileProcessing) {
+      const stats = await fs.promises.stat(fullPath);
+      if (!stats.isDirectory()) {
+        return res.status(400).json({ error: "Not a directory" });
+      }
 
-    if (!stats.isDirectory()) {
-      return res.status(400).json({ error: "Not a directory" })
-    }
+      const files = await fs.promises.readdir(fullPath);
 
-    const files = fs.readdirSync(fullPath)
-    const fileDetailsPromises = files.map(async file => {
-      const filePath = path.join(fullPath, file);
-      const fileStats = fs.statSync(filePath);
-      const isDirectory = fileStats.isDirectory();
+      const processFile = async (file) => {
+        const filePath = path.join(fullPath, file);
 
-      const fileDetail = {
-        name: file,
-        path: utils.normalizePath(path.join(dir, file)),
-        size: fileStats.size,
-        mtime: fileStats.mtime,
-        isDirectory,
+        // limit the concurrency of file read
+        return fileReadLimit(async () => {
+          try {
+            const [fileStats, mimeType] = await Promise.all([
+              fs.promises.stat(filePath),
+              utils.getFileType(filePath).catch(() => 'unknown')
+            ]);
+
+            const result = {
+              name: file,
+              path: utils.normalizePath(path.join(dir, file)),
+              size: fileStats.size,
+              mtime: fileStats.mtime,
+              isDirectory: fileStats.isDirectory(),
+              mimeType: fileStats.isDirectory() ? undefined : mimeType
+            };
+
+            if (cover === 'true' && result.isDirectory) {
+              await processFolderCover(result, filePath, dir);
+            }
+
+            return result;
+          } catch (error) {
+            console.error(`Error processing ${filePath}:`, error);
+            return {
+              name: file,
+              error: 'Failed to get file info'
+            };
+          }
+        });
       };
 
-      if (!isDirectory) {
-        fileDetail.mimeType = await utils.getFileType(filePath);
+      // handle partial failures
+      const results = await Promise.allSettled(files.map(processFile));
+
+      // filter valid results
+      const fileDetails = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value);
+
+      res.json({ files: fileDetails });
+
+    } else {
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isDirectory()) {
+        return res.status(400).json({ error: "Not a directory" })
       }
 
-      if (cover === 'true' && isDirectory) {
-        try {
-          const subFiles = fs.readdirSync(filePath);
-          const imageFilesPromises = await Promise.all(
-            subFiles.map(async subFile => {
-              const subFilePath = path.join(filePath, subFile);
-              const mimeType = await utils.getFileType(subFilePath);
-              return { subFile, mimeType };
-            })
-          );
+      const files = fs.readdirSync(fullPath)
+      const fileDetailsPromises = files.map(async file => {
+        const filePath = path.join(fullPath, file);
+        const fileStats = fs.statSync(filePath);
+        const isDirectory = fileStats.isDirectory();
 
-          const imageFiles = imageFilesPromises
-            .filter(({ mimeType }) => mimeType.startsWith('image/'))
-            .map(({ subFile }) => subFile)
-            .sort();
+        const fileDetail = {
+          name: file,
+          path: utils.normalizePath(path.join(dir, file)),
+          size: fileStats.size,
+          mtime: fileStats.mtime,
+          isDirectory,
+        };
 
-          if (imageFiles.length > 0) {
-            const coverImage = imageFiles[0];
-            fileDetail.cover = utils.normalizePath(path.join(dir, file, coverImage));
-          }
-        } catch (err) {
-          // Silently fail if can't read subdirectory
+        if (!isDirectory) {
+          fileDetail.mimeType = await utils.getFileType(filePath);
         }
-      }
 
-      return fileDetail;
-    });
+        if (cover === 'true' && isDirectory) {
+          try {
+            const subFiles = fs.readdirSync(filePath);
+            const imageFilesPromises = await Promise.all(
+              subFiles.map(async subFile => {
+                const subFilePath = path.join(filePath, subFile);
+                const mimeType = await utils.getFileType(subFilePath);
+                return { subFile, mimeType };
+              })
+            );
 
-    const fileDetails = await Promise.all(fileDetailsPromises);
-    res.json({ files: fileDetails })
+            const imageFiles = imageFilesPromises
+              .filter(({ mimeType }) => mimeType.startsWith('image/'))
+              .map(({ subFile }) => subFile)
+              .sort();
+
+            if (imageFiles.length > 0) {
+              const coverImage = imageFiles[0];
+              fileDetail.cover = utils.normalizePath(path.join(dir, file, coverImage));
+            }
+          } catch (err) {
+            // Silently fail if can't read subdirectory
+          }
+        }
+
+        return fileDetail;
+      });
+
+      const fileDetails = await Promise.all(fileDetailsPromises);
+      res.json({ files: fileDetails })
+    }
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
 });
+
+async function processFolderCover(fileDetail, filePath, baseDir) {
+  try {
+    const subFiles = await fs.promises.readdir(filePath);
+
+    // parallel check file type
+    const imageCheckPromises = subFiles.map(async subFile => {
+      const subFilePath = path.join(filePath, subFile);
+      try {
+        const mimeType = await utils.getFileType(subFilePath);
+        return { subFile, mimeType };
+      } catch {
+        return { subFile, mimeType: 'unknown' };
+      }
+    });
+
+    const imageFiles = (await Promise.all(imageCheckPromises))
+      .filter(({ mimeType }) => mimeType.startsWith('image/'))
+      .map(({ subFile }) => subFile)
+      .sort();
+
+    if (imageFiles.length > 0) {
+      fileDetail.cover = utils.normalizePath(
+        path.join(baseDir, fileDetail.name, imageFiles[0])
+      );
+    }
+  } catch (error) {
+    console.error(`Error processing cover for ${filePath}:`, error);
+  }
+}
 
 app.get('/api/search', (req, res) => {
   const { query, dir = '' } = req.query;
@@ -840,73 +957,96 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
 })
 
 app.post('/api/clone', writePermissionMiddleware, (req, res) => {
-  const { source, destination } = req.body;
+  const { sources, destination } = req.body;
   const basePath = path.resolve(config.baseDirectory);
-  const sourcePath = path.join(basePath, source);
-  const destPath = path.join(basePath, destination);
-
-  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
+  
+  if (!sources || !Array.isArray(sources) || sources.length === 0) {
+    return res.status(400).json({ error: 'No sources provided' });
   }
 
+  const results = [];
   try {
-    // Check if source exists
-    if (!fs.existsSync(sourcePath)) {
-      return res.status(404).json({ error: 'Source file or directory not found' });
-    }
-
-    // Check if destination parent directory exists
-    const destDir = path.dirname(destPath);
+    const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
 
-    const stats = fs.statSync(sourcePath);
-    if (stats.isDirectory()) {
-      // Clone directory recursively
-      copyFolderRecursiveSync(sourcePath, destPath);
-      res.status(200).json({ message: 'Directory cloned successfully' });
-    } else {
-      // Clone file
-      fs.copyFileSync(sourcePath, destPath);
-      res.status(200).json({ message: 'File cloned successfully' });
+    for (const source of sources) {
+      const sourcePath = path.join(basePath, source);
+      const destPath = path.join(destDir, path.basename(source));
+
+      if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+        results.push({ source, status: 'failed', error: 'Access denied' });
+        continue;
+      }
+
+      try {
+        if (!fs.existsSync(sourcePath)) {
+          results.push({ source, status: 'failed', error: 'Source not found' });
+          continue;
+        }
+
+        const stats = fs.statSync(sourcePath);
+        if (stats.isDirectory()) {
+          copyFolderRecursiveSync(sourcePath, destPath);
+        } else {
+          fs.copyFileSync(sourcePath, destPath);
+        }
+        results.push({ source, status: 'success', destination: path.relative(basePath, destPath) });
+      } catch (error) {
+        results.push({ source, status: 'failed', error: error.message });
+      }
     }
+
+    res.json({ results });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-})
+});
 
 app.post('/api/move', writePermissionMiddleware, (req, res) => {
-  const { source, destination } = req.body;
+  const { sources, destination } = req.body;
   const basePath = path.resolve(config.baseDirectory);
-  const sourcePath = path.join(basePath, source);
-  const destPath = path.join(basePath, destination);
 
-  if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
-    return res.status(403).json({ error: 'Access denied' });
+  if (!sources || !Array.isArray(sources) || sources.length === 0) {
+    console
+    return res.status(400).json({ error: 'No sources provided' });
   }
 
+  const results = [];
   try {
-    // Check if source exists
-    if (!fs.existsSync(sourcePath)) {
-      return res.status(404).json({ error: 'Source file or directory not found' });
-    }
-
-    // Check if destination parent directory exists
-    const destDir = path.dirname(destPath);
+    const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
 
-    // Move file or directory
-    fs.renameSync(sourcePath, destPath);
-    res.status(200).json({ message: 'File or directory moved successfully' });
+    for (const source of sources) {
+      const sourcePath = path.join(basePath, source);
+      const destPath = path.join(destDir, path.basename(source));
+
+      if (!sourcePath.startsWith(basePath) || !destPath.startsWith(basePath)) {
+        results.push({ source, status: 'failed', error: 'Access denied' });
+        continue;
+      }
+
+      try {
+        if (!fs.existsSync(sourcePath)) {
+          results.push({ source, status: 'failed', error: 'Source not found' });
+          continue;
+        }
+
+        fs.renameSync(sourcePath, destPath);
+        results.push({ source, status: 'success', destination: path.relative(basePath, destPath) });
+      } catch (error) {
+        results.push({ source, status: 'failed', error: error.message });
+      }
+    }
+
+    res.json({ results });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-})
-
-
+});
 
 app.get('/api/index-status', (req, res) => {
   if (!config.useFileIndex) {

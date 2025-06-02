@@ -213,8 +213,6 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
     ) : null;
   }
 
-  console.log(visibleSegments, hiddenSegments);
-
   return (
     <div 
       ref={containerRef} 

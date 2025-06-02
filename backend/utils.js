@@ -1,7 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const config = require('./config');
 const mimeMagic = require('mime-magic');
 
+function isRecoverableError(error) {
+  const fatalErrors = ['EACCES', 'EADDRINUSE', 'ECONNREFUSED'];
+  return !fatalErrors.includes(error.code);
+}
 
 function normalizePath(filepath) {
   return filepath.replace(/\\/g, '/');
@@ -48,6 +53,7 @@ function getFileTypeByExt(extension) {
     '.cbz': 'application/cbz',
     '.cbr': 'application/cbr',
     '.epub': 'application/epub',
+    ...config.customContentTypes
   };
 
   return contentTypes[extension] || 'application/octet-stream';
@@ -59,15 +65,19 @@ async function getFileType(filePath) {
   }
 
   const extension = path.extname(filePath).toLowerCase();
-  if (extension === '.cbz') return 'application/cbz';
-  if (extension === '.cbr') return 'application/cbr';
-  if (extension === '.epub') return 'application/epub';
-  try {
-    return await getFileTypeByMime(filePath);
-  } catch (error) {
-    console.error('Error detecting MIME type:', error);
-    const ext = path.extname(filePath).toLowerCase();
-    return getFileTypeByExt(ext);
+  if (config.useMimeMagic) {
+    if (extension === '.cbz') return 'application/cbz';
+    if (extension === '.cbr') return 'application/cbr';
+    if (extension === '.epub') return 'application/epub';
+    try {
+      return await getFileTypeByMime(filePath);
+    } catch (error) {
+      console.error('Error detecting MIME type:', error);
+      const ext = path.extname(filePath).toLowerCase();
+      return getFileTypeByExt(ext);
+    }
+  } else {
+    return getFileTypeByExt(extension);
   }
 }
 
@@ -83,6 +93,7 @@ function getSubdirectories(dir) {
 }
 
 module.exports = {
+  isRecoverableError,
   normalizePath,
   getFileType,
   getFileTypeByMime,

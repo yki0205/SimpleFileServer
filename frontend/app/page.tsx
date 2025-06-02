@@ -18,8 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
-  Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User,
-  Check, CircleCheck, CircleX, ArrowLeftRight,
+  Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
+  CircleCheck, CircleX, ArrowLeftRight, RefreshCw
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -72,14 +72,16 @@ interface FileRowProps {
     isSelecting: boolean;
     isSearching: boolean;
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
+    onCopy: (path: string) => void;
+    onCut: (path: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
-    onShowDetails?: (file: FileData) => void;
+    onShowDetails: (file: FileData) => void;
   };
 }
 
 const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
-  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onDownload, onDelete, onShowDetails } = data;
+  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails } = data;
   const file = files[index];
 
   return (
@@ -97,9 +99,17 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+          <ContextMenuItem onClick={() => onShowDetails(file)}>
             <Info className="mr-2" size={16} />
             Details
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onCopy(file.path)}>
+            <ClipboardCopy className="mr-2" size={16} />
+            Copy
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onCut(file.path)}>
+            <Scissors className="mr-2" size={16} />
+            Cut
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onDownload(file.path)}>
             <Download className="mr-2" size={16} />
@@ -125,14 +135,16 @@ interface FileCellProps {
     isSelecting: boolean;
     columnCount: number;
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
+    onCopy: (path: string) => void;
+    onCut: (path: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
-    onShowDetails?: (file: FileData) => void;
+    onShowDetails: (file: FileData) => void;
   };
 }
 
 const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onDownload, onDelete, onShowDetails } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -153,9 +165,17 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+          <ContextMenuItem onClick={() => onShowDetails(file)}>
             <Info className="mr-2" size={16} />
             Details
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onCopy(file.path)}>
+            <ClipboardCopy className="mr-2" size={16} />
+            Copy
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onCut(file.path)}>
+            <Scissors className="mr-2" size={16} />
+            Cut
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onDownload(file.path)}>
             <Download className="mr-2" size={16} />
@@ -181,15 +201,17 @@ interface ImageCellProps {
     isSelecting: boolean;
     columnCount: number;
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
+    onCopy: (path: string) => void;
+    onCut: (path: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
-    onShowDetails?: (file: FileData) => void;
+    onShowDetails: (file: FileData) => void;
     token?: string;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onDownload, onDelete, onShowDetails, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, token } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -214,9 +236,17 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             />
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+            <ContextMenuItem onClick={() => onShowDetails(file)}>
               <Info className="mr-2" size={16} />
               Details
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopy(file.path)}>
+              <ClipboardCopy className="mr-2" size={16} />
+              Copy
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCut(file.path)}>
+              <Scissors className="mr-2" size={16} />
+              Cut
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onDownload(file.path)}>
               <Download className="mr-2" size={16} />
@@ -247,9 +277,17 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             />
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+            <ContextMenuItem onClick={() => onShowDetails(file)}>
               <Info className="mr-2" size={16} />
               Details
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopy(file.path)}>
+              <ClipboardCopy className="mr-2" size={16} />
+              Copy
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCut(file.path)}>
+              <Scissors className="mr-2" size={16} />
+              Cut
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onDownload(file.path)}>
               <Download className="mr-2" size={16} />
@@ -283,6 +321,14 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               <Info className="mr-2" size={16} />
               Details
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopy(file.path)}>
+              <ClipboardCopy className="mr-2" size={16} />
+              Copy
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCut(file.path)}>
+              <Scissors className="mr-2" size={16} />
+              Cut
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onDownload(file.path)}>
               <Download className="mr-2" size={16} />
               Download
@@ -309,15 +355,17 @@ interface MasonryCellProps {
     columnWidth: number;
     direction: 'ltr' | 'rtl';
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
+    onCopy: (path: string) => void;
+    onCut: (path: string) => void;
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
-    onShowDetails?: (file: FileData) => void;
+    onShowDetails: (file: FileData) => void;
     token?: string;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onDownload, onDelete, onShowDetails, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, token } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -355,9 +403,17 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
               />
             </ContextMenuTrigger>
             <ContextMenuContent>
-              <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+              <ContextMenuItem onClick={() => onShowDetails(file)}>
                 <Info className="mr-2" size={16} />
                 Details
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onCopy(file.path)}>
+                <ClipboardCopy className="mr-2" size={16} />
+                Copy
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onCut(file.path)}>
+                <Scissors className="mr-2" size={16} />
+                Cut
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onDownload(file.path)}>
                 <Download className="mr-2" size={16} />
@@ -456,6 +512,7 @@ function FileExplorerContent() {
   const [downloadMultipleDialogOpen, setDownloadMultipleDialogOpen] = useState(false);
 
   const [fileToDelete, setFileToDelete] = useState('');
+  const [filesToDelete, setFilesToDelete] = useState<string[]>([])
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
   const [deleteMultipleDialogOpen, setDeleteMultipleDialogOpen] = useState(false);
 
@@ -520,6 +577,31 @@ function FileExplorerContent() {
   const [useFileWatcher, setUseFileWatcher] = useState(true);
   const [showIndexDialog, setShowIndexDialog] = useState(false);
   const [showWatcherDialog, setShowWatcherDialog] = useState(false);
+
+
+  const cloneTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const moveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Automatically clear filesToClone and filesToMove after 5 minutes
+  useEffect(() => {
+    if (filesToClone.length > 0) {
+      cloneTimerRef.current = setTimeout(() => {
+        setFilesToClone([]);
+      }, 5 * 60 * 1000);
+    }
+
+    if (filesToMove.length > 0) {
+      moveTimerRef.current = setTimeout(() => {
+        setFilesToMove([]);
+      }, 5 * 60 * 1000);
+    }
+
+    return () => {
+      cloneTimerRef.current && clearTimeout(cloneTimerRef.current);
+      moveTimerRef.current && clearTimeout(moveTimerRef.current);
+    };
+  }, [filesToClone, filesToMove]);
+
 
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
     queryKey: ['files', currentPath],
@@ -619,7 +701,15 @@ function FileExplorerContent() {
     });
   }, [filesData?.files, searchData?.results, imagesData?.images, sortBy, sortOrder, viewMode, isSearching]);
 
-
+  const refetch = useCallback(() => {
+    if (viewMode === 'imageOnly') {
+      refetchImages();
+    } else if (isSearching) {
+      refetchSearch();
+    } else {
+      refetchFiles();
+    }
+  }, [viewMode, isSearching, refetchSearch, refetchFiles, refetchImages]);
 
   const navigateTo = (path: string, query: string = '') => {
     if (viewMode === 'imageOnly') {
@@ -864,11 +954,7 @@ function FileExplorerContent() {
               ));
 
               // Refresh file list
-              if (isSearching) {
-                refetchSearch();
-              } else {
-                refetchFiles();
-              }
+              refetch();
             } else {
               setUploadFiles(prev => prev.map(f =>
                 f.id === fileData.id ? {
@@ -1131,29 +1217,21 @@ function FileExplorerContent() {
     fetch(`/api/mkdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
-      if (isSearching) {
-        refetchSearch();
-      } else {
-        refetchFiles();
-      }
+      refetch();
     }).catch((error) => {
       console.error('Error creating directory:', error);
     });
-  }, [token, isSearching, refetchSearch, refetchFiles]);
+  }, [token, refetch]);
 
   const handleRmdir = useCallback((path: string) => {
     fetch(`/api/rmdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
-      if (isSearching) {
-        refetchSearch();
-      } else {
-        refetchFiles();
-      }
+      refetch();
     }).catch((error) => {
       console.error('Error removing directory:', error);
     });
-  }, [token, isSearching, refetchSearch, refetchFiles]);
+  }, [token, refetch]);
 
 
 
@@ -1161,15 +1239,11 @@ function FileExplorerContent() {
     fetch(`/api/rename?path=${encodeURIComponent(path)}&newName=${encodeURIComponent(newName)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
-      if (isSearching) {
-        refetchSearch();
-      } else {
-        refetchFiles();
-      }
+      refetch();
     }).catch((error) => {
       console.error('Error renaming file:', error);
     });
-  }, [token, isSearching, refetchSearch, refetchFiles]);
+  }, [token, refetch]);
 
 
 
@@ -1184,29 +1258,33 @@ function FileExplorerContent() {
     }).then(() => {
       setFileToDelete('');
       setDeleteComfirmDialogOpen(false);
-      if (isSearching) {
-        refetchSearch();
-      } else {
-        refetchFiles();
-      }
+      refetch();
     }).catch((error) => {
       console.error('Error deleting file:', error);
     });
-  }, []);
+  }, [token, refetch]);
 
   const handleDeleteCancel = useCallback(() => {
     setFileToDelete('');
     setDeleteComfirmDialogOpen(false);
   }, []);
 
+  const handleDeleteMultiple = useCallback((paths: string[]) => {
+    setFilesToDelete(paths);
+    setDeleteMultipleDialogOpen(true);
+  }, []);
+
   const handleDeleteMultipleConfirm = useCallback((paths: string[]) => {
     fetch(`/api/delete?paths=${encodeURIComponent(paths.join('|'))}${token ? `&token=${token}` : ''}`, {
       method: 'DELETE',
     }).then(() => {
-      setSelectedFiles([]);
+      setFilesToDelete([]);
       setDeleteMultipleDialogOpen(false);
+      refetch();
+    }).catch((error) => {
+      console.error('Error deleting files:', error);
     });
-  }, []);
+  }, [token, refetch]);
 
   const handleDeleteMultipleCancel = useCallback(() => {
     setSelectedFiles([]);
@@ -1223,9 +1301,31 @@ function FileExplorerContent() {
     setFilesToClone(paths);
   }, []);
 
-  const handlePaste = useCallback((path: string) => {
-    // TODO: Implement paste
+  const handlePasteConfirm = useCallback((destinationPath: string) => {
+    cloneTimerRef.current && clearTimeout(cloneTimerRef.current);
+    fetch(`/api/clone${token ? `?token=${token}` : ''}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sources: filesToClone,
+        destination: destinationPath
+      })
+    }).then(() => {
+      setCloneComfirmDialogOpen(false);
+      setFilesToClone([]);
+      refetch();
+    }).catch((error) => {
+      console.error('Error pasting files:', error);
+    });
+  }, [filesToClone, token, refetch]);
+
+  const handlePasteCancel = useCallback(() => {
+    setCloneComfirmDialogOpen(false);
   }, []);
+
+
 
   const handleMoveFrom = useCallback((path: string) => {
     setFilesToMove([path]);
@@ -1235,10 +1335,29 @@ function FileExplorerContent() {
     setFilesToMove(paths);
   }, []);
 
-  const handleMoveHere = useCallback((newPath: string) => {
-    // TODO: Implement move here
-  }, []);
+  const handleMoveHereComfirm = useCallback((destinationPath: string) => {
+    moveTimerRef.current && clearTimeout(moveTimerRef.current);
+    fetch(`/api/move${token ? `?token=${token}` : ''}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sources: filesToMove,
+        destination: destinationPath
+      })
+    }).then(() => {
+      setMoveComfirmDialogOpen(false);
+      setFilesToMove([]);
+      refetch();
+    }).catch((error) => {
+      console.error('Error moving files:', error);
+    });
+  }, [filesToMove, token, refetch]);
 
+  const handleMoveHereCancel = useCallback(() => {
+    setMoveComfirmDialogOpen(false)
+  }, []);
 
 
   const handleVirtualizedScroll = ({ scrollOffset, scrollTop }: any) => {
@@ -1380,6 +1499,8 @@ function FileExplorerContent() {
         isSelecting,
         isSearching,
         onFileClick: handleFileClick,
+        onCopy: handleCopy,
+        onCut: handleMoveFrom,
         onDownload: handleDownload,
         onDelete: handleDelete,
         onShowDetails: handleShowDetails
@@ -1414,6 +1535,8 @@ function FileExplorerContent() {
           isSelecting,
           columnCount,
           onFileClick: handleFileClick,
+          onCopy: handleCopy,
+          onCut: handleMoveFrom,
           onDownload: handleDownload,
           onDelete: handleDelete,
           onShowDetails: handleShowDetails
@@ -1449,6 +1572,8 @@ function FileExplorerContent() {
           isSelecting,
           columnCount,
           onFileClick: handleFileClick,
+          onCopy: handleCopy,
+          onCut: handleMoveFrom,
           onDownload: handleDownload,
           onDelete: handleDelete,
           onShowDetails: handleShowDetails,
@@ -1488,6 +1613,8 @@ function FileExplorerContent() {
               columnWidth,
               direction: gridDirection,
               onFileClick: handleFileClick,
+              onCopy: handleCopy,
+              onCut: handleMoveFrom,
               onDownload: handleDownload,
               onDelete: handleDelete,
               onShowDetails: handleShowDetails,
@@ -1498,6 +1625,8 @@ function FileExplorerContent() {
       </div>
     );
   }, [useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
+
+
 
 
   return (
@@ -1770,11 +1899,31 @@ function FileExplorerContent() {
               {selectedFiles.length} files selected
             </span>
             <div className="flex items-center gap-2">
-              <button onClick={() => handleDownloadMultiple2(selectedFiles)} className="flex items-center gap-1 text-blue-500 hover:text-blue-600">
+              <button
+                onClick={() => { handleMoveFromMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+              >
+                <Scissors size={18} />
+                <span className="text-sm max-sm:hidden">Cut</span>
+              </button>
+              <button
+                onClick={() => { handleCopyMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+              >
+                <ClipboardCopy size={18} />
+                <span className="text-sm max-sm:hidden">Copy</span>
+              </button>
+              <button
+                onClick={() => { handleDownloadMultiple2(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+              >
                 <Download size={18} />
                 <span className="text-sm max-sm:hidden">Download</span>
               </button>
-              <button onClick={() => setDeleteMultipleDialogOpen(true)} className="flex items-center gap-1 text-red-500 hover:text-red-600">
+              <button
+                onClick={() => { handleDeleteMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                className="flex items-center gap-1 text-red-500 hover:text-red-600"
+              >
                 <Trash2 size={18} />
                 <span className="text-sm max-sm:hidden">Delete</span>
               </button>
@@ -1829,9 +1978,13 @@ function FileExplorerContent() {
         </div>
       ) : null}
 
-      {viewMode === 'imageOnly' && (
+      {viewMode === 'imageOnly' ? (
         <div className="flex justify-center text-sm text-muted-foreground mb-1">
           {imagesData?.images.length} images found in {currentPath}
+        </div>
+      ): (
+        <div className="flex justify-center text-sm text-muted-foreground mb-1">
+          {sortedFiles.length} files found
         </div>
       )}
 
@@ -2178,11 +2331,35 @@ function FileExplorerContent() {
         open={deleteMultipleDialogOpen}
         setOpen={setDeleteMultipleDialogOpen}
         title="Delete"
-        description={`Are you sure you want to delete ${selectedFiles.length} files?`}
+        description={`Are you sure you want to delete ${filesToDelete.length} files?`}
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => handleDeleteMultipleConfirm(selectedFiles)}
+        onConfirm={() => handleDeleteMultipleConfirm(filesToDelete)}
         onCancel={handleDeleteMultipleCancel}
+      />
+
+      {/* Paste here dialog */}
+      <ConfirmDialog
+        open={cloneComfirmDialogOpen}
+        setOpen={setCloneComfirmDialogOpen}
+        title="Paste here"
+        description="Are you sure you want to paste these files here?"
+        confirmText="Paste"
+        cancelText="Cancel"
+        onConfirm={() => handlePasteConfirm(currentPath)}
+        onCancel={handlePasteCancel}
+      />
+
+      {/* Move here dialog */}
+      <ConfirmDialog
+        open={moveComfirmDialogOpen}
+        setOpen={setMoveComfirmDialogOpen}
+        title="Move here"
+        description="Are you sure you want to move these files here?"
+        confirmText="Move"
+        cancelText="Cancel"
+        onConfirm={() => handleMoveHereComfirm(currentPath)}
+        onCancel={handleMoveHereCancel}
       />
 
       {/* Index settings dialog */}
