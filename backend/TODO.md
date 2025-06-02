@@ -1,6 +1,6 @@
-# BUG
+# ISSUE
 
-## 1
+## 1 Wather的错误处理
 
 node:events:485
       throw er; // Unhandled 'error' event
@@ -20,7 +20,7 @@ Node.js v24.1.0
 [nodemon] app crashed - waiting for file changes before starting...
 
 
-## 2
+## 2 内存过量使用
 
  658860 [main] file 49076 cygwin program: *** fatal error - Internal error: Out of memory for new path buf.
  926065 [main] file 37540 cygwin program: *** fatal error - Internal error: Out of memory for new wide path buf.

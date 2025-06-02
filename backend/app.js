@@ -22,6 +22,7 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const pLimit = require('p-limit').default;
 const fileReadLimit = pLimit(100);
 
+process.env.NO_CONFIG_WARNING = 'true';
 
 const originalStdoutWrite = process.stdout.write;
 process.stdout.write = (chunk, encoding, callback) => {
@@ -292,7 +293,7 @@ app.get('/api/search', (req, res) => {
   const searchPath = path.join(basePath, dir);
 
   if (!query) {
-    return res.status(400).json({ error: "Search query is required" })
+    return res.status(400).json({ error: "Search query is required" });
   }
 
   try {
@@ -342,7 +343,7 @@ app.get('/api/images', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-})
+});
 
 app.get('/api/download', (req, res) => {
   const { path: requestedPath, paths: requestedPaths } = req.query;
@@ -1250,7 +1251,7 @@ async function parallelSearch(dir, query, basePath) {
       const subdirs = utils.getSubdirectories(dir);
 
       if (subdirs.length === 0) {
-        return searchFiles(dir, query, basePath);
+        return await searchFiles(dir, query, basePath);
       }
 
       const numCores = os.cpus().length;
@@ -1266,7 +1267,7 @@ async function parallelSearch(dir, query, basePath) {
         workers.push(createSearchWorker(workerSubdirs, query, basePath));
       }
 
-      const rootResults = searchFilesInDirectory(dir, query, basePath);
+      const rootResults = await searchFilesInDirectory(dir, query, basePath);
       const workerResults = await Promise.all(workers);
 
       return rootResults.concat(...workerResults);
@@ -1282,7 +1283,7 @@ async function parallelFindImages(dir, basePath) {
       const subdirs = utils.getSubdirectories(dir);
 
       if (subdirs.length === 0) {
-        return findAllImages(dir, basePath);
+        return await findAllImages(dir, basePath);
       }
 
       const numCores = os.cpus().length;
@@ -1298,7 +1299,7 @@ async function parallelFindImages(dir, basePath) {
         workers.push(createImageWorker(workerSubdirs, basePath));
       }
 
-      const rootResults = findImagesInDirectory(dir, basePath);
+      const rootResults = await findImagesInDirectory(dir, basePath);
       const workerResults = await Promise.all(workers);
 
       return rootResults.concat(...workerResults);
