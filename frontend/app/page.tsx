@@ -1054,7 +1054,8 @@ function FileExplorerContent() {
     const filename = path.split('/').pop() || 'download';
 
     // Create a download entry
-    const downloadId = crypto.randomUUID();
+    // const downloadId = crypto.randomUUID();
+    const downloadId = generateUniqueId();
     const newDownload = {
       id: downloadId,
       name: filename,

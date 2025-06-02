@@ -610,13 +610,15 @@ app.get('/api/thumbnail', async (req, res) => {
         .on('error', (err) => {
           console.error('Error generating video thumbnail:', err);
           res.status(500).json({ error: 'Failed to generate thumbnail' });
+          if (fs.existsSync(outputPath)) {
+            fs.unlinkSync(outputPath);
+          }
         });
     } else {
       res.status(400).json({ error: 'File is not supported' });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
-    console.log(error)
   }
 });
 
