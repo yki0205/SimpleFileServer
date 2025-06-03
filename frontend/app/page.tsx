@@ -25,7 +25,7 @@ import {
 import { BreadcrumbNav } from "@/components/nav";
 import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
-import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EpubPreview, PDFPreview } from "@/components/preview";
+import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EPUBPreview, PDFPreview } from "@/components/preview";
 import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog, LoginDialog } from "@/components/dialog";
 
 import { useAuth } from '@/context/auth-context';
@@ -2127,7 +2127,7 @@ function FileExplorerContent() {
           )}
 
           {preview.type === 'epub' && (
-            <EpubPreview
+            <EPUBPreview
               isOpen={preview.isOpen}
               title={preview.path.split('/').pop()}
               src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
