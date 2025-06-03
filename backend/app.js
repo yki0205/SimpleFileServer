@@ -533,6 +533,11 @@ app.get('/api/thumbnail', async (req, res) => {
   }
 
   if (!config.generateThumbnail) {
+    const mimeType = await utils.getFileType(fullPath);
+    if (mimeType.startsWith('image/')) {
+      res.setHeader('Content-Type', mimeType);
+      return fs.createReadStream(fullPath).pipe(res);
+    }
     return res.status(400).json({ error: 'Thumbnail generation is disabled' });
   }
 
