@@ -1633,7 +1633,7 @@ function FileExplorerContent() {
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
       <header className="flex flex-wrap justify-between mb-2 gap-1">
-        <div className="order-1 flex items-center gap-1">
+        <div className="flex-1 order-1 flex gap-1 justify-start">
           <Button
             variant="outline"
             size="icon"
@@ -1704,7 +1704,7 @@ function FileExplorerContent() {
           )}
         </div>
 
-        <form onSubmit={handleSearch} className="order-3 max-sm:w-full sm:max-w-sm flex gap-1">
+        <form onSubmit={handleSearch} className="flex-1 order-3 max-sm:min-w-[300px] max-sm:w-full sm:max-w-sm flex gap-1 justify-center">
           <Input
             name="searchQuery"
             placeholder="Search files..."
@@ -1725,7 +1725,7 @@ function FileExplorerContent() {
           )}
         </form>
 
-        <div className="order-2 sm:order-4 flex gap-1">
+        <div className="flex-1 order-2 sm:order-4 flex gap-1 justify-end">
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="flex items-center gap-1 min-w-20 h-full font-bold font-mono select-none">
