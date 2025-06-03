@@ -1632,51 +1632,39 @@ function FileExplorerContent() {
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
-      <header className="flex flex-wrap justify-between mb-2 gap-1">
-        <div className="flex-1 order-1 flex gap-1 justify-start">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goBack}
-            disabled={!canGoBack}
-            className={cn(
-              "text-black",
-              "bg-white hover:bg-white/80",
-              "transition-colors duration-200"
-            )}
-          >
-            <ArrowLeft size={18} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goHome}
-            className={cn(
-              "text-black",
-              "bg-white hover:bg-white/80",
-              "transition-colors duration-200"
-            )}
-          >
-            <Home size={18} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleUpload}
-            className={cn(
-              "text-black",
-              "bg-white hover:bg-white/80",
-              "transition-colors duration-200",
-              "max-sm:hidden"
-            )}
-          >
-            <Upload size={18} />
-          </Button>
-          {useFileIndex && (
+      <header className="flex flex-col sm:flex-row mb-2 gap-1">
+
+        <div className="w-full flex justify-between gap-1">
+          <div className="flex-1 flex gap-1 justify-start">
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setShowIndexDialog(true)}
+              onClick={goBack}
+              disabled={!canGoBack}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200"
+              )}
+            >
+              <ArrowLeft size={18} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={goHome}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200"
+              )}
+            >
+              <Home size={18} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleUpload}
               className={cn(
                 "text-black",
                 "bg-white hover:bg-white/80",
@@ -1684,27 +1672,220 @@ function FileExplorerContent() {
                 "max-sm:hidden"
               )}
             >
-              <Database size={18} />
+              <Upload size={18} />
             </Button>
-          )}
-          {useFileWatcher && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowWatcherDialog(true)}
+            {useFileIndex && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowIndexDialog(true)}
+                className={cn(
+                  "text-black",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200",
+                  "max-sm:hidden"
+                )}
+              >
+                <Database size={18} />
+              </Button>
+            )}
+            {useFileWatcher && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowWatcherDialog(true)}
+                className={cn(
+                  "text-black",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200",
+                  "max-sm:hidden"
+                )}
+              >
+                <Eye size={18} />
+              </Button>
+            )}
+          </div>
+
+          <form onSubmit={handleSearch} className="flex-1 max-sm:hidden max-w-sm flex gap-1 justify-center">
+            <Input
+              name="searchQuery"
+              placeholder="Search files..."
+              defaultValue={searchQuery}
               className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200",
+                "w-full",
+                "backdrop-blur-sm",
+                "text-white",
+                "selection:bg-white selection:text-black",
+                "focus-visible:ring-[1px]"
+              )}
+            />
+            <Button type="submit" variant="secondary" size="icon">
+              <Search size={18} />
+            </Button>
+            {isSearching && (
+              <Button type="button" variant="secondary" size="icon" className="text-red-500" onClick={handleClearSearch}>
+                <X size={18} />
+              </Button>
+            )}
+          </form>
+
+          <div className="flex-1 flex gap-1 justify-end">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="flex items-center gap-1 min-w-20 h-full font-bold font-mono select-none">
+                  {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'}
+                  {sortOrder === 'asc' ? ' ↑' : ' ↓'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-1">
+                <div className="grid gap-1">
+                  <Button
+                    variant={sortBy === 'name' ? "default" : "ghost"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      setSortBy('name');
+                      setSortOrder(sortBy === 'name' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                    }}
+                  >
+                    Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                  <Button
+                    variant={sortBy === 'size' ? "default" : "ghost"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      setSortBy('size');
+                      setSortOrder(sortBy === 'size' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                    }}
+                  >
+                    Size {sortBy === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                  <Button
+                    variant={sortBy === 'date' ? "default" : "ghost"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      setSortBy('date');
+                      setSortOrder(sortBy === 'date' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                    }}
+                  >
+                    Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('list')}
+              className="max-sm:hidden"
+            >
+              <ListIcon size={18} />
+            </Button>
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('grid')}
+              className="max-sm:hidden"
+            >
+              <Grid3x3 size={18} />
+            </Button>
+            <Button
+              variant={viewMode === 'image' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => {
+                if (viewMode === 'image') {
+                  setViewMode('imageOnly');
+                } else {
+                  setViewMode('image');
+                }
+              }}
+              className={cn(
+                viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50',
                 "max-sm:hidden"
               )}
             >
-              <Eye size={18} />
+              <ImageIcon size={18} />
             </Button>
-          )}
+
+            <div className="flex items-center">
+              {isAuthenticated ? (
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon">
+                        <User className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        <User className="w-4 h-4 mr-2" />
+                        {username} ({permissions})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={logout}>
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Logout
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsLoginDialogOpen(true)}
+                  title="Login"
+                  className="max-sm:hidden"
+                >
+                  <LogIn className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className="sm:hidden">
+                  <MoreHorizontal size={18} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-1 sm:hidden">
+                <div className="grid gap-1">
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
+                    <ListIcon size={18} /> List View
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('grid')}>
+                    <Grid3x3 size={18} /> Grid View
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('image')}>
+                    <ImageIcon size={18} /> Image View
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
+                    <ImageIcon size={18} className="text-yellow-500" /> Image Only
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
+                    <Upload size={18} /> Upload Files
+                  </Button>
+                  {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
+                    <Database size={18} /> Index Settings
+                  </Button>}
+                  {useFileWatcher && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowWatcherDialog(true)}>
+                    <Eye size={18} /> Watcher Settings
+                  </Button>}
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
+                    <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
+                    <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
 
-        <form onSubmit={handleSearch} className="flex-1 order-3 max-sm:w-full sm:max-w-sm flex gap-1 justify-center">
+        <form onSubmit={handleSearch} className="flex-1 sm:hidden w-full flex gap-1 justify-center">
           <Input
             name="searchQuery"
             placeholder="Search files..."
@@ -1726,161 +1907,6 @@ function FileExplorerContent() {
             </Button>
           )}
         </form>
-
-        <div className="flex-1 order-2 sm:order-4 flex gap-1 justify-end">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="flex items-center gap-1 min-w-20 h-full font-bold font-mono select-none">
-                {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'}
-                {sortOrder === 'asc' ? ' ↑' : ' ↓'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-48 p-1">
-              <div className="grid gap-1">
-                <Button
-                  variant={sortBy === 'name' ? "default" : "ghost"}
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => {
-                    setSortBy('name');
-                    setSortOrder(sortBy === 'name' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                  }}
-                >
-                  Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </Button>
-                <Button
-                  variant={sortBy === 'size' ? "default" : "ghost"}
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => {
-                    setSortBy('size');
-                    setSortOrder(sortBy === 'size' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                  }}
-                >
-                  Size {sortBy === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </Button>
-                <Button
-                  variant={sortBy === 'date' ? "default" : "ghost"}
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => {
-                    setSortBy('date');
-                    setSortOrder(sortBy === 'date' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                  }}
-                >
-                  Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('list')}
-            className="max-sm:hidden"
-          >
-            <ListIcon size={18} />
-          </Button>
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('grid')}
-            className="max-sm:hidden"
-          >
-            <Grid3x3 size={18} />
-          </Button>
-          <Button
-            variant={viewMode === 'image' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => {
-              if (viewMode === 'image') {
-                setViewMode('imageOnly');
-              } else {
-                setViewMode('image');
-              }
-            }}
-            className={cn(
-              viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50',
-              "max-sm:hidden"
-            )}
-          >
-            <ImageIcon size={18} />
-          </Button>
-
-          <div className="flex items-center">
-            {isAuthenticated ? (
-              <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <User className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <User className="w-4 h-4 mr-2" />
-                      {username} ({permissions})
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={logout}>
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Logout
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setIsLoginDialogOpen(true)}
-                title="Login"
-                className="max-sm:hidden"
-              >
-                <LogIn className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="sm:hidden">
-                <MoreHorizontal size={18} />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-1 sm:hidden">
-              <div className="grid gap-1">
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
-                  <ListIcon size={18} /> List View
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('grid')}>
-                  <Grid3x3 size={18} /> Grid View
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('image')}>
-                  <ImageIcon size={18} /> Image View
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
-                  <ImageIcon size={18} className="text-yellow-500" /> Image Only
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
-                  <Upload size={18} /> Upload Files
-                </Button>
-                {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
-                  <Database size={18} /> Index Settings
-                </Button>}
-                {useFileWatcher && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowWatcherDialog(true)}>
-                  <Eye size={18} /> Watcher Settings
-                </Button>}
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
-                  <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
-                  <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
 
       </header>
 
