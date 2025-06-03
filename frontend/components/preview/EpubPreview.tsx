@@ -5,13 +5,13 @@ import { cn } from "@/lib/utils";
 import PreviewBase, { PreviewBaseProps } from "./PreviewBase";
 import { EPUBReader } from "@/components/reader";
 
-interface EpubPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError' | 'onFullScreen' | 'onToggleDirection'> {
+interface EPUBPreviewProps extends Omit<PreviewBaseProps, 'children' | 'isLoading' | 'hasError' | 'onFullScreen' | 'onToggleDirection'> {
   /** EPUB source URL */
   src: string;
 }
 
 
-export const EpubPreview: React.FC<EpubPreviewProps> = ({
+export const EPUBPreview: React.FC<EPUBPreviewProps> = ({
   src,
   controls,
   ...restProps
@@ -47,4 +47,4 @@ export const EpubPreview: React.FC<EpubPreviewProps> = ({
   );
 };
 
-export default EpubPreview; 
+export default EPUBPreview; 

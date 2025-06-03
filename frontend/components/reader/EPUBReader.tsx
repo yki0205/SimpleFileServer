@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Contents, Rendition, NavItem } from 'epubjs';
 import { ReactReader, ReactReaderStyle, type IReactReaderStyle } from 'react-reader';
 import { cn } from "@/lib/utils";
-import { Settings, ArrowRightToLine, ArrowLeftToLine, Search, Sun, Moon, RotateCcw } from 'lucide-react';
+import { Settings, ArrowRightToLine, ArrowLeftToLine, Search, Sun, Moon, RotateCcw, MousePointer, MoreHorizontal, MousePointer2 } from 'lucide-react';
 
 interface EPUBReaderProps {
   src: string;
@@ -23,6 +23,10 @@ export const EPUBReader = ({
   const [darkMode, setDarkMode] = useState(true);
   const [fontSize, setFontSize] = useState(100);
   const [pageInfo, setPageInfo] = useState('');
+  const [pageTurnOnScroll, setPageTurnOnScroll] = useState(true);
+  const [smoothScrolling, setSmoothScrolling] = useState(false);
+  const [pageTransition, setPageTransition] = useState(true);
+  const [disableContextMenu, setDisableContextMenu] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -65,6 +69,28 @@ export const EPUBReader = ({
     const savedTheme = localStorage.getItem(`epub-theme-${src}`);
     if (savedTheme) {
       setDarkMode(savedTheme === 'dark');
+    }
+
+    const savedPageTurnOnScroll = localStorage.getItem(`epub-pageturn-${src}`);
+    if (savedPageTurnOnScroll) {
+      setPageTurnOnScroll(savedPageTurnOnScroll === 'true');
+    }
+
+    const savedSmoothScrolling = localStorage.getItem(`epub-smoothscroll-${src}`);
+    if (savedSmoothScrolling) {
+      setSmoothScrolling(savedSmoothScrolling === 'true');
+    }
+
+    const savedPageTransition = localStorage.getItem(`epub-pagetransition-${src}`);
+    if (savedPageTransition !== null) {
+      setPageTransition(savedPageTransition === 'true');
+    } else {
+      setPageTransition(true); // Default to true if not set
+    }
+
+    const savedDisableContextMenu = localStorage.getItem(`epub-disablecontextmenu-${src}`);
+    if (savedDisableContextMenu) {
+      setDisableContextMenu(savedDisableContextMenu === 'true');
     }
   }, [src]);
 
@@ -145,6 +171,30 @@ export const EPUBReader = ({
     setDarkMode(prev => !prev);
   };
 
+  const togglePageTurnOnScroll = () => {
+    const newValue = !pageTurnOnScroll;
+    setPageTurnOnScroll(newValue);
+    localStorage.setItem(`epub-pageturn-${src}`, newValue.toString());
+  };
+
+  const toggleSmoothScrolling = () => {
+    const newValue = !smoothScrolling;
+    setSmoothScrolling(newValue);
+    localStorage.setItem(`epub-smoothscroll-${src}`, newValue.toString());
+  };
+
+  const togglePageTransition = () => {
+    const newValue = !pageTransition;
+    setPageTransition(newValue);
+    localStorage.setItem(`epub-pagetransition-${src}`, newValue.toString());
+  };
+
+  const toggleDisableContextMenu = () => {
+    const newValue = !disableContextMenu;
+    setDisableContextMenu(newValue);
+    localStorage.setItem(`epub-disablecontextmenu-${src}`, newValue.toString());
+  };
+
   return (
     <div className={cn("h-full w-full relative", className)}>
       <div className="h-full">
@@ -160,11 +210,20 @@ export const EPUBReader = ({
             openAs: 'epub',
           }}
           isRTL={isRTL}
+          pageTurnOnScroll={pageTurnOnScroll}
           loadingView={<div className="flex flex-col items-center justify-center h-full">
             <RotateCcw className="animate-spin" />
             <p>Loading...</p>
           </div>}
-          readerStyles={darkMode ? darkReaderTheme : lightReaderTheme}
+          readerStyles={
+            pageTransition 
+              ? darkMode 
+                ? { ...pageTransitionStyles, ...darkReaderTheme } 
+                : { ...pageTransitionStyles, ...lightReaderTheme }
+              : darkMode 
+                ? darkReaderTheme 
+                : lightReaderTheme
+          }
           getRendition={(rendition) => {
             renditionRef.current = rendition;
             rendition.themes.fontSize(`${fontSize}%`);
@@ -180,9 +239,17 @@ export const EPUBReader = ({
             rendition.hooks.content.register((contents: Contents) => {
               const document = contents.window.document;
               if (document) {
-                // Enable smooth scrolling
+                // Set scroll behavior based on user preference
                 // @ts-ignore - manager type is missing in epubjs Rendition
-                rendition.manager.container.style['scroll-behavior'] = 'smooth';
+                rendition.manager.container.style['scroll-behavior'] = smoothScrolling ? 'smooth' : 'auto';
+                
+                // Handle context menu disabling
+                if (disableContextMenu) {
+                  const body = document.querySelector('body');
+                  if (body) {
+                    body.oncontextmenu = () => false;
+                  }
+                }
               }
             });
           }}
@@ -196,9 +263,9 @@ export const EPUBReader = ({
       </div>
 
       {/* Page info display */}
-      {/* <div className="absolute top-0 left-0 right-0 p-2 text-center text-sm bg-black/70 text-white">
+      <div className="absolute bottom-4 left-4 p-2 text-sm bg-black/70 text-white rounded-md z-10">
         {pageInfo}
-      </div> */}
+      </div>
 
       {/* Search panel */}
       {showSearch && (
@@ -309,6 +376,50 @@ export const EPUBReader = ({
                   {darkMode ? <Moon size={16} /> : <Sun size={16} />}
                 </button>
               </div>
+
+              <div>
+                <div className="mb-2 font-medium">Page Turn On Scroll</div>
+                <button
+                  onClick={togglePageTurnOnScroll}
+                  className="w-full text-left py-2 px-3 hover:bg-gray-700 rounded flex items-center justify-between"
+                >
+                  {pageTurnOnScroll ? 'Enabled' : 'Disabled'}
+                  <MousePointer size={16} />
+                </button>
+              </div>
+
+              <div>
+                <div className="mb-2 font-medium">Smooth Scrolling</div>
+                <button
+                  onClick={toggleSmoothScrolling}
+                  className="w-full text-left py-2 px-3 hover:bg-gray-700 rounded flex items-center justify-between"
+                >
+                  {smoothScrolling ? 'Enabled' : 'Disabled'}
+                  <MoreHorizontal size={16} />
+                </button>
+              </div>
+
+              <div>
+                <div className="mb-2 font-medium">Page Transition Animation</div>
+                <button
+                  onClick={togglePageTransition}
+                  className="w-full text-left py-2 px-3 hover:bg-gray-700 rounded flex items-center justify-between"
+                >
+                  {pageTransition ? 'Enabled' : 'Disabled'}
+                  <ArrowRightToLine size={16} />
+                </button>
+              </div>
+
+              <div>
+                <div className="mb-2 font-medium">Disable Right-Click Menu</div>
+                <button
+                  onClick={toggleDisableContextMenu}
+                  className="w-full text-left py-2 px-3 hover:bg-gray-700 rounded flex items-center justify-between"
+                >
+                  {disableContextMenu ? 'Enabled' : 'Disabled'}
+                  <MousePointer2 size={16} />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -359,6 +470,21 @@ const darkReaderTheme: IReactReaderStyle = {
   tocButton: {
     ...ReactReaderStyle.tocButton,
     color: 'white',
+  },
+}
+
+const pageTransitionStyles: Partial<IReactReaderStyle> = {
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    transition: 'transform 0.5s ease',
+  },
+  prev: {
+    ...ReactReaderStyle.prev,
+    transition: 'transform 0.3s ease-out',
+  },
+  next: {
+    ...ReactReaderStyle.next,
+    transition: 'transform 0.3s ease-out',
   },
 }
 
