@@ -402,7 +402,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
         enableCtrlWheelZoom: true,
         enableBaseHandleKeyboard: true,
         enableFullscreenNavigation: zoom == 1,
-        enableFullscreenToolbar: zoom == 1,
+        enableFullscreenToolbar: true,
         preventDrag: true,
         preventPullToRefresh: true,
         removeTouchDelay: true,

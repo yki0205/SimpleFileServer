@@ -230,10 +230,10 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
   // Internal event handlers
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && enableBackdropClose) {
+    if (e.target === e.currentTarget && enableBackdropClose && !isFullScreen) {
       onClose?.();
     }
-  }, [enableBackdropClose, onClose]);
+  }, [enableBackdropClose, isFullScreen, onClose]);
 
   // Toggle fullscreen
   const handleFullScreen = useCallback(() => {
