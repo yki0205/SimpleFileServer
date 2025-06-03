@@ -19,7 +19,7 @@ import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
-  CircleCheck, CircleX, ArrowLeftRight, RefreshCw
+  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -1704,6 +1704,19 @@ function FileExplorerContent() {
                 <Eye size={18} />
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={refetch}
+              className={cn(
+                "group",
+                "text-blue-700 hover:text-blue-800",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200"
+              )}
+            >
+              <RefreshCcw size={18} className="group-hover:animate-spin" />
+            </Button>
           </div>
 
           <form onSubmit={handleSearch} className="flex-1 max-sm:hidden max-w-sm flex gap-1 justify-center">

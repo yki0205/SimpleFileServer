@@ -21,7 +21,6 @@ Maximum update depth exceeded. This can happen when a component calls setState i
 
 # TODO
 
-- Refresh Button
 - 全局的右键菜单
 - 右键菜单中添加打开多选的选项
 - 实现rename
