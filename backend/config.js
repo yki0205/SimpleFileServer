@@ -19,7 +19,7 @@ module.exports = {
   port: process.env.PORT || 11073,
 
   baseDirectory: BASE_DIR,
-
+  logsDirectory: process.env.LOG_DIRECTORY || 'logs',
 
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB
@@ -28,6 +28,12 @@ module.exports = {
 
   generateThumbnail: process.env.GENERATE_THUMBNAIL === 'true' || false,
   thumbnailCacheDir: process.env.THUMBNAIL_CACHE_DIR || path.join(TMP_DIR, 'thumbnails'),
+  
+  // PSD processing options
+  // NOTE: This may cause a large storage usage, please be careful.
+  processPsd: process.env.PROCESS_PSD === 'true' || false,
+  psdCacheDir: process.env.PSD_CACHE_DIR || path.join(TMP_DIR, 'processed-psd'),
+  psdProcessor: process.env.PSD_PROCESSOR || 'psd', // 'psd' or 'imagemagick'
   
   // User authentication settings
   // Format: 'username|password|rw' where 'rw' indicates read and write permissions

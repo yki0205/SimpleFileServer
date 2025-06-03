@@ -18,11 +18,31 @@ const watcher = require('./watcher');
 const { authMiddleware, writePermissionMiddleware } = require('./auth');
 // worker threads
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+// For PSD file processing
+const { execSync } = require('child_process');
+const crypto = require('crypto');
+const PSD = require('psd');
 
 const pLimit = require('p-limit').default;
 const fileReadLimit = pLimit(100);
 
+// Create logs directory if it doesn't exist
+if (!fs.existsSync(config.logsDirectory)) {
+  fs.mkdirSync(config.logsDirectory, { recursive: true });
+}
+
+// Create thumbnail cache directory if it doesn't exist
+if (config.generateThumbnail && !fs.existsSync(config.thumbnailCacheDir)) {
+  fs.mkdirSync(config.thumbnailCacheDir, { recursive: true });
+}
+
+// Create PSD cache directory if it doesn't exist
+if (config.processPsd && !fs.existsSync(config.psdCacheDir)) {
+  fs.mkdirSync(config.psdCacheDir, { recursive: true });
+}
+
 process.env.NO_CONFIG_WARNING = 'true';
+process.env.SUPPRESS_NO_CONFIG_WARNING = 'true';
 
 const originalStdoutWrite = process.stdout.write;
 process.stdout.write = (chunk, encoding, callback) => {
@@ -47,7 +67,7 @@ process
     ================================================
     `;
 
-    fs.appendFileSync('crash.log', errorLog);
+    fs.appendFileSync(path.join(config.logsDirectory, 'crash.log'), errorLog);
     console.error(`[${errorTime}] Uncaught Exception:`, error);
     // exit if the error is not recoverable
     if (!utils.isRecoverableError(error)) {
@@ -64,7 +84,7 @@ process
     ================================================
     `;
 
-    fs.appendFileSync('rejections.log', errorLog);
+    fs.appendFileSync(path.join(config.logsDirectory, 'rejections.log'), errorLog);
     console.error(`[${errorTime}] Unhandled Rejection:`, reason);
   });
 
@@ -395,7 +415,7 @@ app.get('/api/download', (req, res) => {
   }
 });
 
-app.get('/api/raw', (req, res) => {
+app.get('/api/raw', async (req, res) => {
   const { path: requestedPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
 
@@ -437,14 +457,29 @@ app.get('/api/raw', (req, res) => {
     } else {
       const fileName = path.basename(fullPath);
       const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
-      utils.getFileType(fullPath).then(mimeType => {
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
-        res.sendFile(fullPath);
-      }).catch(error => {
-        console.error('Error getting mime type:', error);
-        res.status(500).json({ error: error.message });
-      });
+      
+      // Get file mime type
+      const mimeType = await utils.getFileType(fullPath);
+      
+      // Check if this is a PSD file that needs processing
+      if (mimeType === 'image/vnd.adobe.photoshop' && config.processPsd) {
+        // Process PSD file
+        const processedFilePath = await processPsdFile(fullPath);
+        
+        if (processedFilePath) {
+          // If processing was successful, serve the processed file
+          const processedMimeType = config.psdFormat === 'png' ? 'image/png' : 'image/jpeg';
+          res.setHeader('Content-Type', processedMimeType);
+          res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}.${config.psdFormat}`);
+          return fs.createReadStream(processedFilePath).pipe(res);
+        }
+        // If processing failed, fall back to original behavior
+      }
+      
+      // Normal file handling
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+      res.sendFile(fullPath);
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -521,6 +556,65 @@ app.get('/api/thumbnail', async (req, res) => {
       if (mimeType === 'image/x-icon') {
         // Cause sharp cannot handle ico files, I return the original file directly
         res.setHeader('Content-Type', 'image/x-icon');
+        return fs.createReadStream(fullPath).pipe(res);
+      }
+      if (mimeType === 'image/vnd.adobe.photoshop') {
+        // If PSD processing is enabled, try to use the processed version for thumbnail
+        if (config.processPsd) {
+          const processedFilePath = await processPsdFile(fullPath);
+          
+          if (processedFilePath) {
+            // Use the processed file to generate thumbnail with Sharp
+            const sharp = require('sharp');
+            
+            // Cache mechanism: generate cache path
+            const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'thumbnails');
+            if (!fs.existsSync(cacheDir)) {
+              fs.mkdirSync(cacheDir, { recursive: true });
+            }
+            
+            // Create cache filename for the processed PSD
+            const cacheKey = `psd_${Buffer.from(fullPath).toString('base64').replace(/[=]/g, '').replace(/[\\/]/g, '_')}_w${width}_${height || 'auto'}_q${quality}`;
+            const cachePath = path.join(cacheDir, `${cacheKey}.jpg`);
+            
+            // If cache exists, return cached thumbnail directly
+            if (fs.existsSync(cachePath)) {
+              res.setHeader('Content-Type', 'image/jpeg');
+              res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
+              return fs.createReadStream(cachePath).pipe(res);
+            }
+            
+            // Process with Sharp
+            let transformer = sharp(processedFilePath)
+              .rotate() // Auto-rotate based on EXIF data
+              .resize({
+                width: parseInt(width),
+                height: height ? parseInt(height) : null,
+                fit: 'inside',
+                withoutEnlargement: true
+              })
+              .jpeg({ quality: parseInt(quality) });
+              
+            // Save to cache
+            transformer
+              .clone()
+              .toFile(cachePath)
+              .catch(err => {
+                console.error('Error caching thumbnail:', err);
+                if (fs.existsSync(cachePath)) {
+                  fs.unlinkSync(cachePath);
+                }
+              });
+              
+            // Send to client
+            res.setHeader('Content-Type', 'image/jpeg');
+            res.setHeader('Cache-Control', 'public, max-age=31536000');
+            return transformer.pipe(res);
+          }
+        }
+        
+        // If processing is disabled or failed, return the original file
+        res.setHeader('Content-Type', 'image/vnd.adobe.photoshop');
         return fs.createReadStream(fullPath).pipe(res);
       }
 
@@ -1413,6 +1507,86 @@ function copyFolderRecursiveSync(source, destination) {
       // Copy files
       fs.copyFileSync(sourcePath, destPath);
     }
+  }
+}
+
+async function processPsdFile(psdPath) {
+  if (!config.processPsd) {
+    return null;
+  }
+  
+  try {
+    // Generate a hash of the file path and last modified time to create a unique cache key
+    const stats = fs.statSync(psdPath);
+    const hashInput = `${psdPath}-${stats.mtimeMs}`;
+    const cacheKey = crypto.createHash('md5').update(hashInput).digest('hex');
+    
+    const outputPath = path.join(config.psdCacheDir, `${cacheKey}.png`);
+    
+    if (fs.existsSync(outputPath)) {
+      return outputPath;
+    }
+    
+    if (config.psdProcessor === 'imagemagick') {
+      return await processWithImageMagick(psdPath, outputPath);
+    } else {
+      return await processWithPsdLibrary(psdPath, outputPath);
+    }
+  } catch (error) {
+    console.error(`Error processing PSD file ${psdPath}: ${error.message}`);
+    return null;
+  }
+}
+
+// Process PSD file using ImageMagick
+async function processWithImageMagick(psdPath, outputPath) {
+  try {
+    // Process the PSD file using ImageMagick (convert command) to PNG
+    // Note: This requires ImageMagick to be installed on the system
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    const pngOutputPath = outputPath.replace(/\.[^.]+$/, '.png');
+    // execSync(`magick "${psdPath}" "${pngOutputPath}"`);
+    execSync(`magick "${psdPath}"[0] "${pngOutputPath}"`);
+    
+    if (fs.existsSync(pngOutputPath)) {
+      return pngOutputPath;
+    } else {
+      console.error(`Failed to process PSD file with ImageMagick: ${psdPath} - Output file not created`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error executing ImageMagick for PSD processing: ${error.message}`);
+    return null;
+  }
+}
+
+// Process PSD file using the psd library
+async function processWithPsdLibrary(psdPath, outputPath) {
+  try {
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    const pngOutputPath = outputPath.replace(/\.[^.]+$/, '.png');
+    
+    await PSD.open(psdPath).then(psd => {
+      return psd.image.saveAsPng(pngOutputPath);
+    });
+    
+    if (fs.existsSync(pngOutputPath)) {
+      return pngOutputPath;
+    } else {
+      console.error(`Failed to process PSD file with psd library: ${psdPath} - Output file not created`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error processing PSD with psd library: ${error.message}`);
+    return null;
   }
 }
 

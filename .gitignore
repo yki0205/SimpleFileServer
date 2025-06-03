@@ -1,3 +1,5 @@
 temp/
 test/
+logs/
+.vscode/
 node_modules/

@@ -31,3 +31,5 @@ Node.js v24.1.0
  774489 [main] file 41652 D:\Program\Code\SimpleFileServer\backend\node_modules\mime-magic\bin\file.exe: *** fatal error - internal error reading the windows environment - too many environment variables?
 3845665 [main] file 52272 exception::handle: Exception: STATUS_ACCESS_VIOLATION
 [nodemon] app crashed - waiting for file changes before starting...
+
+这个问题会出现在生成压缩包文件时，需要优化

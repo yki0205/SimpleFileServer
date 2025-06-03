@@ -177,7 +177,8 @@
 
 ### 支持格式
 
-- [x] .jpg, .jpeg, .png, .gif, .bmp, .webp, .svg, .tiff, .ico, .raw, .psd
+- [x] .jpg, .jpeg, .png, .gif, .bmp, .webp, .svg, .tiff, .ico, .raw
+- [x] .psd
 
 ### 功能实现
 
