@@ -22,8 +22,6 @@ Maximum update depth exceeded. This can happen when a component calls setState i
 # TODO
 
 - 全局的右键菜单
-- 右键菜单中添加打开多选的选项
 - 实现rename
 - 实现mkdir
 - 实现rmdir（出于安全考虑，我将删除文件夹作为一个单独的api从delete中提取）
-- 文件夹上传

@@ -19,7 +19,7 @@ import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
-  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw
+  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, CheckCheck
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -77,11 +77,12 @@ interface FileRowProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
+    onQuickSelect: (path: string) => void;
   };
 }
 
 const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
-  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails } = data;
+  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect } = data;
   const file = files[index];
 
   return (
@@ -102,6 +103,10 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
           <ContextMenuItem onClick={() => onShowDetails(file)}>
             <Info className="mr-2" size={16} />
             Details
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+            <Check className="mr-2" size={16} />
+            Select
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onCopy(file.path)}>
             <ClipboardCopy className="mr-2" size={16} />
@@ -140,11 +145,12 @@ interface FileCellProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
+    onQuickSelect: (path: string) => void;
   };
 }
 
 const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -168,6 +174,10 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
           <ContextMenuItem onClick={() => onShowDetails(file)}>
             <Info className="mr-2" size={16} />
             Details
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+            <Check className="mr-2" size={16} />
+            Select
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onCopy(file.path)}>
             <ClipboardCopy className="mr-2" size={16} />
@@ -206,12 +216,13 @@ interface ImageCellProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
+    onQuickSelect: (path: string) => void;
     token?: string;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, token } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -239,6 +250,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             <ContextMenuItem onClick={() => onShowDetails(file)}>
               <Info className="mr-2" size={16} />
               Details
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+              <Check className="mr-2" size={16} />
+              Select
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
@@ -281,6 +296,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               <Info className="mr-2" size={16} />
               Details
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+              <Check className="mr-2" size={16} />
+              Select
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
               Copy
@@ -321,6 +340,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               <Info className="mr-2" size={16} />
               Details
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+              <Check className="mr-2" size={16} />
+              Select
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
               Copy
@@ -360,12 +383,13 @@ interface MasonryCellProps {
     onDownload: (path: string) => void;
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
+    onQuickSelect: (path: string) => void;
     token?: string;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, token } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -406,6 +430,10 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
               <ContextMenuItem onClick={() => onShowDetails(file)}>
                 <Info className="mr-2" size={16} />
                 Details
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
+                <Check className="mr-2" size={16} />
+                Select
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onCopy(file.path)}>
                 <ClipboardCopy className="mr-2" size={16} />
@@ -789,6 +817,18 @@ function FileExplorerContent() {
     setSelectedFiles(sortedFiles.filter(file => !selectedFiles.includes(file.path)).map(file => file.path));
   }
 
+  const handleQuickSelect = useCallback((path: string) => {
+    if (!isSelecting) {
+      setIsSelecting(true);
+    }
+
+    if (selectedFiles.includes(path)) {
+      setSelectedFiles(prev => prev.filter(file => file !== path));
+    } else {
+      setSelectedFiles(prev => [...prev, path]);
+    }
+  }, [isSelecting, selectedFiles, setSelectedFiles]);
+
 
 
   const openPreview = useCallback((path: string, mimeType: string) => {
@@ -999,6 +1039,130 @@ function FileExplorerContent() {
 
           // Start upload
           xhr.open('POST', `/api/upload?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`);
+          xhr.send(formData);
+        });
+      }
+    };
+
+    fileInput.click();
+  }
+
+  // Handle folder upload with progress tracking
+  const handleFolderUpload = async () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.multiple = true;
+    // Set directory selection attributes
+    // TypeScript doesn't recognize webkitdirectory by default
+    (fileInput as any).webkitdirectory = true;
+    (fileInput as any).directory = true; // For Firefox compatibility
+    
+    fileInput.onchange = async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
+
+      // Prepare files for tracking with proper typing
+      const uploadList = Array.from(files).map(file => {
+        // Use webkitRelativePath for folder structure path if available
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        
+        return {
+          id: generateUniqueId(),
+          name: relativePath,
+          size: file.size,
+          progress: 0,
+          status: 'pending' as const,
+          file: file
+        };
+      });
+
+      // Add files to tracking state
+      setUploadFiles(uploadList);
+      setShowUploadDialog(true);
+
+      // Process each file upload
+      for (const fileData of uploadList) {
+        await new Promise<void>((resolve) => {
+          const xhr = new XMLHttpRequest();
+
+          // Store the XHR reference in our Map
+          xhrRefsRef.current.set(fileData.id, xhr);
+
+          const formData = new FormData();
+          formData.append('files', fileData.file);
+
+          // Update file status to uploading
+          setUploadFiles(prev => prev.map(f =>
+            f.id === fileData.id ? { ...f, status: 'uploading' } : f
+          ));
+
+          // Setup progress handler
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const progress = Math.round((event.loaded / event.total) * 100);
+
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? { ...f, progress } : f
+              ));
+            }
+          });
+
+          // Handle completion
+          xhr.addEventListener('load', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? { ...f, progress: 100, status: 'completed' } : f
+              ));
+
+              // Refresh file list
+              refetch();
+            } else {
+              setUploadFiles(prev => prev.map(f =>
+                f.id === fileData.id ? {
+                  ...f,
+                  status: 'error',
+                  error: `Error: ${xhr.status} ${xhr.statusText}`
+                } : f
+              ));
+            }
+            resolve();
+          });
+
+          // Handle errors
+          xhr.addEventListener('error', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? {
+                ...f,
+                status: 'error',
+                error: 'Network error occurred'
+              } : f
+            ));
+            resolve();
+          });
+
+          // Handle abort event
+          xhr.addEventListener('abort', () => {
+            // Remove XHR reference
+            xhrRefsRef.current.delete(fileData.id);
+
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? {
+                ...f,
+                status: 'error',
+                error: 'Upload cancelled'
+              } : f
+            ));
+            resolve();
+          });
+
+          // Start upload
+          xhr.open('POST', `/api/upload-folder?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`);
           xhr.send(formData);
         });
       }
@@ -1504,14 +1668,15 @@ function FileExplorerContent() {
         onCut: handleMoveFrom,
         onDownload: handleDownload,
         onDelete: handleDelete,
-        onShowDetails: handleShowDetails
+        onShowDetails: handleShowDetails,
+        onQuickSelect: handleQuickSelect
       }}
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
     >
       {FileRow}
     </List>
-  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
+  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1540,7 +1705,8 @@ function FileExplorerContent() {
           onCut: handleMoveFrom,
           onDownload: handleDownload,
           onDelete: handleDelete,
-          onShowDetails: handleShowDetails
+          onShowDetails: handleShowDetails,
+          onQuickSelect: handleQuickSelect
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1548,7 +1714,7 @@ function FileExplorerContent() {
         {FileCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
+  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1578,6 +1744,7 @@ function FileExplorerContent() {
           onDownload: handleDownload,
           onDelete: handleDelete,
           onShowDetails: handleShowDetails,
+          onQuickSelect: handleQuickSelect,
           token: token || undefined
         }}
         className="custom-scrollbar"
@@ -1586,7 +1753,7 @@ function FileExplorerContent() {
         {ImageCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
+  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1619,20 +1786,21 @@ function FileExplorerContent() {
               onDownload: handleDownload,
               onDelete: handleDelete,
               onShowDetails: handleShowDetails,
+              onQuickSelect: handleQuickSelect,
               token: token || undefined
             }}
           />
         ))}
       </div>
     );
-  }, [useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails]);
+  }, [useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
 
 
 
 
   return (
     <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
-      <header className="flex flex-col sm:flex-row mb-2 gap-1">
+      <header className="flex flex-col md:flex-row mb-2 gap-1">
 
         <div className="w-full flex justify-between gap-1">
           <div className="flex-1 flex gap-1 justify-start">
@@ -1673,6 +1841,19 @@ function FileExplorerContent() {
               )}
             >
               <Upload size={18} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleFolderUpload}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200",
+                "max-sm:hidden"
+              )}
+            >
+              <FolderUp size={18} />
             </Button>
             {useFileIndex && (
               <Button
@@ -1719,7 +1900,7 @@ function FileExplorerContent() {
             </Button>
           </div>
 
-          <form onSubmit={handleSearch} className="flex-1 max-sm:hidden max-w-sm flex gap-1 justify-center">
+          <form onSubmit={handleSearch} className="flex-1 max-md:hidden max-w-sm flex gap-1 justify-center">
             <Input
               name="searchQuery"
               placeholder="Search files..."
@@ -1880,6 +2061,9 @@ function FileExplorerContent() {
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
                     <Upload size={18} /> Upload Files
                   </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => handleFolderUpload()}>
+                    <FolderUp size={18} /> Upload Folder
+                  </Button>
                   {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
                     <Database size={18} /> Index Settings
                   </Button>}
@@ -1898,7 +2082,7 @@ function FileExplorerContent() {
           </div>
         </div>
 
-        <form onSubmit={handleSearch} className="flex-1 sm:hidden w-full flex gap-1 justify-center">
+        <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
           <Input
             name="searchQuery"
             placeholder="Search files..."
@@ -1931,7 +2115,7 @@ function FileExplorerContent() {
                 Searching: "{searchQuery}" in {currentPath || 'root'}
               </div>
             ) : (
-              <div className="bg-muted p-1 rounded-md text-sm flex flex-wrap items-center overflow-x-auto whitespace-nowrap">
+              <div className="bg-muted p-1 rounded-md">
                 <BreadcrumbNav
                   currentPath={currentPath}
                   onNavigate={navigateTo}
@@ -1980,7 +2164,7 @@ function FileExplorerContent() {
                 <span className="text-sm max-sm:hidden">Invert</span>
               </button>
               <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-700 hover:text-green-800">
-                <Check size={18} />
+                <CheckCheck size={18} />
                 <span className="text-sm max-sm:hidden">Select All</span>
               </button>
               <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-700 hover:text-red-800">
@@ -2421,6 +2605,7 @@ function FileExplorerContent() {
         open={showWatcherDialog}
         setOpen={setShowWatcherDialog}
       />
+
       {/* Login dialog */}
       <LoginDialog
         open={isLoginDialogOpen}

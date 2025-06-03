@@ -316,36 +316,6 @@ app.get('/api/files', async (req, res) => {
   }
 });
 
-async function processFolderCover(fileDetail, filePath, baseDir) {
-  try {
-    const subFiles = await fs.promises.readdir(filePath);
-
-    // parallel check file type
-    const imageCheckPromises = subFiles.map(async subFile => {
-      const subFilePath = path.join(filePath, subFile);
-      try {
-        const mimeType = await utils.getFileType(subFilePath);
-        return { subFile, mimeType };
-      } catch {
-        return { subFile, mimeType: 'unknown' };
-      }
-    });
-
-    const imageFiles = (await Promise.all(imageCheckPromises))
-      .filter(({ mimeType }) => mimeType.startsWith('image/'))
-      .map(({ subFile }) => subFile)
-      .sort();
-
-    if (imageFiles.length > 0) {
-      fileDetail.cover = utils.normalizePath(
-        path.join(baseDir, fileDetail.name, imageFiles[0])
-      );
-    }
-  } catch (error) {
-    console.error(`Error processing cover for ${filePath}:`, error);
-  }
-}
-
 app.get('/api/search', (req, res) => {
   const { query, dir = '' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -981,6 +951,103 @@ app.post('/api/upload', writePermissionMiddleware, (req, res) => {
   });
 })
 
+app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const uploadPath = path.join(basePath, dir);
+
+  if (!uploadPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  // Ensure base upload directory exists
+  if (!fs.existsSync(uploadPath)) {
+    try {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    } catch (error) {
+      return res.status(500).json({ error: `Failed to create directory: ${error.message}` });
+    }
+  }
+
+  // Configure multer storage with directory structure preservation
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      // Extract directory path from the webkitRelativePath field
+      let relativePath = '';
+      if (file.originalname.includes('/')) {
+        relativePath = file.originalname.substring(0, file.originalname.lastIndexOf('/'));
+      } else if (file.webkitRelativePath) {
+        const parts = file.webkitRelativePath.split('/');
+        parts.pop(); // Remove the filename
+        relativePath = parts.join('/');
+      }
+
+      // Create full directory path
+      const fullPath = path.join(uploadPath, relativePath);
+      
+      // Create nested directories if they don't exist
+      try {
+        fs.mkdirSync(fullPath, { recursive: true });
+      } catch (error) {
+        console.error(`Failed to create directory structure: ${error.message}`);
+        // Continue anyway, multer will handle the error if the directory doesn't exist
+      }
+
+      cb(null, fullPath);
+    },
+    filename: function (req, file, cb) {
+      // Extract just the filename without path
+      let fileName = file.originalname;
+      if (fileName.includes('/')) {
+        fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+      } else if (file.webkitRelativePath) {
+        fileName = file.webkitRelativePath.split('/').pop();
+      }
+      
+      const decodedName = Buffer.from(fileName, 'latin1').toString('utf8');
+      cb(null, decodedName);
+    }
+  });
+
+  // File filter to reject unwanted files
+  const fileFilter = (req, file, cb) => {
+    // You can add file type restrictions here if needed
+    cb(null, true);
+  };
+
+  const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: config.uploadSizeLimit
+    }
+  }).array('files', config.uploadCountLimit);
+
+  upload(req, res, function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    } else if (err) {
+      return res.status(500).json({ error: `Server error: ${err.message}` });
+    }
+
+    const uploadedFiles = req.files.map(file => {
+      // Calculate the relative path from the base upload directory
+      const relativePath = path.relative(uploadPath, file.path);
+      return {
+        name: file.originalname,
+        path: path.join(dir, relativePath).replace(/\\/g, '/'),
+        size: file.size,
+        mimetype: file.mimetype
+      };
+    });
+
+    res.status(200).json({
+      message: 'Files and folders uploaded successfully',
+      files: uploadedFiles
+    });
+  });
+})
+
 app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
   const { path: dirPath } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -1552,6 +1619,36 @@ function copyFolderRecursiveSync(source, destination) {
       // Copy files
       fs.copyFileSync(sourcePath, destPath);
     }
+  }
+}
+
+async function processFolderCover(fileDetail, filePath, baseDir) {
+  try {
+    const subFiles = await fs.promises.readdir(filePath);
+
+    // parallel check file type
+    const imageCheckPromises = subFiles.map(async subFile => {
+      const subFilePath = path.join(filePath, subFile);
+      try {
+        const mimeType = await utils.getFileType(subFilePath);
+        return { subFile, mimeType };
+      } catch {
+        return { subFile, mimeType: 'unknown' };
+      }
+    });
+
+    const imageFiles = (await Promise.all(imageCheckPromises))
+      .filter(({ mimeType }) => mimeType.startsWith('image/'))
+      .map(({ subFile }) => subFile)
+      .sort();
+
+    if (imageFiles.length > 0) {
+      fileDetail.cover = utils.normalizePath(
+        path.join(baseDir, fileDetail.name, imageFiles[0])
+      );
+    }
+  } catch (error) {
+    console.error(`Error processing cover for ${filePath}:`, error);
   }
 }
 

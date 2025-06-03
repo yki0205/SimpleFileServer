@@ -258,16 +258,16 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
               ...
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-2 max-h-60 overflow-auto">
-            <div className="flex flex-col gap-1">
+          <PopoverContent className="w-auto p-2 max-h-60 max-w-screen">
+            <div className="flex flex-col gap-1 text-xs">
               {hiddenSegments.map(({ segment, index, path }) => (
                 <button
                   key={index}
                   onClick={() => handleClick(path)}
-                  className="text-left hover:bg-gray-100 p-1 rounded whitespace-nowrap flex items-center gap-1"
+                  className="text-left hover:bg-gray-300 p-1 rounded flex items-center gap-1"
                   title={path}
                 >
-                  <span className="text-muted-foreground text-xs">
+                  <span className="text-muted-foreground">
                     {index > 0 ? '···/' : '/'}
                   </span>
                   <span>{segment}</span>
@@ -324,7 +324,8 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         "cursor-pointer rounded-md p-1",
         "hover:bg-gray-300",
         isFirst && "min-w-[40px]",
-        isLast ? "font-semibold min-w-[40px]" : "truncate max-w-[120px]"
+        // NOTE: max-w-[63vw] is not a good solution, but it works for now
+        isLast ? "font-semibold truncate max-w-[63vw]" : "truncate max-w-[120px]"
       )}
       title={path}
     >
