@@ -195,8 +195,10 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
         // If we're at the first page and onPrev is provided
         if (showPrevChapterConfirm) {
           // If confirmation is showing and clicked again, navigate
+          // NOTE: I didn't find a graceful way to get the total number of pages in the previous chapter, 
+          // so although it should be the last page of the previous chapter according to normal logic, I just set it to the first page here
+          setCurrentPage(0);
           onPrev();
-          setCurrentPage(totalPages - 1);
           setShowPrevChapterConfirm(false);
         } else {
           // First click - show confirmation
@@ -217,8 +219,10 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
         // If we're at the first page and onPrev is provided
         if (showPrevChapterConfirm) {
           // If confirmation is showing and clicked again, navigate
+          // NOTE: I didn't find a graceful way to get the total number of pages in the previous chapter, 
+          // so although it should be the last page of the previous chapter according to normal logic, I just set it to the first page here
+          setCurrentPage(0);
           onPrev();
-          setCurrentPage(totalPages - 1);
           setShowPrevChapterConfirm(false);
         } else {
           // First click - show confirmation
