@@ -14,6 +14,8 @@ interface BreadcrumbNavProps {
   showRootIcon?: boolean;
   /** Handler for root/home icon click */
   onRootClick?: () => void;
+  /** Additional CSS classes for the breadcrumb container */
+  className?: string;
 }
 
 /**
@@ -25,6 +27,7 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
   onNavigate,
   showRootIcon = false,
   onRootClick,
+  className,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const segmentRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -216,7 +219,10 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({
   return (
     <div 
       ref={containerRef} 
-      className="flex items-center text-sm overflow-hidden flex-grow"
+      className={cn(
+        "flex items-center text-sm overflow-hidden flex-grow",
+        className
+      )}
     >
       {isMeasuring && (
         <div className="absolute left-[-9999px] top-[-9999px] whitespace-nowrap">

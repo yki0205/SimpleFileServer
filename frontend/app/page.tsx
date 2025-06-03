@@ -1704,15 +1704,17 @@ function FileExplorerContent() {
           )}
         </div>
 
-        <form onSubmit={handleSearch} className="flex-1 order-3 max-sm:min-w-[300px] max-sm:w-full sm:max-w-sm flex gap-1 justify-center">
+        <form onSubmit={handleSearch} className="flex-1 order-3 max-sm:w-full sm:max-w-sm flex gap-1 justify-center">
           <Input
             name="searchQuery"
             placeholder="Search files..."
             defaultValue={searchQuery}
             className={cn(
               "w-full",
+              "backdrop-blur-sm",
               "text-white",
-              "selection:bg-white selection:text-black"
+              "selection:bg-white selection:text-black",
+              "focus-visible:ring-[1px]"
             )}
           />
           <Button type="submit" variant="secondary" size="icon">
@@ -1776,6 +1778,7 @@ function FileExplorerContent() {
             variant={viewMode === 'list' ? 'default' : 'outline'}
             size="icon"
             onClick={() => setViewMode('list')}
+            className="max-sm:hidden"
           >
             <ListIcon size={18} />
           </Button>
@@ -1783,6 +1786,7 @@ function FileExplorerContent() {
             variant={viewMode === 'grid' ? 'default' : 'outline'}
             size="icon"
             onClick={() => setViewMode('grid')}
+            className="max-sm:hidden"
           >
             <Grid3x3 size={18} />
           </Button>
@@ -1796,7 +1800,10 @@ function FileExplorerContent() {
                 setViewMode('image');
               }
             }}
-            className={cn(viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50')}
+            className={cn(
+              viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50',
+              "max-sm:hidden"
+            )}
           >
             <ImageIcon size={18} />
           </Button>
@@ -1828,6 +1835,7 @@ function FileExplorerContent() {
                 size="icon"
                 onClick={() => setIsLoginDialogOpen(true)}
                 title="Login"
+                className="max-sm:hidden"
               >
                 <LogIn className="w-4 h-4" />
               </Button>
@@ -1842,7 +1850,7 @@ function FileExplorerContent() {
             </PopoverTrigger>
             <PopoverContent className="w-auto p-1 sm:hidden">
               <div className="grid gap-1">
-                {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
+                <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
                   <ListIcon size={18} /> List View
                 </Button>
                 <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('grid')}>
@@ -1852,8 +1860,8 @@ function FileExplorerContent() {
                   <ImageIcon size={18} /> Image View
                 </Button>
                 <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
-                  <ImageIcon size={18} /> Image Only
-                </Button> */}
+                  <ImageIcon size={18} className="text-yellow-500" /> Image Only
+                </Button>
                 <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
                   <Upload size={18} /> Upload Files
                 </Button>
@@ -1878,7 +1886,7 @@ function FileExplorerContent() {
 
       <div className="flex justify-between gap-1">
         {!isSelecting ? (
-          <nav ref={navRef} className="flex-1 mb-2">
+          <nav ref={navRef} className="flex-1">
             {isSearching ? (
               <div className="bg-muted p-1 rounded-md text-sm">
                 Searching: "{searchQuery}" in {currentPath || 'root'}
@@ -1895,21 +1903,21 @@ function FileExplorerContent() {
             )}
           </nav>
         ) : (
-          <div className="h-9 flex-1 mb-2 bg-muted px-4 py-1 rounded-md flex justify-between items-center gap-1">
+          <div className="h-9 flex-1 bg-muted px-4 py-1 rounded-md flex justify-between items-center gap-1">
             <span className="text-sm">
               {selectedFiles.length} files selected
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { handleMoveFromMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
-                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+                className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
               >
                 <Scissors size={18} />
                 <span className="text-sm max-sm:hidden">Cut</span>
               </button>
               <button
                 onClick={() => { handleCopyMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
-                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+                className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
               >
                 <ClipboardCopy size={18} />
                 <span className="text-sm max-sm:hidden">Copy</span>
@@ -1932,11 +1940,11 @@ function FileExplorerContent() {
                 <ArrowLeftRight size={18} />
                 <span className="text-sm max-sm:hidden">Invert</span>
               </button>
-              <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-500 hover:text-green-600">
+              <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-700 hover:text-green-800">
                 <Check size={18} />
                 <span className="text-sm max-sm:hidden">Select All</span>
               </button>
-              <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-500 hover:text-red-600">
+              <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-700 hover:text-red-800">
                 <X size={18} />
                 <span className="text-sm max-sm:hidden">Clear</span>
               </button>
@@ -1979,21 +1987,21 @@ function FileExplorerContent() {
         </div>
       ) : null}
 
-      {viewMode === 'imageOnly' ? (
-        <div className="flex justify-center text-sm text-muted-foreground mb-1">
-          {imagesData?.images.length} images found in {currentPath}
-        </div>
-      ): (
-        <div className="flex justify-center text-sm text-muted-foreground mb-1">
-          {sortedFiles.length} files found
-        </div>
-      )}
 
       {(isAuthenticated && !isLoading && !isError && !isNotFound) && (
         <>
+          {viewMode === 'imageOnly' ? (
+            <div className="flex justify-center text-sm text-muted/70 select-none">
+              {imagesData?.images.length} images found in {currentPath}
+            </div>
+          ) : (
+            <div className="flex justify-center text-sm text-muted/70 select-none">
+              {sortedFiles.length} files found
+            </div>
+          )}
           {/* List view */}
           {viewMode === 'list' && (
-            <div className="w-full h-[calc(100vh-250px)]">
+            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
               <AutoSizer>
                 {renderList}
               </AutoSizer>
@@ -2001,7 +2009,7 @@ function FileExplorerContent() {
           )}
           {/* Grid view */}
           {viewMode === 'grid' && (
-            <div className="w-full h-[calc(100vh-250px)]">
+            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
               <AutoSizer>
                 {renderGrid}
               </AutoSizer>
@@ -2009,7 +2017,7 @@ function FileExplorerContent() {
           )}
           {/* Image view */}
           {viewMode === 'image' && (
-            <div className="w-full h-[calc(100vh-250px)]">
+            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
               <AutoSizer>
                 {renderImageGrid}
               </AutoSizer>
@@ -2017,7 +2025,7 @@ function FileExplorerContent() {
           )}
           {/* Image Only view */}
           {viewMode === 'imageOnly' && !useMasonry && (
-            <div className="w-full h-[calc(100vh-250px)]">
+            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
               <AutoSizer>
                 {renderImageGrid}
               </AutoSizer>
@@ -2025,7 +2033,7 @@ function FileExplorerContent() {
           )}
           {/* Masonry view */}
           {viewMode === 'imageOnly' && useMasonry && (
-            <div className="w-full h-[calc(100vh-250px)]">
+            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
               <AutoSizer>
                 {renderMasonry}
               </AutoSizer>

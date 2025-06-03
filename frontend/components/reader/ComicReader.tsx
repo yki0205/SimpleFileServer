@@ -119,8 +119,7 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
       clearTimeout(controlsTimeoutRef.current);
     }
 
-    // Set a new timeout to hide controls
-    if (!showControls) {
+    if (!showControls && zoom === 1) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000); // Hide after 3 seconds
@@ -331,7 +330,16 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
     if (zoom > 1) {
       setPosition({ x: 0, y: 0 });
     }
-  }, [zoom])
+    
+    // Show controls when zoom level changes from 1
+    if (zoom !== 1) {
+      setShowControls(true);
+      // Clear any existing timeout to prevent auto-hiding
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    }
+  }, [zoom]);
 
   // Reset zoom and position when page changes
   useEffect(() => {
@@ -449,12 +457,15 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
         clearTimeout(controlsTimeoutRef.current);
       }
 
-      // Set new timeout
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
+      // Only set timeout to hide controls if zoom level is 1
+      if (zoom === 1) {
+        // Set new timeout
+        controlsTimeoutRef.current = setTimeout(() => {
+          setShowControls(false);
+        }, 3000);
+      }
     }
-  }, [showControls]);
+  }, [showControls, zoom]);
 
   // Apply global listeners for mouse movement
   useEffect(() => {

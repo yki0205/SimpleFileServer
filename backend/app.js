@@ -95,6 +95,45 @@ const PORT = config.port;
 
 app.use(cors());
 app.use(express.json());
+
+app.get('/api/bg', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const config = require('./config');
+  
+  try {
+    // Get the background image path from config
+    const bgImagePath = config.backgroundImagePath;
+    
+    // Check if file exists
+    if (!fs.existsSync(bgImagePath)) {
+      console.error(`Background image not found at path: ${bgImagePath}`);
+      return res.status(404).send('Background image not found');
+    }
+    
+    // Determine content type based on file extension
+    const ext = path.extname(bgImagePath).toLowerCase();
+    const contentType = utils.getFileTypeByExt(ext);
+
+    if (!contentType.startsWith('image/')) {
+      console.error(`Unsupported file extension: ${ext}`);
+      return res.status(400).send('Unsupported file extension');
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    
+    // Stream the file to response
+    const stream = fs.createReadStream(bgImagePath);
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Error serving background image:', error);
+    res.status(500).send('Error serving background image');
+  }
+})
+
+// Apply authentication middleware to all other routes
 app.use(authMiddleware);
 
 if (config.useFileIndex) {

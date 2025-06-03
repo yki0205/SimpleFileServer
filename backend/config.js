@@ -21,6 +21,9 @@ module.exports = {
   baseDirectory: BASE_DIR,
   logsDirectory: process.env.LOG_DIRECTORY || 'logs',
 
+  // Background image path - can be absolute or relative to server root
+  backgroundImagePath: process.env.BACKGROUND_IMAGE_PATH || path.join(__dirname, 'assets/bg.jpg'),
+
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB
 
