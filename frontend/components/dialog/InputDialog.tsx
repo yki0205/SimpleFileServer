@@ -64,7 +64,7 @@ export function InputDialog({
           <DialogDescription className="text-white/60">{description}</DialogDescription>
         </DialogHeader>
         
-        <div className="py-4">
+        <form onSubmit={handleConfirm} className="py-4">
           <Input
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -72,7 +72,7 @@ export function InputDialog({
             className="bg-black/40 border-white/20 text-white"
             autoFocus
           />
-        </div>
+        </form>
         
         <DialogFooter>
           <Button 

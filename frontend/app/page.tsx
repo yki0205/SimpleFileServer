@@ -19,14 +19,17 @@ import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
-  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, CheckCheck
+  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
 import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
 import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EPUBPreview, PDFPreview } from "@/components/preview";
-import { ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog, IndexSettingsDialog, WatcherSettingsDialog, LoginDialog } from "@/components/dialog";
+import {
+  ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog,
+  IndexSettingsDialog, WatcherSettingsDialog, LoginDialog, InputDialog
+} from "@/components/dialog";
 
 import { useAuth } from '@/context/auth-context';
 
@@ -78,11 +81,12 @@ interface FileRowProps {
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
+    onRename: (path: string) => void;
   };
 }
 
 const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
-  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect } = data;
+  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename } = data;
   const file = files[index];
 
   return (
@@ -107,6 +111,10 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
           <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
             <Check className="mr-2" size={16} />
             Select
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onRename(file.path)}>
+            <Edit className="mr-2" size={16} />
+            Rename
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onCopy(file.path)}>
             <ClipboardCopy className="mr-2" size={16} />
@@ -146,11 +154,12 @@ interface FileCellProps {
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
+    onRename: (path: string) => void;
   };
 }
 
 const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -178,6 +187,10 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
           <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
             <Check className="mr-2" size={16} />
             Select
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onRename(file.path)}>
+            <Edit className="mr-2" size={16} />
+            Rename
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onCopy(file.path)}>
             <ClipboardCopy className="mr-2" size={16} />
@@ -217,12 +230,13 @@ interface ImageCellProps {
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
+    onRename: (path: string) => void;
     token?: string;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -254,6 +268,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
               <Check className="mr-2" size={16} />
               Select
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onRename(file.path)}>
+              <Edit className="mr-2" size={16} />
+              Rename
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
@@ -300,6 +318,10 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               <Check className="mr-2" size={16} />
               Select
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onRename(file.path)}>
+              <Edit className="mr-2" size={16} />
+              Rename
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
               Copy
@@ -336,13 +358,17 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
             />
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={() => onShowDetails && onShowDetails(file)}>
+            <ContextMenuItem onClick={() => onShowDetails(file)}>
               <Info className="mr-2" size={16} />
               Details
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
               <Check className="mr-2" size={16} />
               Select
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onRename(file.path)}>
+              <Edit className="mr-2" size={16} />
+              Rename
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(file.path)}>
               <ClipboardCopy className="mr-2" size={16} />
@@ -384,12 +410,13 @@ interface MasonryCellProps {
     onDelete: (path: string) => void;
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
+    onRename: (path: string) => void;
     token?: string;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -434,6 +461,10 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
               <ContextMenuItem onClick={() => onQuickSelect(file.path)}>
                 <Check className="mr-2" size={16} />
                 Select
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onRename(file.path)}>
+                <Edit className="mr-2" size={16} />
+                Rename
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onCopy(file.path)}>
                 <ClipboardCopy className="mr-2" size={16} />
@@ -534,6 +565,12 @@ function FileExplorerContent() {
 
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const isSelectingRef = useRef(isSelecting);
+
+  const [fileToRename, setFileToRename] = useState('');
+  const [renameInputDialogOpen, setRenameInputDialogOpen] = useState(false);
+
+  const [mkdirInputDialogOpen, setMkdirInputDialogOpen] = useState(false);
 
   const [fileToDownload, setFileToDownload] = useState('');
   const [downloadComfirmDialogOpen, setDownloadComfirmDialogOpen] = useState(false);
@@ -544,14 +581,11 @@ function FileExplorerContent() {
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
   const [deleteMultipleDialogOpen, setDeleteMultipleDialogOpen] = useState(false);
 
-  // TODO: Implement clone and move
   const [filesToClone, setFilesToClone] = useState<string[]>([]);
   const [cloneComfirmDialogOpen, setCloneComfirmDialogOpen] = useState(false);
-  const [cloneMultipleDialogOpen, setCloneMultipleDialogOpen] = useState(false);
 
   const [filesToMove, setFilesToMove] = useState<string[]>([]);
   const [moveComfirmDialogOpen, setMoveComfirmDialogOpen] = useState(false);
-  const [moveMultipleDialogOpen, setMoveMultipleDialogOpen] = useState(false);
 
   const [fileToShowDetails, setFileToShowDetails] = useState<FileData | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -744,6 +778,12 @@ function FileExplorerContent() {
       setViewMode('image');
     }
 
+    // Clear selection state when navigating
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectedFiles([]);
+    }
+
     const params = new URLSearchParams();
     if (path) params.set('p', path);
     if (query) params.set('q', query);
@@ -754,6 +794,12 @@ function FileExplorerContent() {
     if (isSearching) {
       navigateTo(currentPath, '');
       return;
+    }
+
+    // Clear selection state when navigating back
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectedFiles([]);
     }
 
     const pathParts = currentPath.split('/');
@@ -827,7 +873,7 @@ function FileExplorerContent() {
     } else {
       setSelectedFiles(prev => [...prev, path]);
     }
-  }, [isSelecting, selectedFiles, setSelectedFiles]);
+  }, [isSelecting, selectedFiles]);
 
 
 
@@ -910,7 +956,7 @@ function FileExplorerContent() {
         setDownloadComfirmDialogOpen(true);
       }
     }
-  }, [openPreview, isSelecting, setSelectedFiles, selectedFiles]);
+  }, [openPreview, isSelecting, selectedFiles]);
 
 
 
@@ -1056,7 +1102,7 @@ function FileExplorerContent() {
     // TypeScript doesn't recognize webkitdirectory by default
     (fileInput as any).webkitdirectory = true;
     (fileInput as any).directory = true; // For Firefox compatibility
-    
+
     fileInput.onchange = async (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (!files || files.length === 0) return;
@@ -1065,7 +1111,7 @@ function FileExplorerContent() {
       const uploadList = Array.from(files).map(file => {
         // Use webkitRelativePath for folder structure path if available
         const relativePath = (file as any).webkitRelativePath || file.name;
-        
+
         return {
           id: generateUniqueId(),
           name: relativePath,
@@ -1378,16 +1424,6 @@ function FileExplorerContent() {
 
 
 
-  const handleMkdir = useCallback((path: string) => {
-    fetch(`/api/mkdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
-      method: 'POST',
-    }).then(() => {
-      refetch();
-    }).catch((error) => {
-      console.error('Error creating directory:', error);
-    });
-  }, [token, refetch]);
-
   const handleRmdir = useCallback((path: string) => {
     fetch(`/api/rmdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
@@ -1400,15 +1436,46 @@ function FileExplorerContent() {
 
 
 
-  const handleRename = useCallback((path: string, newName: string) => {
-    fetch(`/api/rename?path=${encodeURIComponent(path)}&newName=${encodeURIComponent(newName)}${token ? `&token=${token}` : ''}`, {
+  const handleRename = useCallback((path: string) => {
+    setFileToRename(path);
+    setRenameInputDialogOpen(true);
+  }, []);
+
+  const handleRenameConfirm = useCallback((newName: string) => {
+    fetch(`/api/rename?path=${encodeURIComponent(fileToRename)}&newName=${encodeURIComponent(newName)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
       refetch();
+      setRenameInputDialogOpen(false);
     }).catch((error) => {
       console.error('Error renaming file:', error);
     });
+  }, [token, refetch, fileToRename]);
+
+  const handleRenameCancel = useCallback(() => {
+    setRenameInputDialogOpen(false);
+  }, []);
+
+
+
+  const handleMkdir = useCallback(() => {
+    setMkdirInputDialogOpen(true);
+  }, []);
+
+  const handleMkdirConfirm = useCallback((path: string, name: string) => {
+    fetch(`/api/mkdir?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}${token ? `&token=${token}` : ''}`, {
+      method: 'POST',
+    }).then(() => {
+      refetch();
+      setMkdirInputDialogOpen(false);
+    }).catch((error) => {
+      console.error('Error creating directory:', error);
+    });
   }, [token, refetch]);
+
+  const handleMkdirCancel = useCallback(() => {
+    setMkdirInputDialogOpen(false);
+  }, []);
 
 
 
@@ -1551,6 +1618,12 @@ function FileExplorerContent() {
           setViewMode('image');
         }, 0);
       }
+      if (isSelectingRef.current) {
+        setTimeout(() => {
+          setIsSelecting(false);
+          setSelectedFiles([]);
+        }, 0);
+      }
       return originalPushState(data, unused, url);
     };
 
@@ -1563,6 +1636,12 @@ function FileExplorerContent() {
           setViewMode('image');
         }, 0);
       }
+      if (isSelectingRef.current) {
+        setTimeout(() => {
+          setIsSelecting(false);
+          setSelectedFiles([]);
+        }, 0);
+      }
       return originalReplaceState(data, unused, url);
     };
 
@@ -1572,11 +1651,6 @@ function FileExplorerContent() {
       history.replaceState = originalReplaceState;
     };
   }, []);
-
-  // update viewModeRef when viewMode changes
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-  }, [viewMode]);
 
   // listen for browser back/forward buttons
   useEffect(() => {
@@ -1592,6 +1666,29 @@ function FileExplorerContent() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [viewMode]);
+
+  // update viewModeRef when viewMode changes
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isSelectingRef.current) {
+        setIsSelecting(false);
+        setSelectedFiles([]);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isSelecting]);
+
+  // update isSelectingRef when isSelecting changes
+  useEffect(() => {
+    isSelectingRef.current = isSelecting;
+  }, [isSelecting]);
 
   // update activeScrollRef when viewMode changes
   useEffect(() => {
@@ -1669,14 +1766,15 @@ function FileExplorerContent() {
         onDownload: handleDownload,
         onDelete: handleDelete,
         onShowDetails: handleShowDetails,
-        onQuickSelect: handleQuickSelect
+        onQuickSelect: handleQuickSelect,
+        onRename: handleRename
       }}
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
     >
       {FileRow}
     </List>
-  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
+  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1706,7 +1804,8 @@ function FileExplorerContent() {
           onDownload: handleDownload,
           onDelete: handleDelete,
           onShowDetails: handleShowDetails,
-          onQuickSelect: handleQuickSelect
+          onQuickSelect: handleQuickSelect,
+          onRename: handleRename
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1714,7 +1813,7 @@ function FileExplorerContent() {
         {FileCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
+  }, [sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1745,6 +1844,7 @@ function FileExplorerContent() {
           onDelete: handleDelete,
           onShowDetails: handleShowDetails,
           onQuickSelect: handleQuickSelect,
+          onRename: handleRename,
           token: token || undefined
         }}
         className="custom-scrollbar"
@@ -1753,7 +1853,7 @@ function FileExplorerContent() {
         {ImageCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
+  }, [token, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1787,13 +1887,14 @@ function FileExplorerContent() {
               onDelete: handleDelete,
               onShowDetails: handleShowDetails,
               onQuickSelect: handleQuickSelect,
+              onRename: handleRename,
               token: token || undefined
             }}
           />
         ))}
       </div>
     );
-  }, [useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, getColumnCount, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect]);
+  }, [token, useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
 
 
@@ -1854,6 +1955,19 @@ function FileExplorerContent() {
               )}
             >
               <FolderUp size={18} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleMkdir}
+              className={cn(
+                "text-black",
+                "bg-white hover:bg-white/80",
+                "transition-colors duration-200",
+                "max-sm:hidden"
+              )}
+            >
+              <FolderPlus size={18} />
             </Button>
             {useFileIndex && (
               <Button
@@ -2063,6 +2177,9 @@ function FileExplorerContent() {
                   </Button>
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => handleFolderUpload()}>
                     <FolderUp size={18} /> Upload Folder
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={handleMkdir}>
+                    <FolderPlus size={18} /> Create Directory
                   </Button>
                   {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
                     <Database size={18} /> Index Settings
@@ -2610,6 +2727,34 @@ function FileExplorerContent() {
       <LoginDialog
         open={isLoginDialogOpen}
         setOpen={setIsLoginDialogOpen}
+      />
+
+      {/* Rename input dialog */}
+      <InputDialog
+        open={renameInputDialogOpen}
+        setOpen={setRenameInputDialogOpen}
+        title="Rename"
+        description="Enter the new name for the file"
+        confirmText="Rename"
+        cancelText="Cancel"
+        defaultValue={fileToRename.split('/').pop()}
+        placeholder="New name"
+        onConfirm={(newName) => handleRenameConfirm(newName)}
+        onCancel={handleRenameCancel}
+      />
+
+      {/* Mkdir input dialog */}
+      <InputDialog
+        open={mkdirInputDialogOpen}
+        setOpen={setMkdirInputDialogOpen}
+        title="Mkdir"
+        description="Enter the name for the new directory"
+        confirmText="Create"
+        cancelText="Cancel"
+        defaultValue={currentPath.split('/').pop()}
+        placeholder="New directory name"
+        onConfirm={(name) => handleMkdirConfirm(currentPath, name)}
+        onCancel={handleMkdirCancel}
       />
     </main>
   );

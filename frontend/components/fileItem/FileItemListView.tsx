@@ -28,7 +28,7 @@ export function FileItemListView(
       case 'video': return Video;
       case 'audio': return Music;
       case 'text': case 'pdf': case 'epub': return FileText;
-      case 'archive': return FileArchive;
+      // case 'archive': return FileArchive;
       case 'comic': return FileArchive;
       default: return File;
     }

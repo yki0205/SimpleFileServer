@@ -1049,9 +1049,9 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
 })
 
 app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
-  const { path: dirPath } = req.query;
+  const { path: dirPath, name: dirName } = req.query;
   const basePath = path.resolve(config.baseDirectory);
-  const fullPath = path.join(basePath, dirPath);
+  const fullPath = path.join(basePath, dirPath, dirName);
 
   if (!fullPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
@@ -1141,8 +1141,16 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // NOTE: Temporarily allow deleting directories
     if (fs.statSync(fullPath).isDirectory()) {
-      return res.status(400).json({ error: 'Cannot delete a directory' });
+      // return res.status(400).json({ error: 'Cannot delete a directory' });
+      try {
+        fs.rmSync(fullPath, { recursive: true });
+        res.status(200).json({ message: 'Directory deleted successfully' });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+      return;
     }
 
     try {

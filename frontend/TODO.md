@@ -3,7 +3,7 @@
 
 ## 1 
 
-在selection状态时允许navigate可能会导致预想不到的错误，应该禁止在selection状态时navigate，或者在navigate时自动取消selection状态
+~在selection状态时允许navigate可能会导致预想不到的错误，应该禁止在selection状态时navigate，或者在navigate时自动取消selection状态~（已修改，待测试）
 
 ## 2
 
@@ -22,6 +22,3 @@ Maximum update depth exceeded. This can happen when a component calls setState i
 # TODO
 
 - 全局的右键菜单
-- 实现rename
-- 实现mkdir
-- 实现rmdir（出于安全考虑，我将删除文件夹作为一个单独的api从delete中提取）
