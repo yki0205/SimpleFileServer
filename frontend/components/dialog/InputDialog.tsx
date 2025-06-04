@@ -69,7 +69,7 @@ export function InputDialog({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
-            className="bg-black/40 border-white/20 text-white"
+            className="bg-black/40 border-white/20 text-white focus-visible:ring-[1px]"
             autoFocus
           />
         </form>

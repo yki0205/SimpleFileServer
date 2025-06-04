@@ -45,14 +45,12 @@ const SQL = {
   FROM files 
   WHERE (name LIKE ? OR path LIKE ?) 
   AND (? = '%' OR path LIKE ?)
-  LIMIT 1000
   `,
   FIND_IMAGES: `
   SELECT name, path, size, mtime, mimeType, isDirectory 
   FROM files 
   WHERE mimeType LIKE 'image/%'
   AND (? = '%' OR path LIKE ?)
-  LIMIT 5000
   `,
   DELETE_FILE: 'DELETE FROM files WHERE path = ?',
   DELETE_ALL_FILES: 'DELETE FROM files',

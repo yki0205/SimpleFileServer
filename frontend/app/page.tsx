@@ -577,7 +577,6 @@ function FileExplorerContent() {
   const [downloadMultipleDialogOpen, setDownloadMultipleDialogOpen] = useState(false);
 
   const [fileToDelete, setFileToDelete] = useState('');
-  const [filesToDelete, setFilesToDelete] = useState<string[]>([])
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
   const [deleteMultipleDialogOpen, setDeleteMultipleDialogOpen] = useState(false);
 
@@ -1502,7 +1501,6 @@ function FileExplorerContent() {
   }, []);
 
   const handleDeleteMultiple = useCallback((paths: string[]) => {
-    setFilesToDelete(paths);
     setDeleteMultipleDialogOpen(true);
   }, []);
 
@@ -1510,7 +1508,8 @@ function FileExplorerContent() {
     fetch(`/api/delete?paths=${encodeURIComponent(paths.join('|'))}${token ? `&token=${token}` : ''}`, {
       method: 'DELETE',
     }).then(() => {
-      setFilesToDelete([]);
+      setSelectedFiles([]);
+      setIsSelecting(false);
       setDeleteMultipleDialogOpen(false);
       refetch();
     }).catch((error) => {
@@ -1519,7 +1518,6 @@ function FileExplorerContent() {
   }, [token, refetch]);
 
   const handleDeleteMultipleCancel = useCallback(() => {
-    setSelectedFiles([]);
     setDeleteMultipleDialogOpen(false);
   }, []);
 
@@ -2270,7 +2268,7 @@ function FileExplorerContent() {
                 <span className="text-sm max-sm:hidden">Download</span>
               </button>
               <button
-                onClick={() => { handleDeleteMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                onClick={() => { handleDeleteMultiple(selectedFiles) }}
                 className="flex items-center gap-1 text-red-500 hover:text-red-600"
               >
                 <Trash2 size={18} />
@@ -2680,10 +2678,10 @@ function FileExplorerContent() {
         open={deleteMultipleDialogOpen}
         setOpen={setDeleteMultipleDialogOpen}
         title="Delete"
-        description={`Are you sure you want to delete ${filesToDelete.length} files?`}
+        description={`Are you sure you want to delete ${selectedFiles.length} files?`}
         confirmText="Delete"
         cancelText="Cancel"
-        onConfirm={() => handleDeleteMultipleConfirm(filesToDelete)}
+        onConfirm={() => handleDeleteMultipleConfirm(selectedFiles)}
         onCancel={handleDeleteMultipleCancel}
       />
 
@@ -2739,7 +2737,7 @@ function FileExplorerContent() {
         cancelText="Cancel"
         defaultValue={fileToRename.split('/').pop()}
         placeholder="New name"
-        onConfirm={(newName) => handleRenameConfirm(newName)}
+        onConfirm={(newName) => handleRenameConfirm(newName.trim())}
         onCancel={handleRenameCancel}
       />
 
@@ -2753,7 +2751,7 @@ function FileExplorerContent() {
         cancelText="Cancel"
         defaultValue={currentPath.split('/').pop()}
         placeholder="New directory name"
-        onConfirm={(name) => handleMkdirConfirm(currentPath, name)}
+        onConfirm={(name) => handleMkdirConfirm(currentPath, name.trim())}
         onCancel={handleMkdirCancel}
       />
     </main>

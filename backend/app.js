@@ -1169,7 +1169,14 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
       }
 
       if (fs.statSync(fullPath).isDirectory()) {
-        return res.status(400).json({ error: 'Cannot delete a directory' });
+        // NOTE: Temporarily allow deleting directories
+        // return res.status(400).json({ error: 'Cannot delete a directory' });
+        try {
+          fs.rmSync(fullPath, { recursive: true });
+        } catch (error) {
+          return res.status(500).json({ error: error.message });
+        }
+        continue;
       }
 
       try {

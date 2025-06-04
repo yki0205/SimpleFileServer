@@ -24,6 +24,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
+
   const handleLoad = useCallback(() => {
     cachedVideosRef.current.add(src);
     setIsLoading(false);
@@ -105,12 +108,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         src={src}
         autoPlay={autoPlay}
         className={cn(
-          (isLoading || hasError) && "opacity-0",
+          (isLoading || hasError) && "opacity-0"
         )}
         onLoad={handleLoad}
         onError={handleError}
         onNext={controls?.onNext}
         onPrev={controls?.onPrev}
+        onFullscreen={setIsFullscreen}
+        onPictureInPicture={setIsPictureInPicture}
       />
     </PreviewBase>
   );

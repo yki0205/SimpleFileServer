@@ -18,6 +18,9 @@ interface VideoProps {
   onDownload?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  // Fallbacks 
+  onFullscreen?: (isFullscreen: boolean) => void;
+  onPictureInPicture?: (isPictureInPicture: boolean) => void;
 }
 
 export const Video = ({
@@ -30,6 +33,8 @@ export const Video = ({
   onDownload,
   onNext,
   onPrev,
+  onFullscreen,
+  onPictureInPicture,
 }: VideoProps) => {
   // Core video refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -297,9 +302,11 @@ export const Video = ({
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
         setIsPictureInPicture(false);
+        onPictureInPicture?.(false);
       } else if (document.pictureInPictureEnabled) {
         await videoRef.current.requestPictureInPicture();
         setIsPictureInPicture(true);
+        onPictureInPicture?.(true);
       } else {
         console.error("Picture-in-Picture is not supported in this browser");
       }
@@ -315,10 +322,12 @@ export const Video = ({
       containerRef.current.requestFullscreen().catch(err => {
         console.error(`Error attempting to enable fullscreen: ${err.message}`);
       });
+      onFullscreen?.(true);
     } else {
       document.exitFullscreen().catch(err => {
         console.error(`Error attempting to exit fullscreen: ${err.message}`);
       });
+      onFullscreen?.(false);
     }
   };
 
@@ -946,11 +955,11 @@ export const Video = ({
   // Function to show/hide keyboard shortcuts
   const showKeyboardShortcutsHelp = () => {
     setShowKeyboardShortcuts(true);
-    
+
     if (keyboardShortcutsTimeoutRef.current) {
       clearTimeout(keyboardShortcutsTimeoutRef.current);
     }
-    
+
     keyboardShortcutsTimeoutRef.current = setTimeout(() => {
       setShowKeyboardShortcuts(false);
     }, 5000); // Hide after 5 seconds
