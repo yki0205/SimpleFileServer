@@ -46,8 +46,20 @@ const SQL = {
   WHERE (name LIKE ? OR path LIKE ?) 
   AND (? = '%' OR path LIKE ?)
   `,
+  SEARCH_FILES_COUNT: `
+  SELECT COUNT(*) as count 
+  FROM files 
+  WHERE (name LIKE ? OR path LIKE ?) 
+  AND (? = '%' OR path LIKE ?)
+  `,
   FIND_IMAGES: `
   SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE mimeType LIKE 'image/%'
+  AND (? = '%' OR path LIKE ?)
+  `,
+  FIND_IMAGES_COUNT: `
+  SELECT COUNT(*) as count 
   FROM files 
   WHERE mimeType LIKE 'image/%'
   AND (? = '%' OR path LIKE ?)
@@ -156,40 +168,117 @@ function deleteFromIndex(filePath) {
   }
 }
 
-function searchIndex(query, directory = '') {
-  if (!db) return [];
+/**
+ * Search files in the index with optional pagination
+ * @param {string} query - The search query
+ * @param {string} directory - Optional directory to limit search to
+ * @param {number} page - Page number (1-based) for pagination (optional)
+ * @param {number} limit - Number of results per page (optional)
+ * @returns {Object} Search results with pagination info
+ */
+function searchIndex(query, directory = '', page, limit) {
+  if (!db) return { results: [], total: 0, hasMore: false };
   
   try {
     const searchTerm = `%${query}%`;
     const dirPath = directory ? `${directory}%` : '%';
     
-    const results = db.prepare(SQL.SEARCH_FILES).all(searchTerm, searchTerm, dirPath, dirPath);
+    // Get total count for pagination info
+    const totalCount = db.prepare(SQL.SEARCH_FILES_COUNT)
+      .get(searchTerm, searchTerm, dirPath, dirPath).count;
     
-    return results.map(file => ({
-      ...file,
-      isDirectory: !!file.isDirectory
-    }));
+    let results;
+    let hasMore = false;
+    
+    // Handle pagination if specified
+    if (page !== undefined && limit !== undefined) {
+      // Convert to numbers and validate
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 100;
+      
+      // Calculate offset
+      const offset = (pageNum - 1) * limitNum;
+      
+      // Paginated query
+      const paginatedQuery = `${SQL.SEARCH_FILES} LIMIT ? OFFSET ?`;
+      results = db.prepare(paginatedQuery)
+        .all(searchTerm, searchTerm, dirPath, dirPath, limitNum, offset);
+      
+      // Check if there are more results
+      hasMore = offset + results.length < totalCount;
+    } else {
+      // Backward compatibility: return all results if no pagination specified
+      results = db.prepare(SQL.SEARCH_FILES)
+        .all(searchTerm, searchTerm, dirPath, dirPath);
+    }
+    
+    return {
+      results: results.map(file => ({
+        ...file,
+        isDirectory: !!file.isDirectory
+      })),
+      total: totalCount,
+      hasMore
+    };
   } catch (error) {
     console.error('Error searching index:', error);
-    return [];
+    return { results: [], total: 0, hasMore: false };
   }
 }
 
-function findImagesInIndex(directory = '') {
-  if (!db) return [];
+/**
+ * Find images in the index with optional pagination
+ * @param {string} directory - Optional directory to limit search to
+ * @param {number} page - Page number (1-based) for pagination (optional)
+ * @param {number} limit - Number of results per page (optional)
+ * @returns {Object} Images results with pagination info
+ */
+function findImagesInIndex(directory = '', page, limit) {
+  if (!db) return { images: [], total: 0, hasMore: false };
   
   try {
     const dirPath = directory ? `${directory}%` : '%';
     
-    const results = db.prepare(SQL.FIND_IMAGES).all(dirPath, dirPath);
+    // Get total count for pagination info
+    const totalCount = db.prepare(SQL.FIND_IMAGES_COUNT)
+      .get(dirPath, dirPath).count;
     
-    return results.map(file => ({
-      ...file,
-      isDirectory: !!file.isDirectory
-    }));
+    let results;
+    let hasMore = false;
+    
+    // Handle pagination if specified
+    if (page !== undefined && limit !== undefined) {
+      // Convert to numbers and validate
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 100;
+      
+      // Calculate offset
+      const offset = (pageNum - 1) * limitNum;
+      
+      // Paginated query
+      const paginatedQuery = `${SQL.FIND_IMAGES} LIMIT ? OFFSET ?`;
+      results = db.prepare(paginatedQuery)
+        .all(dirPath, dirPath, limitNum, offset);
+      
+      // Check if there are more results
+      hasMore = offset + results.length < totalCount;
+    } else {
+      // Backward compatibility: return all results if no pagination specified
+      results = db.prepare(SQL.FIND_IMAGES)
+        .all(dirPath, dirPath);
+    }
+    
+    return {
+      images: results.map(file => ({
+        ...file,
+        isDirectory: !!file.isDirectory
+      })),
+      total: totalCount,
+      hasMore
+    };
   } catch (error) {
     console.error('Error finding images in index:', error);
-    return [];
+    return { images: [], total: 0, hasMore: false };
   }
 }
 

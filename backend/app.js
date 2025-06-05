@@ -317,7 +317,7 @@ app.get('/api/files', async (req, res) => {
 });
 
 app.get('/api/search', (req, res) => {
-  const { query, dir = '' } = req.query;
+  const { query, dir = '', page, limit = 100 } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -328,14 +328,21 @@ app.get('/api/search', (req, res) => {
   try {
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      const results = indexer.searchIndex(query, dir);
-      return res.json({ results });
+      // Call searchIndex with pagination parameters
+      const searchResult = indexer.searchIndex(query, dir, page, limit);
+      return res.json(searchResult);
     }
 
     // Otherwise, use real-time search
+    // Note: Real-time search doesn't support pagination yet
     parallelSearch(searchPath, query, basePath)
       .then(results => {
-        res.json({ results });
+        // Format response to match the structure of paginated results
+        res.json({ 
+          results, 
+          total: results.length,
+          hasMore: false
+        });
       })
       .catch(error => {
         res.status(500).json({ error: error.message });
@@ -346,7 +353,7 @@ app.get('/api/search', (req, res) => {
 });
 
 app.get('/api/images', (req, res) => {
-  const { dir = '' } = req.query;
+  const { dir = '', page, limit = 100 } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -357,14 +364,21 @@ app.get('/api/images', (req, res) => {
   try {
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      const images = indexer.findImagesInIndex(dir);
-      return res.json({ images });
+      // Call findImagesInIndex with pagination parameters
+      const imagesResult = indexer.findImagesInIndex(dir, page, limit);
+      return res.json(imagesResult);
     }
 
     // Otherwise, use real-time search
+    // Note: Real-time search doesn't support pagination yet
     parallelFindImages(searchPath, basePath)
       .then(images => {
-        res.json({ images });
+        // Format response to match the structure of paginated results
+        res.json({ 
+          images, 
+          total: images.length,
+          hasMore: false
+        });
       })
       .catch(error => {
         res.status(500).json({ error: error.message });
