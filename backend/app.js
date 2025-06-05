@@ -193,7 +193,7 @@ app.get('/api/validate-token', (req, res) => {
 });
 
 app.get('/api/files', async (req, res) => {
-  const { dir = '', cover = 'false' } = req.query;
+  const { dir = '', cover = 'false', page, limit = 100 } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, dir);
 
@@ -249,11 +249,29 @@ app.get('/api/files', async (req, res) => {
       const results = await Promise.allSettled(files.map(processFile));
 
       // filter valid results
-      const fileDetails = results
+      let fileDetails = results
         .filter(r => r.status === 'fulfilled')
         .map(r => r.value);
+      
+      // Handle pagination if specified
+      const total = fileDetails.length;
+      let hasMore = false;
+      
+      if (page !== undefined) {
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 100;
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        
+        hasMore = endIndex < total;
+        fileDetails = fileDetails.slice(startIndex, endIndex);
+      }
 
-      res.json({ files: fileDetails });
+      res.json({ 
+        files: fileDetails,
+        total: total,
+        hasMore: hasMore
+      });
 
     } else {
       const stats = fs.statSync(fullPath);
@@ -262,7 +280,7 @@ app.get('/api/files', async (req, res) => {
         return res.status(400).json({ error: "Not a directory" })
       }
 
-      const files = fs.readdirSync(fullPath)
+      const files = fs.readdirSync(fullPath);
       const fileDetailsPromises = files.map(async file => {
         const filePath = path.join(fullPath, file);
         const fileStats = fs.statSync(filePath);
@@ -308,8 +326,27 @@ app.get('/api/files', async (req, res) => {
         return fileDetail;
       });
 
-      const fileDetails = await Promise.all(fileDetailsPromises);
-      res.json({ files: fileDetails })
+      let fileDetails = await Promise.all(fileDetailsPromises);
+      
+      // Handle pagination if specified
+      const total = fileDetails.length;
+      let hasMore = false;
+      
+      if (page !== undefined) {
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 100;
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        
+        hasMore = endIndex < total;
+        fileDetails = fileDetails.slice(startIndex, endIndex);
+      }
+
+      res.json({
+        files: fileDetails,
+        total: total,
+        hasMore: hasMore
+      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });

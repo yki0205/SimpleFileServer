@@ -46,14 +46,20 @@ interface FileData {
 
 interface FilesResponse {
   files: FileData[];
+  hasMore?: boolean;
+  total?: number;
 }
 
 interface ImagesResponse {
   images: FileData[];
+  hasMore?: boolean;
+  total?: number;
 }
 
 interface SearchResponse {
   results: FileData[];
+  hasMore?: boolean;
+  total?: number;
 }
 
 interface PreviewState {
@@ -664,34 +670,114 @@ function FileExplorerContent() {
   }, [filesToClone, filesToMove]);
 
 
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [hasMoreFiles, setHasMoreFiles] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [accumulatedFiles, setAccumulatedFiles] = useState<FileData[]>([]);
+  const [totalFiles, setTotalFiles] = useState(0);
+
+  // Page size for API requests
+  const PAGE_SIZE = 100;
+
+  // Buffer to trigger next page load before reaching the end
+  const SCROLL_BUFFER = 10;
+
   const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
-    queryKey: ['files', currentPath],
+    queryKey: ['files', currentPath, page],
     queryFn: async () => {
-      const response = await axios.get('/api/files', { params: { dir: currentPath, cover: showDirectoryCovers ? 'true' : 'false' } });
+      const response = await axios.get('/api/files', {
+        params: {
+          dir: currentPath,
+          cover: showDirectoryCovers ? 'true' : 'false',
+          page: page,
+          limit: PAGE_SIZE
+        }
+      });
       return response.data;
     },
     enabled: isAuthenticated && !isSearching && viewMode !== 'imageOnly'
   });
 
+  // Handle files data updates
+  useEffect(() => {
+    if (!filesData) return;
+
+    // If first page, replace accumulated files
+    if (page === 1) {
+      setAccumulatedFiles(filesData.files || []);
+    } else {
+      // Otherwise append to existing files
+      setAccumulatedFiles(prev => [...prev, ...(filesData.files || [])]);
+    }
+    setHasMoreFiles(filesData.hasMore || false);
+    setTotalFiles(filesData.total || filesData.files?.length || 0);
+
+    // Reset loading flag when data is loaded
+    setIsLoadingMore(false);
+  }, [filesData, page]);
+
   const { data: imagesData, isLoading: imagesLoading, error: imagesError, refetch: refetchImages } = useQuery<ImagesResponse>({
-    queryKey: ['images', currentPath],
+    queryKey: ['images', currentPath, viewMode === 'imageOnly' && useMasonry ? null : page],
     queryFn: async () => {
-      const response = await axios.get('/api/images', { params: { dir: currentPath } });
+      // Don't use pagination for masonry mode
+      const params = viewMode === 'imageOnly' && useMasonry
+        ? { dir: currentPath }
+        : { dir: currentPath, page: page, limit: PAGE_SIZE };
+
+      const response = await axios.get('/api/images', { params });
       return response.data;
     },
     enabled: isAuthenticated && viewMode === 'imageOnly' && !isSearching
   });
 
+  // Handle images data updates
+  useEffect(() => {
+    if (!imagesData || (viewMode === 'imageOnly' && useMasonry)) return;
+
+    if (page === 1) {
+      setAccumulatedFiles(imagesData.images || []);
+    } else {
+      setAccumulatedFiles(prev => [...prev, ...(imagesData.images || [])]);
+    }
+    setHasMoreFiles(imagesData.hasMore || false);
+    setTotalFiles(imagesData.total || imagesData.images?.length || 0);
+
+    // Reset loading flag when data is loaded
+    setIsLoadingMore(false);
+  }, [imagesData, page, viewMode, useMasonry]);
+
   const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useQuery<SearchResponse>({
-    queryKey: ['search', searchQuery, currentPath],
+    queryKey: ['search', searchQuery, currentPath, page],
     queryFn: async () => {
       const response = await axios.get('/api/search', {
-        params: { query: searchQuery, dir: currentPath }
+        params: {
+          query: searchQuery,
+          dir: currentPath,
+          page: page,
+          limit: PAGE_SIZE
+        }
       });
       return response.data;
     },
     enabled: isAuthenticated && isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
   });
+
+  // Handle search data updates
+  useEffect(() => {
+    if (!searchData) return;
+
+    if (page === 1) {
+      setAccumulatedFiles(searchData.results || []);
+    } else {
+      setAccumulatedFiles(prev => [...prev, ...(searchData.results || [])]);
+    }
+    setHasMoreFiles(searchData.hasMore || false);
+    setTotalFiles(searchData.total || searchData.results?.length || 0);
+
+    // Reset loading flag when data is loaded
+    setIsLoadingMore(false);
+  }, [searchData, page]);
 
   const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreview } = useQuery({
     queryKey: ['fileContent', preview.path],
@@ -721,12 +807,12 @@ function FileExplorerContent() {
   const sortedFiles = useMemo(() => {
     let files: FileData[] = [];
 
-    if (viewMode === 'imageOnly') {
+    // For masonry view, use the direct API response
+    if (viewMode === 'imageOnly' && useMasonry) {
       files = imagesData?.images || [];
-    } else if (isSearching) {
-      files = searchData?.results || [];
     } else {
-      files = filesData?.files || [];
+      // For paginated views, use accumulated files
+      files = accumulatedFiles;
     }
 
     if (viewMode === 'imageOnly' && sortBy === 'name') {
@@ -760,7 +846,7 @@ function FileExplorerContent() {
       }
       return 0;
     });
-  }, [filesData?.files, searchData?.results, imagesData?.images, sortBy, sortOrder, viewMode, isSearching]);
+  }, [accumulatedFiles, imagesData?.images, sortBy, sortOrder, viewMode, useMasonry]);
 
   const refetch = useCallback(() => {
     if (viewMode === 'imageOnly') {
@@ -776,6 +862,11 @@ function FileExplorerContent() {
     if (viewMode === 'imageOnly') {
       setViewMode('image');
     }
+
+    // Reset pagination when navigating
+    setPage(1);
+    setAccumulatedFiles([]);
+    setHasMoreFiles(false);
 
     // Clear selection state when navigating
     if (isSelecting) {
@@ -975,6 +1066,14 @@ function FileExplorerContent() {
       navigateTo(currentPath, '');
     }
   }
+
+
+
+  const handleShowDetails = useCallback((file: FileData) => {
+    setFileToShowDetails(file);
+    setDetailsDialogOpen(true);
+  }, []);
+
 
 
   // Handle upload with progress tracking
@@ -1423,18 +1522,6 @@ function FileExplorerContent() {
 
 
 
-  const handleRmdir = useCallback((path: string) => {
-    fetch(`/api/rmdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
-      method: 'POST',
-    }).then(() => {
-      refetch();
-    }).catch((error) => {
-      console.error('Error removing directory:', error);
-    });
-  }, [token, refetch]);
-
-
-
   const handleRename = useCallback((path: string) => {
     setFileToRename(path);
     setRenameInputDialogOpen(true);
@@ -1521,6 +1608,16 @@ function FileExplorerContent() {
     setDeleteMultipleDialogOpen(false);
   }, []);
 
+  const handleRmdir = useCallback((path: string) => {
+    fetch(`/api/rmdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
+      method: 'POST',
+    }).then(() => {
+      refetch();
+    }).catch((error) => {
+      console.error('Error removing directory:', error);
+    });
+  }, [token, refetch]);
+
 
 
   const handleCopy = useCallback((path: string) => {
@@ -1590,16 +1687,30 @@ function FileExplorerContent() {
   }, []);
 
 
+
   const handleVirtualizedScroll = ({ scrollOffset, scrollTop }: any) => {
     const currentScroll = scrollTop ?? scrollOffset ?? 0;
     scrollPosition.current = currentScroll;
     setShowScrollTop(currentScroll > 100);
+
+    // For lists and grids we rely on onItemsRendered instead
   };
 
-  const handleShowDetails = useCallback((file: FileData) => {
-    setFileToShowDetails(file);
-    setDetailsDialogOpen(true);
-  }, []);
+  const loadNextPage = useCallback(() => {
+    if (isLoadingMore || !hasMoreFiles) return;
+
+    setIsLoadingMore(true);
+    setPage(prevPage => prevPage + 1);
+  }, [isLoadingMore, hasMoreFiles]);
+
+  // Handle end of list detection to load more data
+  const handleItemsRendered = useCallback(({ visibleStartIndex, visibleStopIndex }: { visibleStartIndex: number, visibleStopIndex: number }) => {
+    const itemCount = sortedFiles.length;
+    if (!isLoadingMore && hasMoreFiles && visibleStopIndex >= itemCount - SCROLL_BUFFER) {
+      loadNextPage();
+    }
+  }, [sortedFiles.length, isLoadingMore, hasMoreFiles, loadNextPage]);
+
 
 
   // intercept history navigation methods
@@ -1734,6 +1845,15 @@ function FileExplorerContent() {
     closePreview();
   }, [currentPath, searchQuery])
 
+  // Reset pagination when navigating to a new directory or performing a search
+  // useEffect(() => {
+  //   setPage(1);
+  //   setAccumulatedFiles([]);
+  //   setHasMoreFiles(false);
+  // }, [currentPath, searchQuery, viewMode]);
+
+
+
   const isError = (viewMode === 'imageOnly') ? imagesError :
     (isSearching) ? searchError : errorFiles;
 
@@ -1769,10 +1889,16 @@ function FileExplorerContent() {
       }}
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
+      onItemsRendered={({ visibleStartIndex, visibleStopIndex }) => {
+        const itemCount = sortedFiles.length;
+        if (!isLoadingMore && hasMoreFiles && visibleStopIndex >= itemCount - SCROLL_BUFFER) {
+          loadNextPage();
+        }
+      }}
     >
       {FileRow}
     </List>
-  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
+  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1807,11 +1933,17 @@ function FileExplorerContent() {
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
+        onItemsRendered={({ visibleRowStartIndex, visibleRowStopIndex }) => {
+          // Convert row indices to item indices for grid layout
+          const visibleStartIndex = visibleRowStartIndex * columnCount;
+          const visibleStopIndex = (visibleRowStopIndex + 1) * columnCount - 1;
+          handleItemsRendered({ visibleStartIndex, visibleStopIndex });
+        }}
       >
         {FileCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
+  }, [sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1847,11 +1979,17 @@ function FileExplorerContent() {
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
+        onItemsRendered={({ visibleRowStartIndex, visibleRowStopIndex }) => {
+          // Convert row indices to item indices for grid layout
+          const visibleStartIndex = visibleRowStartIndex * columnCount;
+          const visibleStopIndex = (visibleRowStopIndex + 1) * columnCount - 1;
+          handleItemsRendered({ visibleStartIndex, visibleStopIndex });
+        }}
       >
         {ImageCell}
       </Grid>
     );
-  }, [token, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
+  }, [token, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1898,7 +2036,7 @@ function FileExplorerContent() {
 
 
   return (
-    <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8">
+    <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 relative">
       <header className="flex flex-col md:flex-row mb-2 gap-1">
 
         <div className="w-full flex justify-between gap-1">
@@ -2303,82 +2441,73 @@ function FileExplorerContent() {
         )}
       </div>
 
-      {!isAuthenticated && (
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="text-sm text-muted-foreground">
-            Please login to continue
-          </div>
+      {!isAuthenticated ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+          <Error message="Please login to continue" />
         </div>
-      )}
-
-      {isError ? (
-        <div className="flex-1 flex flex-col items-center justify-center">
+      ) : isError ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
           <Error message="Error loading files. Please try again." />
         </div>
       ) : isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
           <Loading message="Loading files..." />
         </div>
       ) : isNotFound ? (
-        <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
           <NotFound message="No files found." />
         </div>
       ) : null}
 
+      {/* Show total files count with loaded count */}
+      <div className={cn(
+        "flex justify-center text-sm text-muted/70 select-none",
+        !(isAuthenticated && !isLoading && !isError && !isNotFound) && "opacity-0"
+      )}>
+        {viewMode === 'imageOnly' && useMasonry && imagesData ? (
+          // For masonry view, show simple count
+          <>{imagesData.images.length} images found in {currentPath}</>
+        ) : (
+          // For paginated views, show loaded/total count
+          <>{sortedFiles.length} of {totalFiles} files loaded</>
+        )}
+      </div>
 
-      {(isAuthenticated && !isLoading && !isError && !isNotFound) && (
-        <>
-          {viewMode === 'imageOnly' ? (
-            <div className="flex justify-center text-sm text-muted/70 select-none">
-              {imagesData?.images.length} images found in {currentPath}
-            </div>
-          ) : (
-            <div className="flex justify-center text-sm text-muted/70 select-none">
-              {sortedFiles.length} files found
-            </div>
-          )}
-          {/* List view */}
-          {viewMode === 'list' && (
-            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
-              <AutoSizer>
-                {renderList}
-              </AutoSizer>
-            </div>
-          )}
-          {/* Grid view */}
-          {viewMode === 'grid' && (
-            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
-              <AutoSizer>
-                {renderGrid}
-              </AutoSizer>
-            </div>
-          )}
-          {/* Image view */}
-          {viewMode === 'image' && (
-            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
-              <AutoSizer>
-                {renderImageGrid}
-              </AutoSizer>
-            </div>
-          )}
-          {/* Image Only view */}
-          {viewMode === 'imageOnly' && !useMasonry && (
-            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
-              <AutoSizer>
-                {renderImageGrid}
-              </AutoSizer>
-            </div>
-          )}
-          {/* Masonry view */}
-          {viewMode === 'imageOnly' && useMasonry && (
-            <div className="w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md">
-              <AutoSizer>
-                {renderMasonry}
-              </AutoSizer>
-            </div>
-          )}
-        </>
-      )}
+      <div className={cn(
+        "w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md",
+        !(isAuthenticated && !isLoading && !isError && !isNotFound) && "opacity-0"
+      )}>
+        {/* List view */}
+        {viewMode === 'list' && (
+          <AutoSizer>
+            {renderList}
+          </AutoSizer>
+        )}
+        {/* Grid view */}
+        {viewMode === 'grid' && (
+          <AutoSizer>
+            {renderGrid}
+          </AutoSizer>
+        )}
+        {/* Image view */}
+        {viewMode === 'image' && (
+          <AutoSizer>
+            {renderImageGrid}
+          </AutoSizer>
+        )}
+        {/* Image Only view */}
+        {viewMode === 'imageOnly' && !useMasonry && (
+          <AutoSizer>
+            {renderImageGrid}
+          </AutoSizer>
+        )}
+        {/* Masonry view */}
+        {viewMode === 'imageOnly' && useMasonry && (
+          <AutoSizer>
+            {renderMasonry}
+          </AutoSizer>
+        )}
+      </div>
 
       {/* Preview Overlay */}
       {preview.isOpen && (
