@@ -11,7 +11,7 @@ const unrar = require('node-unrar-js');
 // handle file uploads
 const multer = require('multer')
 // indexer
-const indexer = require(`./indexer`);
+const indexer = require('./indexer');
 // watcher
 const watcher = require('./watcher');
 // auth

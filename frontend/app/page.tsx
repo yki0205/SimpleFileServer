@@ -440,6 +440,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
                   isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
                 )}
                 loading="lazy"
+                disablePreview={true}
               />
             </ContextMenuTrigger>
             <ContextMenuContent>
@@ -644,6 +645,7 @@ function FileExplorerContent() {
 
 
   // Pagination state
+  const [usePagination, setUsePagination] = useState(true);
   const [page, setPage] = useState(1);
   const pageRef = useRef(page);
   const [accumulatedFiles, setAccumulatedFiles] = useState<FileData[]>([]);
@@ -660,7 +662,7 @@ function FileExplorerContent() {
 
 
   const { data: filesExplorerData, isLoading: isLoadingData, error: errorData, refetch: refetchData, isRefetching: isRefetchingData } = useQuery({
-    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers],
+    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination],
     queryFn: async () => {
       if (!isAuthenticated) {
         return { files: [], hasMore: false, total: 0 };
@@ -671,11 +673,14 @@ function FileExplorerContent() {
       if (isSearching && searchQuery.length > 0) {
         // Search mode
         response = await axios.get('/api/search', {
-          params: {
+          params: usePagination ? {
             query: searchQuery,
             dir: currentPath,
             page: page,
             limit: PAGE_SIZE
+          } : {
+            query: searchQuery,
+            dir: currentPath,
           }
         });
         return {
@@ -686,10 +691,12 @@ function FileExplorerContent() {
       } else if (isImageOnlyMode) {
         // Image mode
         response = await axios.get('/api/images', {
-          params: {
+          params: usePagination ? {
             dir: currentPath,
             page: page,
             limit: PAGE_SIZE
+          } : {
+            dir: currentPath,
           }
         });
         return {
@@ -700,11 +707,14 @@ function FileExplorerContent() {
       } else {
         // Default files mode
         response = await axios.get('/api/files', {
-          params: {
+          params: usePagination ? {
             dir: currentPath,
             cover: showDirectoryCovers ? 'true' : 'false',
             page: page,
             limit: PAGE_SIZE,
+          } : {
+            dir: currentPath,
+            cover: showDirectoryCovers ? 'true' : 'false',
           }
         });
         return {
@@ -793,18 +803,8 @@ function FileExplorerContent() {
   });
 
   const sortedFiles = useMemo(() => {
-    let files: FileData[] = [];
-
-    // For masonry view, use the direct API response
-    if (isImageOnlyMode && useMasonry) {
-      files = filesExplorerData?.files || [];
-    } else {
-      // For paginated views, use accumulated files
-      files = accumulatedFiles;
-    }
-
     if (isImageOnlyMode && sortBy === 'name') {
-      return [...files].sort((a, b) => {
+      return [...accumulatedFiles].sort((a, b) => {
         const pathA = a.path.split('/').concat(a.name).join('/');
         const pathB = b.path.split('/').concat(b.name).join('/');
         return sortOrder === 'asc'
@@ -813,7 +813,7 @@ function FileExplorerContent() {
       });
     }
 
-    return [...files].sort((a, b) => {
+    return [...accumulatedFiles].sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
       if (sortBy === 'name') {
@@ -834,7 +834,7 @@ function FileExplorerContent() {
       }
       return 0;
     });
-  }, [accumulatedFiles, filesExplorerData?.files, sortBy, sortOrder, isImageOnlyMode, useMasonry]);
+  }, [accumulatedFiles, sortBy, sortOrder]);
 
 
 
@@ -1785,12 +1785,24 @@ function FileExplorerContent() {
 
   // add a manual scroll listener for masonry view, since it doesn't use react-window
   useEffect(() => {
-    if (isImageOnlyMode && useMasonry && masonryRef.current) {
+    console.log('masonryRef.current', masonryRef.current);
+    if (isImageOnlyMode && useMasonry && viewMode === 'image' && masonryRef.current) {
       const masonryElement = masonryRef.current;
 
       const handleMasonryScroll = () => {
-        scrollPosition.current = masonryElement.scrollTop;
-        setShowScrollTop(masonryElement.scrollTop > 100);
+        const scrollTop = masonryElement.scrollTop;
+        const scrollHeight = masonryElement.scrollHeight;
+        const clientHeight = masonryElement.clientHeight;
+
+        scrollPosition.current = scrollTop;
+        setShowScrollTop(scrollTop > 100);
+        
+        // Check if scrolled near the bottom (with 200px buffer)
+        const scrollBuffer = 200;
+        console.log(isLoadingMore, hasMoreFiles, scrollTop + clientHeight, scrollHeight - scrollBuffer);
+        if (!isLoadingMore && hasMoreFiles && scrollTop + clientHeight >= scrollHeight - scrollBuffer) {
+          loadNextPage();
+        }
       };
 
       masonryElement.addEventListener('scroll', handleMasonryScroll);
@@ -1798,7 +1810,7 @@ function FileExplorerContent() {
         masonryElement.removeEventListener('scroll', handleMasonryScroll);
       };
     }
-  }, [isImageOnlyMode, useMasonry, masonryRef.current]);
+  }, [isImageOnlyMode, useMasonry, viewMode, isLoadingMore, hasMoreFiles, loadNextPage]);
 
   // close preview when currentPath or searchQuery changes
   useEffect(() => {
@@ -2272,6 +2284,9 @@ function FileExplorerContent() {
                   {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
                     <Eye size={18} /> Watcher Settings
                   </Button>}
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
+                    <TestTube2 size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
+                  </Button>
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
                     <TestTube2 size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
                   </Button>
@@ -2457,7 +2472,11 @@ function FileExplorerContent() {
         "flex justify-center text-sm text-muted/70 select-none",
         (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
       )}>
-        {sortedFiles.length} of {totalFiles} files loaded
+        {usePagination ?
+          `${sortedFiles.length} of ${totalFiles} files loaded`
+          :
+          `${totalFiles} files found`
+        }
       </div>
 
 

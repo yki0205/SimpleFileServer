@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const utils = require('./utils');
 const config = require('./config');
-const indexer = require(`./indexer`);
+const indexer = require('./indexer');
 
 let watchers = [];
 let isWatching = false;
@@ -184,7 +184,7 @@ function shouldIgnore(filePath) {
   return false;
 }
 
-function processFileEvent(eventType, filePath) {
+async function processFileEvent(eventType, filePath) {
   // Don't process ignored files
   if (shouldIgnore(filePath)) {
     return;
@@ -204,9 +204,9 @@ function processFileEvent(eventType, filePath) {
         } else {
           // Handle file changes (create, modify)
           if (eventType === 'change') {
-            handleFileModification(filePath);
+            await handleFileModification(filePath);
           } else if (eventType === 'rename') {
-            handleFileCreation(filePath);
+            await handleFileCreation(filePath);
           }
         }
       } catch (statsError) {
@@ -222,7 +222,7 @@ function processFileEvent(eventType, filePath) {
   }
 }
 
-function handleFileCreation(filePath) {
+async function handleFileCreation(filePath) {
   if (!config.useFileIndex || !indexer.isIndexBuilt()) {
     return;
   }
@@ -239,13 +239,16 @@ function handleFileCreation(filePath) {
     
     const normalizedPath = utils.normalizePath(relativePath);
     
+    // Use async getFileType function
+    const mimeType = stats.isDirectory() ? 'directory' : await utils.getFileType(filePath);
+    
     const fileData = {
       name: path.basename(filePath),
       path: normalizedPath,
       size: stats.size,
       mtime: stats.mtime.toISOString(),
       isDirectory: stats.isDirectory(),
-      mimeType: stats.isDirectory() ? 'directory' : utils.getFileTypeSync(filePath)
+      mimeType: mimeType
     };
     
     console.log(`Adding file to index: ${normalizedPath}`);
@@ -255,9 +258,9 @@ function handleFileCreation(filePath) {
   }
 }
 
-function handleFileModification(filePath) {
+async function handleFileModification(filePath) {
   // Simply treat modifications as creations (will update the existing index entry)
-  handleFileCreation(filePath);
+  await handleFileCreation(filePath);
 }
 
 function handleFileDeletion(filePath) {
@@ -286,28 +289,6 @@ function handleFileDeletion(filePath) {
       
       // Remove from watched directories set
       watchedDirs.delete(filePath);
-      
-      // Find and close any associated watchers
-      const watchersToRemove = [];
-      watchers.forEach((watcher, index) => {
-        try {
-          // We can't directly identify which watcher is for which path,
-          // but we can attempt to close them all and track which ones to remove
-          try {
-            watcher.close();
-          } catch (closeError) {
-            // Ignore close errors, the watcher might already be invalid
-          }
-          watchersToRemove.push(index);
-        } catch (error) {
-          console.error(`Error closing watcher for deleted directory: ${error.message}`);
-        }
-      });
-      
-      // Remove closed watchers from the watchers array (in reverse to avoid index issues)
-      for (let i = watchersToRemove.length - 1; i >= 0; i--) {
-        watchers.splice(watchersToRemove[i], 1);
-      }
       
       // Cancel any retry attempts for this directory
       if (retryQueue.has(filePath)) {

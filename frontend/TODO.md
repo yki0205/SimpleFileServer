@@ -15,10 +15,8 @@ NavigatePreview中似乎存在更新卡顿的情况，需Check
 
 # 4
 
-ImageOnly模式下，会出现：
-
-Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+~Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.~（已修改，待测试）
 
 # TODO
 
-- 全局的右键菜单
+- ~全局的右键菜单~（不再需要，放弃实现）

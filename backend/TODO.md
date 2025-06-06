@@ -1,6 +1,6 @@
 # ISSUE
 
-## 1 Wather的错误处理
+## 1 ~Wather的错误处理~（已修改，待测试）
 
 node:events:485
       throw er; // Unhandled 'error' event
