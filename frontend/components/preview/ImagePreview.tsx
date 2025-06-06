@@ -50,13 +50,17 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   // Handle image load event
   const handleImageLoad = useCallback(() => {
     cachedImagesRef.current.add(src);
-    setIsLoading(false);
+    if (src === currentSrcRef.current) {
+      setIsLoading(false);
+    }
   }, [src]);
 
   // Handle image error event
   const handleImageError = useCallback(() => {
-    setIsLoading(false);
-    setHasError(true);
+    if (src === currentSrcRef.current) {
+      setIsLoading(false);
+      setHasError(true);
+    }
   }, []);
 
   // Track current src and cached images
@@ -65,17 +69,23 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
 
     const checkIfCached = () => {
       if (cachedImagesRef.current.has(src)) {
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
         return;
       }
 
       const img = new Image();
       img.onload = () => {
         cachedImagesRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       };
       img.onerror = () => {
-        setIsLoading(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(true);
+        }
       };
 
       // Set src to trigger load check - this will use browser cache if available
@@ -85,9 +95,13 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       // onload might not fire in some browsers
       if (img.complete) {
         cachedImagesRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       } else {
-        setIsLoading(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(true);
+        }
       }
     };
 
@@ -101,7 +115,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   // Add a timeout to prevent infinite loading
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (isLoading) {
+      if (isLoading && src === currentSrcRef.current) {
         console.log('Image load timeout, forcing state update');
         setIsLoading(false);
       }

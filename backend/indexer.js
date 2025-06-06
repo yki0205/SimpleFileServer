@@ -252,7 +252,7 @@ function deleteFromIndex(filePath) {
 }
 
 
-function searchIndex(query, directory = '', page, limit) {
+function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOrder = 'asc') {
   if (!db) return { results: [], total: 0, hasMore: false };
   
   try {
@@ -275,8 +275,15 @@ function searchIndex(query, directory = '', page, limit) {
       // Calculate offset
       const offset = (pageNum - 1) * limitNum;
       
-      // Paginated query
-      const paginatedQuery = `${SQL.SEARCH_FILES} LIMIT ? OFFSET ?`;
+      // Paginated query with sorting
+      let paginatedQuery = `${SQL.SEARCH_FILES} `;
+      
+      // Add ordering based on sortBy and sortOrder parameters
+      paginatedQuery += getOrderByClause(sortBy, sortOrder);
+      
+      // Add pagination
+      paginatedQuery += ` LIMIT ? OFFSET ?`;
+      
       results = db.prepare(paginatedQuery)
         .all(searchTerm, searchTerm, dirPath, dirPath, limitNum, offset);
       
@@ -284,7 +291,12 @@ function searchIndex(query, directory = '', page, limit) {
       hasMore = offset + results.length < totalCount;
     } else {
       // Backward compatibility: return all results if no pagination specified
-      results = db.prepare(SQL.SEARCH_FILES)
+      let fullQuery = `${SQL.SEARCH_FILES} `;
+      
+      // Add ordering based on sortBy and sortOrder parameters
+      fullQuery += getOrderByClause(sortBy, sortOrder);
+      
+      results = db.prepare(fullQuery)
         .all(searchTerm, searchTerm, dirPath, dirPath);
     }
     
@@ -302,7 +314,7 @@ function searchIndex(query, directory = '', page, limit) {
   }
 }
 
-function findImagesInIndex(directory = '', page, limit) {
+function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrder = 'asc') {
   if (!db) return { images: [], total: 0, hasMore: false };
   
   try {
@@ -324,8 +336,15 @@ function findImagesInIndex(directory = '', page, limit) {
       // Calculate offset
       const offset = (pageNum - 1) * limitNum;
       
-      // Paginated query
-      const paginatedQuery = `${SQL.FIND_IMAGES} LIMIT ? OFFSET ?`;
+      // Paginated query with sorting
+      let paginatedQuery = `${SQL.FIND_IMAGES} `;
+      
+      // Add ordering based on sortBy and sortOrder parameters
+      paginatedQuery += getOrderByClause(sortBy, sortOrder);
+      
+      // Add pagination
+      paginatedQuery += ` LIMIT ? OFFSET ?`;
+      
       results = db.prepare(paginatedQuery)
         .all(dirPath, dirPath, limitNum, offset);
       
@@ -333,7 +352,12 @@ function findImagesInIndex(directory = '', page, limit) {
       hasMore = offset + results.length < totalCount;
     } else {
       // Backward compatibility: return all results if no pagination specified
-      results = db.prepare(SQL.FIND_IMAGES)
+      let fullQuery = `${SQL.FIND_IMAGES} `;
+      
+      // Add ordering based on sortBy and sortOrder parameters
+      fullQuery += getOrderByClause(sortBy, sortOrder);
+      
+      results = db.prepare(fullQuery)
         .all(dirPath, dirPath);
     }
     
@@ -349,6 +373,19 @@ function findImagesInIndex(directory = '', page, limit) {
     console.error('Error finding images in index:', error);
     return { images: [], total: 0, hasMore: false };
   }
+}
+
+// Helper function to generate the ORDER BY clause
+function getOrderByClause(sortBy = 'name', sortOrder = 'asc') {
+  // Validate sortBy to prevent SQL injection
+  const validSortFields = ['name', 'size', 'mtime'];
+  const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
+  
+  // Validate sortOrder to prevent SQL injection
+  const order = sortOrder.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  
+  // Always list directories first, then sort by the specified field
+  return `ORDER BY isDirectory DESC, ${sortField} ${order}`;
 }
 
 function saveFileBatch(files) {

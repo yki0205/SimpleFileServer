@@ -29,12 +29,16 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   const handleLoad = useCallback(() => {
     cachedVideosRef.current.add(src);
-    setIsLoading(false);
+    if (src === currentSrcRef.current) {
+      setIsLoading(false);
+    }
   }, [src]);
 
   const handleError = useCallback(() => {
-    setIsLoading(false);
-    setHasError(true);
+    if (src === currentSrcRef.current) {
+      setIsLoading(false);
+      setHasError(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -42,7 +46,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
     const checkIfCached = () => {
       if (cachedVideosRef.current.has(src)) {
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -50,17 +56,23 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       video.onloadedmetadata = () => {
         cachedVideosRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       };
 
       video.oncanplay = () => {
         cachedVideosRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       };
 
       video.onerror = () => {
-        setIsLoading(false);
-        setHasError(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+          setHasError(true);
+        }
       };
 
       video.src = src;
@@ -69,9 +81,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       if (video.readyState >= 2) {
         cachedVideosRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       } else {
-        setIsLoading(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(true);
+        }
       }
     };
 
@@ -81,7 +97,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (isLoading) {
+      if (isLoading && src === currentSrcRef.current) {
         console.log('Video load timeout, forcing state update');
         setIsLoading(false);
       }

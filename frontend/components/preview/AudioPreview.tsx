@@ -22,64 +22,80 @@ export const AudioPreview: React.FC<AudioPreviewProps> = ({
   const [hasError, setHasError] = useState(false);
 
   const handleLoad = useCallback(() => {
-    cachedAudioRef.current.add(src);
-    setIsLoading(false);
+    if (src === currentSrcRef.current) {
+      cachedAudioRef.current.add(src);
+      setIsLoading(false);
+    }
   }, [src]);
 
   const handleError = useCallback(() => {
-    setIsLoading(false);
-    setHasError(true);
+    if (src === currentSrcRef.current) {
+      setIsLoading(false);
+      setHasError(true);
+    }
   }, []);
 
   useEffect(() => {
     currentSrcRef.current = src;
-    
+
     const checkIfCached = () => {
       if (cachedAudioRef.current.has(src)) {
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
         return;
       }
-      
+
       const audio = new Audio();
-      
+
       audio.onloadedmetadata = () => {
         cachedAudioRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       };
-      
+
       audio.oncanplaythrough = () => {
         cachedAudioRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       };
-      
+
       audio.onerror = () => {
-        setIsLoading(false);
-        setHasError(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+          setHasError(true);
+        }
       };
-      
+
       audio.src = src;
       audio.preload = "metadata";
-      
+
       if (audio.readyState >= 2) {
         cachedAudioRef.current.add(src);
-        setIsLoading(false);
+        if (src === currentSrcRef.current) {
+          setIsLoading(false);
+        }
       } else {
-        setIsLoading(true);
+        if (src === currentSrcRef.current) {
+          setIsLoading(true);
+        }
       }
     };
-    
+
     checkIfCached();
     setHasError(false);
   }, [src]);
-  
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (isLoading) {
+      if (isLoading && src === currentSrcRef.current) {
         console.log('Audio load timeout, forcing state update');
         setIsLoading(false);
       }
     }, 60000); // 60 second timeout
-    
+
     return () => clearTimeout(timeoutId);
   }, [src, isLoading]);
 

@@ -193,7 +193,7 @@ app.get('/api/validate-token', (req, res) => {
 });
 
 app.get('/api/files', async (req, res) => {
-  const { dir = '', cover = 'false', page, limit = 100 } = req.query;
+  const { dir = '', cover = 'false', page, limit = 100, sortBy = 'name', sortOrder = 'asc' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, dir);
 
@@ -252,6 +252,9 @@ app.get('/api/files', async (req, res) => {
       let fileDetails = results
         .filter(r => r.status === 'fulfilled')
         .map(r => r.value);
+      
+      // Sort files before pagination
+      fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
       
       // Handle pagination if specified
       const total = fileDetails.length;
@@ -328,6 +331,9 @@ app.get('/api/files', async (req, res) => {
 
       let fileDetails = await Promise.all(fileDetailsPromises);
       
+      // Sort files before pagination
+      fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
+      
       // Handle pagination if specified
       const total = fileDetails.length;
       let hasMore = false;
@@ -354,7 +360,7 @@ app.get('/api/files', async (req, res) => {
 });
 
 app.get('/api/search', (req, res) => {
-  const { query, dir = '', page, limit = 100 } = req.query;
+  const { query, dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -365,20 +371,37 @@ app.get('/api/search', (req, res) => {
   try {
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      // Call searchIndex with pagination parameters
-      const searchResult = indexer.searchIndex(query, dir, page, limit);
+      // Call searchIndex with pagination and sorting parameters
+      const searchResult = indexer.searchIndex(query, dir, page, limit, sortBy, sortOrder);
       return res.json(searchResult);
     }
 
     // Otherwise, use real-time search
-    // Note: Real-time search doesn't support pagination yet
     parallelSearch(searchPath, query, basePath)
       .then(results => {
+        // Sort results before pagination
+        results = sortFiles(results, sortBy, sortOrder);
+        
+        // Apply pagination if specified
+        let hasMore = false;
+        let total = results.length;
+        let paginatedResults = results;
+        
+        if (page !== undefined) {
+          const pageNum = parseInt(page) || 1;
+          const limitNum = parseInt(limit) || 100;
+          const startIndex = (pageNum - 1) * limitNum;
+          const endIndex = startIndex + limitNum;
+          
+          hasMore = endIndex < total;
+          paginatedResults = results.slice(startIndex, endIndex);
+        }
+        
         // Format response to match the structure of paginated results
         res.json({ 
-          results, 
-          total: results.length,
-          hasMore: false
+          results: paginatedResults, 
+          total: total,
+          hasMore: hasMore
         });
       })
       .catch(error => {
@@ -390,7 +413,7 @@ app.get('/api/search', (req, res) => {
 });
 
 app.get('/api/images', (req, res) => {
-  const { dir = '', page, limit = 100 } = req.query;
+  const { dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -401,20 +424,37 @@ app.get('/api/images', (req, res) => {
   try {
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      // Call findImagesInIndex with pagination parameters
-      const imagesResult = indexer.findImagesInIndex(dir, page, limit);
+      // Call findImagesInIndex with pagination and sorting parameters
+      const imagesResult = indexer.findImagesInIndex(dir, page, limit, sortBy, sortOrder);
       return res.json(imagesResult);
     }
 
     // Otherwise, use real-time search
-    // Note: Real-time search doesn't support pagination yet
     parallelFindImages(searchPath, basePath)
       .then(images => {
+        // Sort images before pagination
+        images = sortFiles(images, sortBy, sortOrder);
+        
+        // Apply pagination if specified
+        let hasMore = false;
+        let total = images.length;
+        let paginatedImages = images;
+        
+        if (page !== undefined) {
+          const pageNum = parseInt(page) || 1;
+          const limitNum = parseInt(limit) || 100;
+          const startIndex = (pageNum - 1) * limitNum;
+          const endIndex = startIndex + limitNum;
+          
+          hasMore = endIndex < total;
+          paginatedImages = images.slice(startIndex, endIndex);
+        }
+        
         // Format response to match the structure of paginated results
         res.json({ 
-          images, 
-          total: images.length,
-          hasMore: false
+          images: paginatedImages, 
+          total: total,
+          hasMore: hasMore
         });
       })
       .catch(error => {
@@ -1756,6 +1796,33 @@ async function processWithPsdLibrary(psdPath, outputPath) {
     console.error(`Error processing PSD with psd library: ${error.message}`);
     return null;
   }
+}
+
+// Helper function to sort files
+function sortFiles(files, sortBy = 'name', sortOrder = 'asc') {
+  return [...files].sort((a, b) => {
+    // Always put directories first
+    if (a.isDirectory && !b.isDirectory) return -1;
+    if (!a.isDirectory && b.isDirectory) return 1;
+    
+    if (sortBy === 'name') {
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc'
+        ? collator.compare(a.name, b.name)
+        : collator.compare(b.name, a.name);
+    } else if (sortBy === 'size') {
+      return sortOrder === 'asc'
+        ? a.size - b.size
+        : b.size - a.size;
+    } else if (sortBy === 'date') {
+      const dateA = new Date(a.mtime).getTime();
+      const dateB = new Date(b.mtime).getTime();
+      return sortOrder === 'asc'
+        ? dateA - dateB
+        : dateB - dateA;
+    }
+    return 0;
+  });
 }
 
 app.listen(PORT, () => {

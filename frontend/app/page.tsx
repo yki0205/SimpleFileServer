@@ -208,10 +208,12 @@ interface ImageCellProps {
   rowIndex: number;
   style: React.CSSProperties;
   data: {
+    columnCount: number;
+    token?: string;
     files: FileData[];
     selectedFiles: string[];
     isSelecting: boolean;
-    columnCount: number;
+    useImageQuickPreview: boolean;
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onCopy: (path: string) => void;
     onCut: (path: string) => void;
@@ -220,12 +222,11 @@ interface ImageCellProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
-    token?: string;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -246,7 +247,7 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
                 isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
               )}
               loading="eager"
-              disablePreview={isSelecting}
+              disablePreview={!useImageQuickPreview || isSelecting}
             />
           </ContextMenuTrigger>
           <ContextMenuContent>
@@ -386,11 +387,13 @@ interface MasonryCellProps {
   index: number;
   style: React.CSSProperties;
   data: {
+    columnCount: number;
+    columnWidth: number;
+    token?: string;
     files: FileData[];
     selectedFiles: string[];
     isSelecting: boolean;
-    columnCount: number;
-    columnWidth: number;
+    useImageQuickPreview: boolean;
     direction: 'ltr' | 'rtl';
     onFileClick: (path: string, mimeType: string, isDirectory: boolean) => void;
     onCopy: (path: string) => void;
@@ -400,12 +403,11 @@ interface MasonryCellProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
-    token?: string;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -440,7 +442,7 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
                   isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
                 )}
                 loading="lazy"
-                disablePreview={true}
+                disablePreview={!useImageQuickPreview}
               />
             </ContextMenuTrigger>
             <ContextMenuContent>
@@ -586,6 +588,8 @@ function FileExplorerContent() {
   // EXPERIMENTAL FEATURE FOR IMAGE VIEW
   const [showDirectoryCovers, setShowDirectoryCovers] = useState(false);
 
+  const [useImageQuickPreview, setUseImageQuickPreview] = useState(false);
+
   // Create refs for the virtualized lists/grids
   const listRef = useRef<List>(null);
   const gridRef = useRef<Grid>(null);
@@ -658,15 +662,22 @@ function FileExplorerContent() {
   // Buffer to trigger next page load before reaching the end
   const SCROLL_BUFFER = 10;
 
+
+  // isChangingPath will be true when navigateTo is called or the browser uses the forward/backward logic,
+  // and false when the searchQuery or currentPath triggers the useEffect.
+  // **Purpose**: Prevent the operation of canceling ImageOnlyMode from triggering an extra data fetch before the path change.
   const [isChangingPath, setIsChangingPath] = useState(false);
 
 
   const { data: filesExplorerData, isLoading: isLoadingData, error: errorData, refetch: refetchData, isRefetching: isRefetchingData } = useQuery({
-    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination],
+    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination, sortBy, sortOrder],
     queryFn: async () => {
+
       if (!isAuthenticated) {
         return { files: [], hasMore: false, total: 0 };
       }
+
+      setIsUpdatingAccumulated(true);
 
       let response;
 
@@ -677,10 +688,14 @@ function FileExplorerContent() {
             query: searchQuery,
             dir: currentPath,
             page: page,
-            limit: PAGE_SIZE
+            limit: PAGE_SIZE,
+            sortBy,
+            sortOrder
           } : {
             query: searchQuery,
             dir: currentPath,
+            sortBy,
+            sortOrder
           }
         });
         return {
@@ -694,9 +709,13 @@ function FileExplorerContent() {
           params: usePagination ? {
             dir: currentPath,
             page: page,
-            limit: PAGE_SIZE
+            limit: PAGE_SIZE,
+            sortBy,
+            sortOrder
           } : {
             dir: currentPath,
+            sortBy,
+            sortOrder
           }
         });
         return {
@@ -712,9 +731,13 @@ function FileExplorerContent() {
             cover: showDirectoryCovers ? 'true' : 'false',
             page: page,
             limit: PAGE_SIZE,
+            sortBy,
+            sortOrder
           } : {
             dir: currentPath,
             cover: showDirectoryCovers ? 'true' : 'false',
+            sortBy,
+            sortOrder
           }
         });
         return {
@@ -724,8 +747,39 @@ function FileExplorerContent() {
         };
       }
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !isChangingPath,
   });
+
+  // Handle paginated data updates
+  useEffect(() => {
+    if (!filesExplorerData || isRefetchingData) return;
+    // setIsUpdatingAccumulated(true);
+
+    // For paginated views
+    if (page === 1) {
+      setAccumulatedFiles(filesExplorerData.files || []);
+    } else {
+      setAccumulatedFiles(prev => [...prev, ...(filesExplorerData.files || [])]);
+    }
+    setHasMoreFiles(filesExplorerData.hasMore || false);
+    setTotalFiles(filesExplorerData.total || filesExplorerData.files?.length || 0);
+
+    // Reset loading flag when data is loaded
+    setIsLoadingMore(false);
+  }, [filesExplorerData, isRefetchingData, page, currentPath, searchQuery]);
+
+  useEffect(() => {
+    if (isUpdatingAccumulated) {
+      setIsUpdatingAccumulated(false);
+    }
+  }, [accumulatedFiles, isUpdatingAccumulated])
+
+  const _isLoading = isLoadingData || isUpdatingAccumulated;
+  const isLoading = showLoadingIndicator && _isLoading;
+  const isError = errorData;
+  const isNotFound = !_isLoading && !isError && totalFiles === 0;
+
+  console.log({ isLoading, _isLoading, isLoadingData, isUpdatingAccumulated })
 
   // Add a delay before showing loading indicator
   useEffect(() => {
@@ -752,30 +806,7 @@ function FileExplorerContent() {
     };
   }, [isLoadingData, isRefetchingData]);
 
-  // Handle paginated data updates
-  useEffect(() => {
-    if (!filesExplorerData || isRefetchingData) return;
-    setIsUpdatingAccumulated(true);
 
-    // For paginated views
-    if (page === 1) {
-      setAccumulatedFiles(filesExplorerData.files || []);
-    } else {
-      setAccumulatedFiles(prev => [...prev, ...(filesExplorerData.files || [])]);
-    }
-    setHasMoreFiles(filesExplorerData.hasMore || false);
-    setTotalFiles(filesExplorerData.total || filesExplorerData.files?.length || 0);
-
-    // Reset loading flag when data is loaded
-    setIsLoadingMore(false);
-    setIsUpdatingAccumulated(false);
-    setIsChangingPath(false);
-  }, [filesExplorerData, isRefetchingData, page, currentPath, searchQuery]);
-
-  const _isLoading = isLoadingData || isUpdatingAccumulated || isChangingPath;
-  const isLoading = showLoadingIndicator && _isLoading;
-  const isError = errorData;
-  const isNotFound = !_isLoading && !isError && totalFiles === 0;
 
   const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreviewContent } = useQuery({
     queryKey: ['fileContent', preview.path],
@@ -802,40 +833,6 @@ function FileExplorerContent() {
     refetchOnWindowFocus: false
   });
 
-  const sortedFiles = useMemo(() => {
-    if (isImageOnlyMode && sortBy === 'name') {
-      return [...accumulatedFiles].sort((a, b) => {
-        const pathA = a.path.split('/').concat(a.name).join('/');
-        const pathB = b.path.split('/').concat(b.name).join('/');
-        return sortOrder === 'asc'
-          ? pathA.localeCompare(pathB)
-          : pathB.localeCompare(pathA);
-      });
-    }
-
-    return [...accumulatedFiles].sort((a, b) => {
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
-      if (sortBy === 'name') {
-        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-        return sortOrder === 'asc'
-          ? collator.compare(a.name, b.name)
-          : collator.compare(b.name, a.name);
-      } else if (sortBy === 'size') {
-        return sortOrder === 'asc'
-          ? a.size - b.size
-          : b.size - a.size;
-      } else if (sortBy === 'date') {
-        const dateA = new Date(a.mtime).getTime();
-        const dateB = new Date(b.mtime).getTime();
-        return sortOrder === 'asc'
-          ? dateA - dateB
-          : dateB - dateA;
-      }
-      return 0;
-    });
-  }, [accumulatedFiles, sortBy, sortOrder]);
-
 
 
   const navigateTo = (path: string, query: string = '') => {
@@ -855,10 +852,6 @@ function FileExplorerContent() {
     setIsChangingPath(true);
 
     setPage(1);
-    setAccumulatedFiles([]);
-    setTotalFiles(0);
-    setHasMoreFiles(false);
-    setIsLoadingMore(false);
 
     const params = new URLSearchParams();
     if (path) params.set('p', path);
@@ -905,7 +898,7 @@ function FileExplorerContent() {
 
 
   const handleSelectAll = () => {
-    setSelectedFiles(sortedFiles.map(file => file.path));
+    setSelectedFiles(accumulatedFiles.map(file => file.path));
   }
 
   const handleClearSelection = () => {
@@ -913,7 +906,7 @@ function FileExplorerContent() {
   }
 
   const handleInvertSelection = () => {
-    setSelectedFiles(sortedFiles.filter(file => !selectedFiles.includes(file.path)).map(file => file.path));
+    setSelectedFiles(accumulatedFiles.filter(file => !selectedFiles.includes(file.path)).map(file => file.path));
   }
 
   const handleQuickSelect = useCallback((path: string) => {
@@ -931,9 +924,9 @@ function FileExplorerContent() {
 
 
   const openPreview = useCallback((path: string, mimeType: string) => {
-    const currentIndex = sortedFiles.findIndex(file => file.path === path);
+    const currentIndex = accumulatedFiles.findIndex(file => file.path === path);
     if (currentIndex === -1) {
-      console.error('File not found in sortedFiles:', path);
+      console.error('File not found in accumulatedFiles:', path);
       return;
     }
 
@@ -943,7 +936,7 @@ function FileExplorerContent() {
       type: getPreviewType(mimeType),
       currentIndex
     });
-  }, [sortedFiles]);
+  }, [accumulatedFiles]);
 
   const closePreview = useCallback(() => {
     setPreview({
@@ -957,18 +950,18 @@ function FileExplorerContent() {
     if (preview.currentIndex === undefined) return;
 
     if (isImageOnlyMode) {
-      if (!sortedFiles) return;
+      if (!accumulatedFiles) return;
       let newIndex;
       if (direction === 'next') {
-        newIndex = (preview.currentIndex + 1) % sortedFiles.length;
+        newIndex = (preview.currentIndex + 1) % accumulatedFiles.length;
       } else {
-        newIndex = (preview.currentIndex - 1 + sortedFiles.length) % sortedFiles.length;
+        newIndex = (preview.currentIndex - 1 + accumulatedFiles.length) % accumulatedFiles.length;
       }
-      openPreview(sortedFiles[newIndex].path, sortedFiles[newIndex].mimeType || '');
+      openPreview(accumulatedFiles[newIndex].path, accumulatedFiles[newIndex].mimeType || '');
       return;
     }
 
-    const sameTypeFiles = sortedFiles.filter(file => {
+    const sameTypeFiles = accumulatedFiles.filter(file => {
       const previewType = getPreviewType(file.mimeType || '');
       return previewType === preview.type;
     });
@@ -1649,11 +1642,11 @@ function FileExplorerContent() {
 
   // Handle end of list detection to load more data
   const handleItemsRendered = useCallback(({ visibleStartIndex, visibleStopIndex }: { visibleStartIndex: number, visibleStopIndex: number }) => {
-    const itemCount = sortedFiles.length;
+    const itemCount = accumulatedFiles.length;
     if (!isLoadingMore && hasMoreFiles && visibleStopIndex >= itemCount - SCROLL_BUFFER) {
       loadNextPage();
     }
-  }, [sortedFiles.length, isLoadingMore, hasMoreFiles, loadNextPage]);
+  }, [accumulatedFiles.length, isLoadingMore, hasMoreFiles, loadNextPage]);
 
 
 
@@ -1700,6 +1693,7 @@ function FileExplorerContent() {
       if (isImageOnlyModeRef.current) {
         // Use setTimeout to move state update to next event loop
         setTimeout(() => {
+          setIsChangingPath(true);
           setIsImageOnlyMode(false);
         }, 0);
       }
@@ -1721,6 +1715,7 @@ function FileExplorerContent() {
       if (isImageOnlyModeRef.current) {
         // Use setTimeout to move state update to next event loop
         setTimeout(() => {
+          setIsChangingPath(true);
           setIsImageOnlyMode(false);
         }, 0);
       }
@@ -1746,6 +1741,7 @@ function FileExplorerContent() {
   useEffect(() => {
     const handlePopState = () => {
       if (isImageOnlyMode) {
+        setIsChangingPath(true);
         setIsImageOnlyMode(false);
       }
     };
@@ -1785,7 +1781,6 @@ function FileExplorerContent() {
 
   // add a manual scroll listener for masonry view, since it doesn't use react-window
   useEffect(() => {
-    console.log('masonryRef.current', masonryRef.current);
     if (isImageOnlyMode && useMasonry && viewMode === 'image' && masonryRef.current) {
       const masonryElement = masonryRef.current;
 
@@ -1796,7 +1791,7 @@ function FileExplorerContent() {
 
         scrollPosition.current = scrollTop;
         setShowScrollTop(scrollTop > 100);
-        
+
         // Check if scrolled near the bottom (with 200px buffer)
         const scrollBuffer = 200;
         console.log(isLoadingMore, hasMoreFiles, scrollTop + clientHeight, scrollHeight - scrollBuffer);
@@ -1815,6 +1810,7 @@ function FileExplorerContent() {
   // close preview when currentPath or searchQuery changes
   useEffect(() => {
     closePreview();
+    setIsChangingPath(false);
   }, [currentPath, searchQuery])
 
 
@@ -1824,11 +1820,11 @@ function FileExplorerContent() {
       ref={listRef}
       height={height}
       width={width}
-      itemCount={sortedFiles.length}
+      itemCount={accumulatedFiles.length}
       itemSize={48}
       overscanCount={20}
       itemData={{
-        files: sortedFiles,
+        files: accumulatedFiles,
         selectedFiles,
         isSelecting,
         isSearching,
@@ -1844,7 +1840,7 @@ function FileExplorerContent() {
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
       onItemsRendered={({ visibleStartIndex, visibleStopIndex }) => {
-        const itemCount = sortedFiles.length;
+        const itemCount = accumulatedFiles.length;
         if (!isLoadingMore && hasMoreFiles && visibleStopIndex >= itemCount - SCROLL_BUFFER) {
           loadNextPage();
         }
@@ -1853,11 +1849,11 @@ function FileExplorerContent() {
       {FileRow}
     </List>
   ),
-    [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+    [accumulatedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
-    const rowCount = Math.ceil(sortedFiles.length / columnCount);
+    const rowCount = Math.ceil(accumulatedFiles.length / columnCount);
     const cellWidth = width / columnCount;
     const cellHeight = cellWidth;
 
@@ -1873,7 +1869,7 @@ function FileExplorerContent() {
         overscanRowCount={10}
         overscanColumnCount={5}
         itemData={{
-          files: sortedFiles,
+          files: accumulatedFiles,
           selectedFiles,
           isSelecting,
           columnCount,
@@ -1898,11 +1894,11 @@ function FileExplorerContent() {
         {FileCell}
       </Grid>
     );
-  }, [sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+  }, [accumulatedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
-    const rowCount = Math.ceil(sortedFiles.length / columnCount);
+    const rowCount = Math.ceil(accumulatedFiles.length / columnCount);
     const cellWidth = width / columnCount;
     const cellHeight = cellWidth;
 
@@ -1918,10 +1914,12 @@ function FileExplorerContent() {
         overscanRowCount={10}
         overscanColumnCount={5}
         itemData={{
-          files: sortedFiles,
+          columnCount,
+          token: token || undefined,
+          files: accumulatedFiles,
           selectedFiles,
           isSelecting,
-          columnCount,
+          useImageQuickPreview,
           onFileClick: handleFileClick,
           onCopy: handleCopy,
           onCut: handleMoveFrom,
@@ -1930,7 +1928,6 @@ function FileExplorerContent() {
           onShowDetails: handleShowDetails,
           onQuickSelect: handleQuickSelect,
           onRename: handleRename,
-          token: token || undefined
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1944,7 +1941,7 @@ function FileExplorerContent() {
         {ImageCell}
       </Grid>
     );
-  }, [token, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+  }, [token, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1965,11 +1962,13 @@ function FileExplorerContent() {
             index={index}
             style={{}}
             data={{
-              files: sortedFiles,
-              selectedFiles,
-              isSelecting,
               columnCount,
               columnWidth,
+              token: token || undefined,
+              files: accumulatedFiles,
+              selectedFiles,
+              isSelecting,
+              useImageQuickPreview,
               direction: gridDirection,
               onFileClick: handleFileClick,
               onCopy: handleCopy,
@@ -1979,13 +1978,12 @@ function FileExplorerContent() {
               onShowDetails: handleShowDetails,
               onQuickSelect: handleQuickSelect,
               onRename: handleRename,
-              token: token || undefined
             }}
           />
         ))}
       </div>
     );
-  }, [token, useMasonry, gridDirection, sortedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
+  }, [token, useMasonry, gridDirection, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
 
 
@@ -2284,6 +2282,9 @@ function FileExplorerContent() {
                   {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
                     <Eye size={18} /> Watcher Settings
                   </Button>}
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
+                    <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
+                  </Button>
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
                     <TestTube2 size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
                   </Button>
@@ -2473,7 +2474,7 @@ function FileExplorerContent() {
         (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
       )}>
         {usePagination ?
-          `${sortedFiles.length} of ${totalFiles} files loaded`
+          `${accumulatedFiles.length} of ${totalFiles} files loaded`
           :
           `${totalFiles} files found`
         }
