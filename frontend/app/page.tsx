@@ -19,10 +19,12 @@ import {
   List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
-  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck
+  CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck,
+  Loader2
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
+import { FloatingButtons, FloatingButton } from "@/components/button";
 import { Error, Loading, NotFound } from "@/components/status";
 import { FileItemListView, FileItemGridView, ImageItem, VideoItem } from "@/components/fileItem";
 import { ImagePreview, VideoPreview, AudioPreview, TextPreview, ComicPreview, EPUBPreview, PDFPreview } from "@/components/preview";
@@ -43,25 +45,6 @@ interface FileData {
   mimeType?: string;
   cover?: string;
 }
-
-interface FilesResponse {
-  files: FileData[];
-  hasMore?: boolean;
-  total?: number;
-}
-
-interface ImagesResponse {
-  images: FileData[];
-  hasMore?: boolean;
-  total?: number;
-}
-
-interface SearchResponse {
-  results: FileData[];
-  hasMore?: boolean;
-  total?: number;
-}
-
 interface PreviewState {
   isOpen: boolean;
   path: string;
@@ -509,23 +492,6 @@ function getColumnCount(width: number) {
   return 8; // 2xl and above
 }
 
-function getButtonStyles(btnCountBefore: number, index: number) {
-  const base = cn(
-    "fixed",
-    "w-10 h-10 rounded-full",
-    "bg-black/50 hover:bg-black/70 text-white",
-    "flex items-center justify-center",
-    "transition-all duration-300",
-  )
-  const positions = [
-    "bottom-8 right-8",
-    "bottom-20 right-8",
-    "bottom-32 right-8",
-    "bottom-44 right-8"
-  ]
-  return cn(base, positions[Math.min(index, positions.length - 1, btnCountBefore)]);
-}
-
 function generateUniqueId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -551,15 +517,16 @@ const previewSupported: Record<string, boolean> = {
 
 
 function FileExplorerContent() {
-  const { isAuthenticated: isAuthenticatedTemp, isCheckingAuth, username, permissions, logout, token } = useAuth();
-  const isAuthenticated = isAuthenticatedTemp && !isCheckingAuth;
+  const { isAuthenticated, isCheckingAuth, username, permissions, logout, token } = useAuth();
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticatedTemp && !isCheckingAuth) {
+    if (!isAuthenticated && !isCheckingAuth) {
       setIsLoginDialogOpen(true);
     }
-  }, [isAuthenticatedTemp, isCheckingAuth]);
+  }, [isAuthenticated, isCheckingAuth]);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -568,6 +535,16 @@ function FileExplorerContent() {
   const searchQuery = searchParams.get('q') || '';
   const isSearching = !!searchQuery;
   const canGoBack = currentPath !== '' || isSearching;
+
+  const [isImageOnlyMode, setIsImageOnlyModeTemp] = useState(false);
+  const setIsImageOnlyMode = (mode: boolean) => {
+    if (isSearching && mode) {
+      // Can't use image-only mode with search
+      return;
+    }
+    setIsImageOnlyModeTemp(mode);
+  }
+  const isImageOnlyModeRef = useRef(isImageOnlyMode);
 
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -595,11 +572,7 @@ function FileExplorerContent() {
   const [fileToShowDetails, setFileToShowDetails] = useState<FileData | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
-  const [viewMode, setViewModeTemp] = useState<'list' | 'grid' | 'image' | 'imageOnly'>('list');
-  const setViewMode = (mode: 'list' | 'grid' | 'image' | 'imageOnly') => {
-    if (isSearching && mode === 'imageOnly') return;
-    setViewModeTemp(mode);
-  }
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image'>('list');
   const viewModeRef = useRef(viewMode);
 
   // EXPERIMENTAL FEATURE FOR GRID VIEW, IMAGE VIEW & IMAGE ONLY VIEW
@@ -672,114 +645,129 @@ function FileExplorerContent() {
 
   // Pagination state
   const [page, setPage] = useState(1);
+  const pageRef = useRef(page);
+  const [accumulatedFiles, setAccumulatedFiles] = useState<FileData[]>([]);
+  const [isUpdatingAccumulated, setIsUpdatingAccumulated] = useState(false);
+  const [totalFiles, setTotalFiles] = useState(0);
   const [hasMoreFiles, setHasMoreFiles] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [accumulatedFiles, setAccumulatedFiles] = useState<FileData[]>([]);
-  const [totalFiles, setTotalFiles] = useState(0);
-
   // Page size for API requests
-  const PAGE_SIZE = 100;
-
+  const PAGE_SIZE = 500;
   // Buffer to trigger next page load before reaching the end
   const SCROLL_BUFFER = 10;
 
-  const { data: filesData, isLoading: isLoadingFiles, error: errorFiles, refetch: refetchFiles } = useQuery<FilesResponse>({
-    queryKey: ['files', currentPath, page],
+  const [isChangingPath, setIsChangingPath] = useState(false);
+
+
+  const { data: filesExplorerData, isLoading: isLoadingData, error: errorData, refetch: refetchData, isRefetching: isRefetchingData } = useQuery({
+    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers],
     queryFn: async () => {
-      const response = await axios.get('/api/files', {
-        params: {
-          dir: currentPath,
-          cover: showDirectoryCovers ? 'true' : 'false',
-          page: page,
-          limit: PAGE_SIZE
-        }
-      });
-      return response.data;
+      if (!isAuthenticated) {
+        return { files: [], hasMore: false, total: 0 };
+      }
+
+      let response;
+
+      if (isSearching && searchQuery.length > 0) {
+        // Search mode
+        response = await axios.get('/api/search', {
+          params: {
+            query: searchQuery,
+            dir: currentPath,
+            page: page,
+            limit: PAGE_SIZE
+          }
+        });
+        return {
+          files: response.data.results,
+          hasMore: response.data.hasMore,
+          total: response.data.total || response.data.results?.length || 0
+        };
+      } else if (isImageOnlyMode) {
+        // Image mode
+        response = await axios.get('/api/images', {
+          params: {
+            dir: currentPath,
+            page: page,
+            limit: PAGE_SIZE
+          }
+        });
+        return {
+          files: response.data.images,
+          hasMore: response.data.hasMore,
+          total: response.data.total || response.data.images?.length || 0
+        };
+      } else {
+        // Default files mode
+        response = await axios.get('/api/files', {
+          params: {
+            dir: currentPath,
+            cover: showDirectoryCovers ? 'true' : 'false',
+            page: page,
+            limit: PAGE_SIZE,
+          }
+        });
+        return {
+          files: response.data.files,
+          hasMore: response.data.hasMore,
+          total: response.data.total || response.data.files?.length || 0
+        };
+      }
     },
-    enabled: isAuthenticated && !isSearching && viewMode !== 'imageOnly'
+    enabled: isAuthenticated,
   });
 
-  // Handle files data updates
+  // Add a delay before showing loading indicator
   useEffect(() => {
-    if (!filesData) return;
-
-    // If first page, replace accumulated files
-    if (page === 1) {
-      setAccumulatedFiles(filesData.files || []);
+    if (isLoadingData || isRefetchingData) {
+      // Set a timer to show loading indicator after 300ms
+      loadingTimerRef.current = setTimeout(() => {
+        setShowLoadingIndicator(true);
+      }, 300);
     } else {
-      // Otherwise append to existing files
-      setAccumulatedFiles(prev => [...prev, ...(filesData.files || [])]);
+      // Clear timer and hide loading indicator when loading is complete
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+      setShowLoadingIndicator(false);
     }
-    setHasMoreFiles(filesData.hasMore || false);
-    setTotalFiles(filesData.total || filesData.files?.length || 0);
+
+    return () => {
+      // Clean up timer on unmount
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+    };
+  }, [isLoadingData, isRefetchingData]);
+
+  // Handle paginated data updates
+  useEffect(() => {
+    if (!filesExplorerData || isRefetchingData) return;
+    setIsUpdatingAccumulated(true);
+
+    // For paginated views
+    if (page === 1) {
+      setAccumulatedFiles(filesExplorerData.files || []);
+    } else {
+      setAccumulatedFiles(prev => [...prev, ...(filesExplorerData.files || [])]);
+    }
+    setHasMoreFiles(filesExplorerData.hasMore || false);
+    setTotalFiles(filesExplorerData.total || filesExplorerData.files?.length || 0);
 
     // Reset loading flag when data is loaded
     setIsLoadingMore(false);
-  }, [filesData, page]);
+    setIsUpdatingAccumulated(false);
+    setIsChangingPath(false);
+  }, [filesExplorerData, isRefetchingData, page, currentPath, searchQuery]);
 
-  const { data: imagesData, isLoading: imagesLoading, error: imagesError, refetch: refetchImages } = useQuery<ImagesResponse>({
-    queryKey: ['images', currentPath, viewMode === 'imageOnly' && useMasonry ? null : page],
-    queryFn: async () => {
-      // Don't use pagination for masonry mode
-      const params = viewMode === 'imageOnly' && useMasonry
-        ? { dir: currentPath }
-        : { dir: currentPath, page: page, limit: PAGE_SIZE };
+  const _isLoading = isLoadingData || isUpdatingAccumulated || isChangingPath;
+  const isLoading = showLoadingIndicator && _isLoading;
+  const isError = errorData;
+  const isNotFound = !_isLoading && !isError && totalFiles === 0;
 
-      const response = await axios.get('/api/images', { params });
-      return response.data;
-    },
-    enabled: isAuthenticated && viewMode === 'imageOnly' && !isSearching
-  });
-
-  // Handle images data updates
-  useEffect(() => {
-    if (!imagesData || (viewMode === 'imageOnly' && useMasonry)) return;
-
-    if (page === 1) {
-      setAccumulatedFiles(imagesData.images || []);
-    } else {
-      setAccumulatedFiles(prev => [...prev, ...(imagesData.images || [])]);
-    }
-    setHasMoreFiles(imagesData.hasMore || false);
-    setTotalFiles(imagesData.total || imagesData.images?.length || 0);
-
-    // Reset loading flag when data is loaded
-    setIsLoadingMore(false);
-  }, [imagesData, page, viewMode, useMasonry]);
-
-  const { data: searchData, isLoading: searchLoading, error: searchError, refetch: refetchSearch } = useQuery<SearchResponse>({
-    queryKey: ['search', searchQuery, currentPath, page],
-    queryFn: async () => {
-      const response = await axios.get('/api/search', {
-        params: {
-          query: searchQuery,
-          dir: currentPath,
-          page: page,
-          limit: PAGE_SIZE
-        }
-      });
-      return response.data;
-    },
-    enabled: isAuthenticated && isSearching && searchQuery.length > 0 && viewMode !== 'imageOnly'
-  });
-
-  // Handle search data updates
-  useEffect(() => {
-    if (!searchData) return;
-
-    if (page === 1) {
-      setAccumulatedFiles(searchData.results || []);
-    } else {
-      setAccumulatedFiles(prev => [...prev, ...(searchData.results || [])]);
-    }
-    setHasMoreFiles(searchData.hasMore || false);
-    setTotalFiles(searchData.total || searchData.results?.length || 0);
-
-    // Reset loading flag when data is loaded
-    setIsLoadingMore(false);
-  }, [searchData, page]);
-
-  const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreview } = useQuery({
+  const { data: previewContent, isLoading: contentLoading, error: contentError, refetch: refetchPreviewContent } = useQuery({
     queryKey: ['fileContent', preview.path],
     queryFn: async () => {
       if (!preview.isOpen || (preview.type !== 'text')) {
@@ -808,14 +796,14 @@ function FileExplorerContent() {
     let files: FileData[] = [];
 
     // For masonry view, use the direct API response
-    if (viewMode === 'imageOnly' && useMasonry) {
-      files = imagesData?.images || [];
+    if (isImageOnlyMode && useMasonry) {
+      files = filesExplorerData?.files || [];
     } else {
       // For paginated views, use accumulated files
       files = accumulatedFiles;
     }
 
-    if (viewMode === 'imageOnly' && sortBy === 'name') {
+    if (isImageOnlyMode && sortBy === 'name') {
       return [...files].sort((a, b) => {
         const pathA = a.path.split('/').concat(a.name).join('/');
         const pathB = b.path.split('/').concat(b.name).join('/');
@@ -846,33 +834,31 @@ function FileExplorerContent() {
       }
       return 0;
     });
-  }, [accumulatedFiles, imagesData?.images, sortBy, sortOrder, viewMode, useMasonry]);
+  }, [accumulatedFiles, filesExplorerData?.files, sortBy, sortOrder, isImageOnlyMode, useMasonry]);
 
-  const refetch = useCallback(() => {
-    if (viewMode === 'imageOnly') {
-      refetchImages();
-    } else if (isSearching) {
-      refetchSearch();
-    } else {
-      refetchFiles();
-    }
-  }, [viewMode, isSearching, refetchSearch, refetchFiles, refetchImages]);
+
 
   const navigateTo = (path: string, query: string = '') => {
-    if (viewMode === 'imageOnly') {
-      setViewMode('image');
+
+    if (path === currentPath && query === searchQuery) return;
+
+    if (isImageOnlyMode) {
+      setIsImageOnlyMode(false);
     }
 
-    // Reset pagination when navigating
-    setPage(1);
-    setAccumulatedFiles([]);
-    setHasMoreFiles(false);
-
-    // Clear selection state when navigating
     if (isSelecting) {
       setIsSelecting(false);
       setSelectedFiles([]);
     }
+
+    // NOTE: It's not a good idea, but it works
+    setIsChangingPath(true);
+
+    setPage(1);
+    setAccumulatedFiles([]);
+    setTotalFiles(0);
+    setHasMoreFiles(false);
+    setIsLoadingMore(false);
 
     const params = new URLSearchParams();
     if (path) params.set('p', path);
@@ -884,12 +870,6 @@ function FileExplorerContent() {
     if (isSearching) {
       navigateTo(currentPath, '');
       return;
-    }
-
-    // Clear selection state when navigating back
-    if (isSelecting) {
-      setIsSelecting(false);
-      setSelectedFiles([]);
     }
 
     const pathParts = currentPath.split('/');
@@ -908,33 +888,16 @@ function FileExplorerContent() {
 
   const scrollToTop = () => {
     if (viewMode === 'list') {
-      if (listRef.current) {
-        // For Lists, scrollToItem is the most reliable method
-        listRef.current.scrollToItem(0, "start");
-      }
+      listRef.current?.scrollToItem(0, "start");
     } else if (viewMode === 'grid') {
-      if (gridRef.current) {
-        // For Grids, scrollToItem with columnIndex and rowIndex
-        gridRef.current.scrollToItem({
-          columnIndex: 0,
-          rowIndex: 0,
-          align: "start"
-        });
+      gridRef.current?.scrollToItem({ columnIndex: 0, rowIndex: 0, align: "start" });
+    } else if (viewMode === 'image' && !(isImageOnlyMode && useMasonry)) {
+      if (isImageOnlyMode && useMasonry) {
+        masonryRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        imageGridRef.current?.scrollToItem({ columnIndex: 0, rowIndex: 0, align: "start" });
       }
-    } else if (viewMode === 'image' || (viewMode === 'imageOnly' && !useMasonry)) {
-      if (imageGridRef.current) {
-        // For Image Grids, same as regular grids
-        imageGridRef.current.scrollToItem({
-          columnIndex: 0,
-          rowIndex: 0,
-          align: "start"
-        });
-      }
-    } else if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
-      masonryRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    // Reset scroll position
     scrollPosition.current = 0;
     setShowScrollTop(false);
   };
@@ -993,7 +956,7 @@ function FileExplorerContent() {
   const navigatePreview = (direction: 'next' | 'prev') => {
     if (preview.currentIndex === undefined) return;
 
-    if (viewMode === 'imageOnly') {
+    if (isImageOnlyMode) {
       if (!sortedFiles) return;
       let newIndex;
       if (direction === 'next') {
@@ -1053,8 +1016,8 @@ function FileExplorerContent() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (viewMode === 'imageOnly') {
-      setViewMode('image');
+    if (isImageOnlyMode) {
+      setIsImageOnlyMode(false);
     }
     const formData = new FormData(e.target as HTMLFormElement);
     const query = formData.get('searchQuery') as string;
@@ -1076,7 +1039,6 @@ function FileExplorerContent() {
 
 
 
-  // Handle upload with progress tracking
   const handleUpload = async () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -1138,7 +1100,7 @@ function FileExplorerContent() {
               ));
 
               // Refresh file list
-              refetch();
+              refetchData();
             } else {
               setUploadFiles(prev => prev.map(f =>
                 f.id === fileData.id ? {
@@ -1191,7 +1153,6 @@ function FileExplorerContent() {
     fileInput.click();
   }
 
-  // Handle folder upload with progress tracking
   const handleFolderUpload = async () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -1262,7 +1223,7 @@ function FileExplorerContent() {
               ));
 
               // Refresh file list
-              refetch();
+              refetchData();
             } else {
               setUploadFiles(prev => prev.map(f =>
                 f.id === fileData.id ? {
@@ -1315,7 +1276,6 @@ function FileExplorerContent() {
     fileInput.click();
   }
 
-  // Cancel specific upload
   const cancelUpload = (fileId: string) => {
     const xhr = xhrRefsRef.current.get(fileId);
     if (xhr) {
@@ -1330,7 +1290,6 @@ function FileExplorerContent() {
     }
   };
 
-  // Cancel all uploads
   const cancelAllUploads = () => {
     // Abort all pending XHR requests
     uploadFiles.forEach(file => {
@@ -1350,14 +1309,12 @@ function FileExplorerContent() {
     ));
   };
 
-  // Remove completed or error upload task
   const removeUploadTask = (fileId: string) => {
     setUploadFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
 
 
-  // Download with progress tracking
   const handleDownload = useCallback((path: string) => {
     const filename = path.split('/').pop() || 'download';
 
@@ -1480,7 +1437,6 @@ function FileExplorerContent() {
     });
   }, []);
 
-  // Cancel specific download
   const cancelDownload = (fileId: string) => {
     const xhr = xhrRefsRef.current.get(fileId);
     if (xhr) {
@@ -1495,7 +1451,6 @@ function FileExplorerContent() {
     }
   };
 
-  // Cancel all downloads
   const cancelAllDownloads = () => {
     // Abort all pending XHR requests
     downloadFiles.forEach(file => {
@@ -1515,7 +1470,6 @@ function FileExplorerContent() {
     ));
   };
 
-  // Remove completed or error download task
   const removeDownloadTask = (fileId: string) => {
     setDownloadFiles(prev => prev.filter(f => f.id !== fileId));
   };
@@ -1531,12 +1485,12 @@ function FileExplorerContent() {
     fetch(`/api/rename?path=${encodeURIComponent(fileToRename)}&newName=${encodeURIComponent(newName)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
-      refetch();
+      refetchData();
       setRenameInputDialogOpen(false);
     }).catch((error) => {
       console.error('Error renaming file:', error);
     });
-  }, [token, refetch, fileToRename]);
+  }, [token, refetchData, fileToRename]);
 
   const handleRenameCancel = useCallback(() => {
     setRenameInputDialogOpen(false);
@@ -1552,12 +1506,12 @@ function FileExplorerContent() {
     fetch(`/api/mkdir?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}${token ? `&token=${token}` : ''}`, {
       method: 'POST',
     }).then(() => {
-      refetch();
+      refetchData();
       setMkdirInputDialogOpen(false);
     }).catch((error) => {
       console.error('Error creating directory:', error);
     });
-  }, [token, refetch]);
+  }, [token, refetchData]);
 
   const handleMkdirCancel = useCallback(() => {
     setMkdirInputDialogOpen(false);
@@ -1576,11 +1530,11 @@ function FileExplorerContent() {
     }).then(() => {
       setFileToDelete('');
       setDeleteComfirmDialogOpen(false);
-      refetch();
+      refetchData();
     }).catch((error) => {
       console.error('Error deleting file:', error);
     });
-  }, [token, refetch]);
+  }, [token, refetchData]);
 
   const handleDeleteCancel = useCallback(() => {
     setFileToDelete('');
@@ -1598,25 +1552,15 @@ function FileExplorerContent() {
       setSelectedFiles([]);
       setIsSelecting(false);
       setDeleteMultipleDialogOpen(false);
-      refetch();
+      refetchData();
     }).catch((error) => {
       console.error('Error deleting files:', error);
     });
-  }, [token, refetch]);
+  }, [token, refetchData]);
 
   const handleDeleteMultipleCancel = useCallback(() => {
     setDeleteMultipleDialogOpen(false);
   }, []);
-
-  const handleRmdir = useCallback((path: string) => {
-    fetch(`/api/rmdir?path=${encodeURIComponent(path)}${token ? `&token=${token}` : ''}`, {
-      method: 'POST',
-    }).then(() => {
-      refetch();
-    }).catch((error) => {
-      console.error('Error removing directory:', error);
-    });
-  }, [token, refetch]);
 
 
 
@@ -1642,11 +1586,11 @@ function FileExplorerContent() {
     }).then(() => {
       setCloneComfirmDialogOpen(false);
       setFilesToClone([]);
-      refetch();
+      refetchData();
     }).catch((error) => {
       console.error('Error pasting files:', error);
     });
-  }, [filesToClone, token, refetch]);
+  }, [filesToClone, token, refetchData]);
 
   const handlePasteCancel = useCallback(() => {
     setCloneComfirmDialogOpen(false);
@@ -1676,11 +1620,11 @@ function FileExplorerContent() {
     }).then(() => {
       setMoveComfirmDialogOpen(false);
       setFilesToMove([]);
-      refetch();
+      refetchData();
     }).catch((error) => {
       console.error('Error moving files:', error);
     });
-  }, [filesToMove, token, refetch]);
+  }, [filesToMove, token, refetchData]);
 
   const handleMoveHereCancel = useCallback(() => {
     setMoveComfirmDialogOpen(false)
@@ -1713,7 +1657,39 @@ function FileExplorerContent() {
 
 
 
-  // intercept history navigation methods
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    isSelectingRef.current = isSelecting;
+  }, [isSelecting]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    switch (viewMode) {
+      case 'list':
+        activeScrollRef.current = listRef.current;
+        break;
+      case 'grid':
+        activeScrollRef.current = gridRef.current;
+        break;
+      case 'image':
+        if (isImageOnlyMode && useMasonry) {
+          activeScrollRef.current = masonryRef.current;
+        } else {
+          activeScrollRef.current = imageGridRef.current;
+        }
+        break;
+      default:
+        activeScrollRef.current = null;
+    }
+  }, [viewMode, isImageOnlyMode, useMasonry]);
+
+
   useEffect(() => {
     const originalPushState = history.pushState.bind(history);
     const originalReplaceState = history.replaceState.bind(history);
@@ -1721,10 +1697,10 @@ function FileExplorerContent() {
     // Override pushState method
     history.pushState = function (data: any, unused: string, url?: string | URL | null) {
       // Use ref instead of state directly
-      if (viewModeRef.current === 'imageOnly') {
+      if (isImageOnlyModeRef.current) {
         // Use setTimeout to move state update to next event loop
         setTimeout(() => {
-          setViewMode('image');
+          setIsImageOnlyMode(false);
         }, 0);
       }
       if (isSelectingRef.current) {
@@ -1732,6 +1708,9 @@ function FileExplorerContent() {
           setIsSelecting(false);
           setSelectedFiles([]);
         }, 0);
+      }
+      if (pageRef.current !== 1) {
+        setPage(1);
       }
       return originalPushState(data, unused, url);
     };
@@ -1739,10 +1718,10 @@ function FileExplorerContent() {
     // Override replaceState method
     history.replaceState = function (data: any, unused: string, url?: string | URL | null) {
       // Use ref instead of state directly
-      if (viewModeRef.current === 'imageOnly') {
+      if (isImageOnlyModeRef.current) {
         // Use setTimeout to move state update to next event loop
         setTimeout(() => {
-          setViewMode('image');
+          setIsImageOnlyMode(false);
         }, 0);
       }
       if (isSelectingRef.current) {
@@ -1750,6 +1729,9 @@ function FileExplorerContent() {
           setIsSelecting(false);
           setSelectedFiles([]);
         }, 0);
+      }
+      if (pageRef.current !== 1) {
+        setPage(1);
       }
       return originalReplaceState(data, unused, url);
     };
@@ -1761,11 +1743,10 @@ function FileExplorerContent() {
     };
   }, []);
 
-  // listen for browser back/forward buttons
   useEffect(() => {
     const handlePopState = () => {
-      if (viewMode === 'imageOnly') {
-        setViewMode('image');
+      if (isImageOnlyMode) {
+        setIsImageOnlyMode(false);
       }
     };
 
@@ -1774,12 +1755,7 @@ function FileExplorerContent() {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [viewMode]);
-
-  // update viewModeRef when viewMode changes
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-  }, [viewMode]);
+  }, [isImageOnlyMode]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1794,38 +1770,22 @@ function FileExplorerContent() {
     };
   }, [isSelecting]);
 
-  // update isSelectingRef when isSelecting changes
   useEffect(() => {
-    isSelectingRef.current = isSelecting;
-  }, [isSelecting]);
+    const handlePopState = () => {
+      if (pageRef.current !== 1) {
+        setPage(1);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [page])
 
-  // update activeScrollRef when viewMode changes
-  useEffect(() => {
-    switch (viewMode) {
-      case 'list':
-        activeScrollRef.current = listRef.current;
-        break;
-      case 'grid':
-        activeScrollRef.current = gridRef.current;
-        break;
-      case 'image':
-        activeScrollRef.current = imageGridRef.current;
-        break;
-      case 'imageOnly':
-        if (useMasonry) {
-          activeScrollRef.current = masonryRef.current;
-        } else {
-          activeScrollRef.current = imageGridRef.current;
-        }
-        break;
-      default:
-        activeScrollRef.current = null;
-    }
-  }, [viewMode, useMasonry]);
 
   // add a manual scroll listener for masonry view, since it doesn't use react-window
   useEffect(() => {
-    if (viewMode === 'imageOnly' && useMasonry && masonryRef.current) {
+    if (isImageOnlyMode && useMasonry && masonryRef.current) {
       const masonryElement = masonryRef.current;
 
       const handleMasonryScroll = () => {
@@ -1838,30 +1798,12 @@ function FileExplorerContent() {
         masonryElement.removeEventListener('scroll', handleMasonryScroll);
       };
     }
-  }, [viewMode, useMasonry, masonryRef.current]);
+  }, [isImageOnlyMode, useMasonry, masonryRef.current]);
 
   // close preview when currentPath or searchQuery changes
   useEffect(() => {
     closePreview();
   }, [currentPath, searchQuery])
-
-  // Reset pagination when navigating to a new directory or performing a search
-  // useEffect(() => {
-  //   setPage(1);
-  //   setAccumulatedFiles([]);
-  //   setHasMoreFiles(false);
-  // }, [currentPath, searchQuery, viewMode]);
-
-
-
-  const isError = (viewMode === 'imageOnly') ? imagesError :
-    (isSearching) ? searchError : errorFiles;
-
-  const isLoading = (viewMode === 'imageOnly') ? imagesLoading :
-    (isSearching) ? searchLoading : isLoadingFiles;
-
-  const isNotFound = ((viewMode === 'imageOnly') ? imagesData?.images.length === 0 :
-    (isSearching) ? searchData?.results.length === 0 : filesData?.files.length === 0) && !isLoading && !isError;
 
 
 
@@ -1869,7 +1811,7 @@ function FileExplorerContent() {
     <List
       ref={listRef}
       height={height}
-      width={width + 10}
+      width={width}
       itemCount={sortedFiles.length}
       itemSize={48}
       overscanCount={20}
@@ -1898,7 +1840,8 @@ function FileExplorerContent() {
     >
       {FileRow}
     </List>
-  ), [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+  ),
+    [sortedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -2001,7 +1944,7 @@ function FileExplorerContent() {
     return (
       <div
         ref={masonryRef}
-        style={{ height, width, position: 'relative', overflowY: 'auto' }}
+        style={{ height, width: width + 10, position: 'relative', overflowY: 'auto' }}
         className="custom-scrollbar"
       >
         {columns.map(index => (
@@ -2036,8 +1979,8 @@ function FileExplorerContent() {
 
 
   return (
-    <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 relative">
-      <header className="flex flex-col md:flex-row mb-2 gap-1">
+    <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
+      <header className="flex flex-col md:flex-row gap-1">
 
         <div className="w-full flex justify-between gap-1">
           <div className="flex-1 flex gap-1 justify-start">
@@ -2138,7 +2081,7 @@ function FileExplorerContent() {
             <Button
               variant="outline"
               size="icon"
-              onClick={refetch}
+              onClick={() => refetchData()}
               className={cn(
                 "group",
                 "text-blue-700 hover:text-blue-800",
@@ -2239,42 +2182,48 @@ function FileExplorerContent() {
             <Button
               variant={viewMode === 'image' ? 'default' : 'outline'}
               size="icon"
-              onClick={() => {
-                if (viewMode === 'image') {
-                  setViewMode('imageOnly');
-                } else {
-                  setViewMode('image');
-                }
-              }}
+              onClick={() => setViewMode('image')}
+              className="max-sm:hidden"
+            >
+              <ImageIcon size={18} />
+            </Button>
+            <Button
+              variant={isImageOnlyMode ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setIsImageOnlyMode(!isImageOnlyMode)}
               className={cn(
-                viewMode === 'imageOnly' && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50',
-                "max-sm:hidden"
+                "max-sm:hidden",
+                "text-yellow-500 hover:text-white hover:bg-yellow-500/20",
+                isSearching && 'hidden',
+                isImageOnlyMode && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50'
               )}
             >
               <ImageIcon size={18} />
             </Button>
 
             <div className="flex items-center">
-              {isAuthenticated ? (
-                <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon">
-                        <User className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <User className="w-4 h-4 mr-2" />
-                        {username} ({permissions})
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={logout}>
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Logout
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
+              {isCheckingAuth ? (
+                <Button variant="outline" size="icon" disabled>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </Button>
+              ) : isAuthenticated ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon">
+                      <User className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem>
+                      <User className="w-4 h-4 mr-2" />
+                      {username} ({permissions})
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={logout}>
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <Button
                   variant="outline"
@@ -2290,45 +2239,54 @@ function FileExplorerContent() {
 
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="icon" className="sm:hidden">
+                <Button variant="outline" size="icon">
                   <MoreHorizontal size={18} />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-1 sm:hidden">
+              <PopoverContent className="w-auto p-1">
                 <div className="grid gap-1">
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('list')}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
                     <ListIcon size={18} /> List View
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('grid')}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
                     <Grid3x3 size={18} /> Grid View
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('image')}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
                     <ImageIcon size={18} /> Image View
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setViewMode('imageOnly')}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
                     <ImageIcon size={18} className="text-yellow-500" /> Image Only
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => handleUpload()}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
                     <Upload size={18} /> Upload Files
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => handleFolderUpload()}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
                     <FolderUp size={18} /> Upload Folder
                   </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={handleMkdir}>
+                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
                     <FolderPlus size={18} /> Create Directory
                   </Button>
-                  {useFileIndex && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowIndexDialog(true)}>
+                  {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
                     <Database size={18} /> Index Settings
                   </Button>}
-                  {useFileWatcher && <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowWatcherDialog(true)}>
+                  {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
                     <Eye size={18} /> Watcher Settings
                   </Button>}
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
+                    <TestTube2 size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
+                  </Button>
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
                     <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
                   </Button>
                   <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
                     <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
                   </Button>
+                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
+                    <TestTube2 size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
+                  </Button>
+                  {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
+                    <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
+                  </Button> */}
                 </div>
               </PopoverContent>
             </Popover>
@@ -2441,73 +2399,67 @@ function FileExplorerContent() {
         )}
       </div>
 
-      {!isAuthenticated ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-          <Error message="Please login to continue" />
+      <div className="relative w-full flex-1">
+        {isCheckingAuth ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+            <Loading message="Checking authentication..." />
+          </div>
+        ) : !isAuthenticated ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+            <Error message="Please login to continue" />
+          </div>
+        ) : isError ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+            <Error message="Error loading files. Please try again." />
+          </div>
+        ) : isLoading ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+            <Loading message="Loading files..." />
+          </div>
+        ) : isNotFound ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+            <NotFound message="No files found" />
+          </div>
+        ) : null}
+
+        <div className={cn(
+          "absolute inset-0 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md",
+          (!isAuthenticated || isLoading || isError || isNotFound) && "opacity-0"
+        )}>
+          {viewMode === 'list' && (
+            <AutoSizer>
+              {renderList}
+            </AutoSizer>
+          )}
+          {viewMode === 'grid' && (
+            <AutoSizer>
+              {renderGrid}
+            </AutoSizer>
+          )}
+          {viewMode === 'image' && (
+            <>
+              {isImageOnlyMode && useMasonry ? (
+                <AutoSizer>
+                  {renderMasonry}
+                </AutoSizer>
+              ) : (
+                <AutoSizer>
+                  {renderImageGrid}
+                </AutoSizer>
+              )}
+            </>
+          )}
         </div>
-      ) : isError ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-          <Error message="Error loading files. Please try again." />
-        </div>
-      ) : isLoading ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-          <Loading message="Loading files..." />
-        </div>
-      ) : isNotFound ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-          <NotFound message="No files found." />
-        </div>
-      ) : null}
+      </div>
 
       {/* Show total files count with loaded count */}
       <div className={cn(
         "flex justify-center text-sm text-muted/70 select-none",
-        !(isAuthenticated && !isLoading && !isError && !isNotFound) && "opacity-0"
+        (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
       )}>
-        {viewMode === 'imageOnly' && useMasonry && imagesData ? (
-          // For masonry view, show simple count
-          <>{imagesData.images.length} images found in {currentPath}</>
-        ) : (
-          // For paginated views, show loaded/total count
-          <>{sortedFiles.length} of {totalFiles} files loaded</>
-        )}
+        {sortedFiles.length} of {totalFiles} files loaded
       </div>
 
-      <div className={cn(
-        "w-full flex-1 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md",
-        !(isAuthenticated && !isLoading && !isError && !isNotFound) && "opacity-0"
-      )}>
-        {/* List view */}
-        {viewMode === 'list' && (
-          <AutoSizer>
-            {renderList}
-          </AutoSizer>
-        )}
-        {/* Grid view */}
-        {viewMode === 'grid' && (
-          <AutoSizer>
-            {renderGrid}
-          </AutoSizer>
-        )}
-        {/* Image view */}
-        {viewMode === 'image' && (
-          <AutoSizer>
-            {renderImageGrid}
-          </AutoSizer>
-        )}
-        {/* Image Only view */}
-        {viewMode === 'imageOnly' && !useMasonry && (
-          <AutoSizer>
-            {renderImageGrid}
-          </AutoSizer>
-        )}
-        {/* Masonry view */}
-        {viewMode === 'imageOnly' && useMasonry && (
-          <AutoSizer>
-            {renderMasonry}
-          </AutoSizer>
-        )}
-      </div>
 
       {/* Preview Overlay */}
       {preview.isOpen && (
@@ -2516,7 +2468,7 @@ function FileExplorerContent() {
           {preview.type === 'image' && (
             <ImagePreview
               isOpen={preview.isOpen}
-              title={viewMode === 'imageOnly' ? preview.path : preview.path.split('/').pop()}
+              title={isImageOnlyMode ? preview.path : preview.path.split('/').pop()}
               src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
               controls={{
                 onClose: closePreview,
@@ -2615,7 +2567,7 @@ function FileExplorerContent() {
         </>
       )}
 
-      <Separator className="my-4" />
+      <Separator />
       <footer className="flex justify-center items-center">
         <p className="text-sm text-muted-foreground font-bold font-mono">
           Developed by <a href="https://github.com/Kobayashi2003" className="underline">Kobayashi2003</a>
@@ -2626,101 +2578,52 @@ function FileExplorerContent() {
         </a>
       </footer>
 
-      {/* Paste here button */}
-      {filesToClone.length > 0 && <button
-        onClick={() => setCloneComfirmDialogOpen(true)}
-        className={cn(
-          getButtonStyles(
-            (filesToMove.length === 0 ? 0 : 1) +
-            (viewMode === 'imageOnly' ? 1 : 0) +
-            (showScrollTop ? 1 : 0) +
-            (uploadFiles.length === 0 ? 0 : 1) +
-            (downloadFiles.length === 0 ? 0 : 1),
-            5
-          ),
+      <FloatingButtons direction="up">
+        {/* Paste here button */}
+        {filesToClone.length > 0 && (
+          <FloatingButton
+            icon={<ClipboardPaste size={18} />}
+            onClick={() => setCloneComfirmDialogOpen(true)}
+            label="Paste here"
+          />
         )}
-        aria-label="Paste here"
-      >
-        <ClipboardPaste size={18} />
-      </button>}
 
-      {/* Move here button */}
-      {filesToMove.length > 0 && <button
-        onClick={() => setMoveComfirmDialogOpen(true)}
-        className={cn(
-          getButtonStyles(
-            (viewMode === 'imageOnly' ? 1 : 0) +
-            (showScrollTop ? 1 : 0) +
-            (uploadFiles.length === 0 ? 0 : 1) +
-            (downloadFiles.length === 0 ? 0 : 1),
-            4
-          ),
+        {/* Move here button */}
+        {filesToMove.length > 0 && (
+          <FloatingButton
+            icon={<MoveHorizontal size={18} />}
+            onClick={() => setMoveComfirmDialogOpen(true)}
+            label="Move here"
+          />
         )}
-        aria-label="Move here"
-      >
-        <MoveHorizontal size={18} />
-      </button>}
 
-      {/* Masonry toggle button - only visible in imageOnly mode */}
-      {viewMode === 'imageOnly' && <button
-        onClick={() => setUseMasonry(!useMasonry)}
-        className={cn(
-          getButtonStyles(
-            (showScrollTop ? 1 : 0) +
-            (uploadFiles.length === 0 ? 0 : 1) +
-            (downloadFiles.length === 0 ? 0 : 1),
-            3
-          ),
-          useMasonry && "bg-white/50 hover:bg-white/70 text-black",
+        {/* Scroll to top button */}
+        {showScrollTop && (
+          <FloatingButton
+            icon={<ArrowUp size={24} />}
+            onClick={scrollToTop}
+            label="Scroll to top"
+          />
         )}
-        aria-label="Toggle masonry layout"
-      >
-        <Layout size={24} />
-      </button>}
 
-      {/* Scroll to top button */}
-      {showScrollTop && <button
-        onClick={scrollToTop}
-        className={cn(
-          getButtonStyles(
-            (uploadFiles.length === 0 ? 0 : 1) +
-            (downloadFiles.length === 0 ? 0 : 1),
-            2
-          ),
+        {/* Upload status button */}
+        {uploadFiles.length > 0 && (
+          <FloatingButton
+            icon={<Upload size={20} />}
+            onClick={() => setShowUploadDialog(true)}
+            label="Show upload progress"
+          />
         )}
-        aria-label="Scroll to top"
-      >
-        <ArrowUp size={24} />
-      </button>}
 
-      {/* Upload status buttons */}
-      {uploadFiles.length > 0 && <button
-        onClick={() => setShowUploadDialog(true)}
-        className={cn(
-          getButtonStyles(
-            (downloadFiles.length === 0 ? 0 : 1),
-            1
-          ),
+        {/* Download status button */}
+        {downloadFiles.length > 0 && (
+          <FloatingButton
+            icon={<Download size={20} />}
+            onClick={() => setShowDownloadDialog(true)}
+            label="Show download progress"
+          />
         )}
-        aria-label="Show upload progress"
-      >
-        <Upload size={20} />
-      </button>}
-
-      {/* Download status buttons */}
-      {downloadFiles.length > 0 && <button
-        onClick={() => setShowDownloadDialog(true)}
-        className={cn(
-          "fixed",
-          getButtonStyles(
-            (uploadFiles.length === 0 ? 0 : 1),
-            0
-          ),
-        )}
-        aria-label="Show download progress"
-      >
-        <Download size={20} />
-      </button>}
+      </FloatingButtons>
 
       {/* Upload dialog */}
       <UploadDialog

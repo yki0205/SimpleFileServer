@@ -22,7 +22,7 @@ module.exports = {
   logsDirectory: process.env.LOG_DIRECTORY || 'logs',
 
   // Background image path - can be absolute or relative to server root
-  backgroundImagePath: process.env.BACKGROUND_IMAGE_PATH || path.join(__dirname, 'assets/bg.jpg'),
+  backgroundImagePath: process.env.BACKGROUND_IMAGE_PATH || path.join(__dirname, 'bg.jpg'),
 
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB
@@ -55,6 +55,12 @@ module.exports = {
   rebuildIndexOnStartup: process.env.REBUILD_INDEX_ON_STARTUP === 'true' || false,
   countFilesBatchSize: parseInt(process.env.COUNT_FILES_BATCH_SIZE) || 100,
   indexBatchSize: parseInt(process.env.INDEX_BATCH_SIZE) || 100,
+  indexerSearchAlgorithm: process.env.INDEXER_SEARCH_ALGORITHM || 'bfs', // 'dfs' or 'bfs'
+  indexerConcurrencyEnabled: process.env.INDEXER_CONCURRENCY_ENABLED !== 'false', // default true
+  indexerConcurrencyLimit: parseInt(process.env.INDEXER_CONCURRENCY_LIMIT) || 100,
+  indexerStorageMode: process.env.INDEXER_STORAGE_MODE || 'batch', // 'batch' or 'immediate'
+  // Adaptive worker count based on system memory (0 = auto, or specify exact count)
+  indexerWorkerCount: parseInt(process.env.INDEXER_WORKER_COUNT) || 0,
   
   // File watcher options
   useFileWatcher: process.env.USE_FILE_WATCHER === 'true' || false,
@@ -73,11 +79,13 @@ module.exports = {
   // File processing mode (parallel/sync)
   parallelFileProcessing: process.env.PARALLEL_FILE_PROCESSING !== 'false', // default true
 
-  // Use mime-magic to detect file type (may impact performance)
+  // Use mime-magic to detect file type
+  // If you want to support more file types, you can set it to true, but it may impact performance
   useMimeMagic: process.env.USE_MIME_MAGIC === 'true' || false,
 
-  // Custom content types (key-value pairs) (
+  // Custom content types (key-value pairs)
   // This is used when useMimeMagic is false or when mime-magic fails to detect the file type
+  // If you want to support more file types, but don't want to use mime-magic, you can set more content types here
   customContentTypes: process.env.CUSTOM_CONTENT_TYPES 
     ? JSON.parse(process.env.CUSTOM_CONTENT_TYPES)
     : {

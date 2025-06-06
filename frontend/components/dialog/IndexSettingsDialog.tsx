@@ -47,7 +47,7 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
   const getProgressPercentage = () => {
     if (!indexStatus?.progress?.total) return 0;
     return Math.min(
-      100, 
+      100,
       Math.round((indexStatus.progress.processed / indexStatus.progress.total) * 100)
     );
   };
@@ -61,14 +61,14 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
   useEffect(() => {
     if (open) {
       fetchStatus();
-      
+
       // If index is building, poll for updates more frequently
       const intervalId = setInterval(() => {
         if (indexStatus?.isBuilding) {
           fetchStatus();
         }
       }, 1000); // Poll every second during active building
-      
+
       return () => clearInterval(intervalId);
     }
   }, [open, indexStatus?.isBuilding]);
@@ -132,12 +132,12 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
                   )}
                 </span>
               </div>
-              
+
               <div className="flex justify-between items-center">
                 <span>Files Indexed:</span>
                 <span className="font-medium">{formatNumber(indexStatus.fileCount || 0)}</span>
               </div>
-              
+
               {indexStatus.lastBuilt && !indexStatus.isBuilding && (
                 <div className="flex justify-between items-center">
                   <span>Last Updated:</span>
@@ -159,7 +159,7 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
                     <span>Processed: {formatNumber(indexStatus.progress.processed || 0)}</span>
                     <span>Total: {formatNumber(indexStatus.progress.total || 0)}</span>
                   </div>
-                  
+
                   {indexStatus.progress.lastUpdated && (
                     <div className="text-xs text-white/50 text-right mt-1">
                       Last update: {new Date(indexStatus.progress.lastUpdated).toLocaleTimeString()}
@@ -169,41 +169,37 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
               )}
 
               {/* Show speed estimate if we have enough data */}
-              {indexStatus.isBuilding && 
-               indexStatus.progress && 
-               indexStatus.progress.processed > 0 && 
-               indexStatus.progress.lastUpdated && (
-                <div className="border border-white/10 rounded p-3 bg-black/40 mt-2">
-                  <h4 className="text-sm font-medium mb-2">Processing Information</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-white/50">Estimated time:</span>
-                      <span className="ml-2 font-medium">
-                        {indexStatus.progress.processed > 0 ? 
-                          formatEstimatedTime((indexStatus.progress.total - indexStatus.progress.processed) / 
-                            (indexStatus.progress.processed / 
-                              ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000))) :
-                          'Calculating...'}
-                      </span>
-                    </div>
+              {indexStatus.isBuilding &&
+                indexStatus.progress &&
+                indexStatus.progress.processed > 0 &&
+                indexStatus.progress.lastUpdated && (
+                  <div className="border border-white/10 rounded p-3 bg-black/40 mt-2">
+                    <h4 className="text-sm font-medium mb-2">Processing Information</h4>
+                    <span className="text-white/50">Estimated time:</span>
+                    <span className="ml-2 font-medium">
+                      {indexStatus.progress.processed > 0 ?
+                        formatEstimatedTime((indexStatus.progress.total - indexStatus.progress.processed) /
+                          (indexStatus.progress.processed /
+                            ((new Date().getTime() - new Date(indexStatus.progress.startTime || indexStatus.progress.lastUpdated).getTime()) / 1000))) :
+                        'Calculating...'}
+                    </span>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => setOpen(false)}
             className="text-white/60 hover:text-red-500 bg-transparent border-white/20"
           >
             Close
           </Button>
-          
+
           {indexStatus?.enabled && (
-            <Button 
+            <Button
               onClick={handleRebuildIndex}
               disabled={indexStatus?.isBuilding || loading}
               variant="outline"
@@ -231,10 +227,10 @@ export function IndexSettingsDialog({ open, setOpen, className }: IndexSettingsD
 // Helper function to format estimated time
 function formatEstimatedTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
-  
+
   if (seconds < 60) return `${Math.round(seconds)} seconds`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
-  
+
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;

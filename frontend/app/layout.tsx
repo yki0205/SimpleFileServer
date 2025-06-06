@@ -29,7 +29,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#3c3c3c]`}
         style={{
-          // backgroundImage: 'url(api/bg)',
+          backgroundImage: 'url(api/bg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',

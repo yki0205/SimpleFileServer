@@ -94,6 +94,35 @@ function getSubdirectories(dir) {
   }
 }
 
+function safeDeleteDirectory(dirPath) {
+  try {
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      try {
+        // try to delete the directory by cmd
+        execSync(`rd /s /q "${dirPath}"`, { windowsHide: true });
+        return true;
+      } catch (cmdError) {
+        console.error(`Command line deletion failed: ${cmdError.message}`);
+        // try to delete the directory by fs.rmSync
+        try {
+          fs.rmSync(dirPath, { recursive: true });
+          return true;
+        } catch (fsError) {
+          console.error(`Failed to delete directory ${dirPath} by fs.rmSync: ${fsError.message}`);
+          return false;
+        }
+      }
+    } else {
+      fs.rmSync(dirPath, { recursive: true });
+      return true;
+    }
+  } catch (error) {
+    console.error(`Failed to delete directory ${dirPath}: ${error.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   isRecoverableError,
   normalizePath,
@@ -101,4 +130,5 @@ module.exports = {
   getFileTypeByMime,
   getFileTypeByExt,
   getSubdirectories,
+  safeDeleteDirectory,
 }; 

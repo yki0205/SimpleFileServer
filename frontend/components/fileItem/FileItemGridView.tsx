@@ -44,6 +44,7 @@ export function FileItemGridView(
         "w-full h-full",
         "cursor-pointer select-none",
         "text-primary bg-accent",
+        "overflow-hidden",
         className
       )}
       onClick={onClick}

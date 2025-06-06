@@ -11,7 +11,7 @@ const unrar = require('node-unrar-js');
 // handle file uploads
 const multer = require('multer')
 // indexer
-const indexer = require('./indexer');
+const indexer = require(`./indexer`);
 // watcher
 const watcher = require('./watcher');
 // auth
@@ -1116,49 +1116,6 @@ app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
   }
 })
 
-app.post('/api/rmdir', writePermissionMiddleware, (req, res) => {
-  const { path: dirPath, paths: dirPaths } = req.query;
-
-  if (!dirPath && !dirPaths) {
-    return res.status(400).json({ error: 'No directory path provided' });
-  }
-
-  if (dirPath) {
-    const basePath = path.resolve(config.baseDirectory);
-    const fullPath = path.join(basePath, dirPath);
-
-    if (!fullPath.startsWith(basePath)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    try {
-      fs.rmdirSync(fullPath, { recursive: true });
-      res.status(200).json({ message: 'Directory removed successfully' });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  } else {
-    const basePath = path.resolve(config.baseDirectory);
-    const fullPaths = dirPaths.split('|').map(p => path.join(basePath, p.trim()));
-
-    for (const fullPath of fullPaths) {
-      if (!fullPath.startsWith(basePath)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      try {
-        fs.rmdirSync(fullPath, { recursive: true });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-
-      fs.rmdirSync(fullPath, { recursive: true });
-    }
-
-    res.status(200).json({ message: 'Directories removed successfully' });
-  }
-})
-
 app.post('/api/rename', writePermissionMiddleware, (req, res) => {
   const { path: filePath, newName } = req.query;
   const basePath = path.resolve(config.baseDirectory);
@@ -1192,12 +1149,14 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // NOTE: Temporarily allow deleting directories
     if (fs.statSync(fullPath).isDirectory()) {
-      // return res.status(400).json({ error: 'Cannot delete a directory' });
       try {
-        fs.rmSync(fullPath, { recursive: true });
-        res.status(200).json({ message: 'Directory deleted successfully' });
+        const success = utils.safeDeleteDirectory(fullPath);
+        if (success) {
+          res.status(200).json({ message: 'Directory deleted successfully' });
+        } else {
+          res.status(500).json({ error: 'Failed to completely delete directory' });
+        }
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1220,10 +1179,11 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
       }
 
       if (fs.statSync(fullPath).isDirectory()) {
-        // NOTE: Temporarily allow deleting directories
-        // return res.status(400).json({ error: 'Cannot delete a directory' });
         try {
-          fs.rmSync(fullPath, { recursive: true });
+          const success = utils.safeDeleteDirectory(fullPath);
+          if (!success) {
+            return res.status(500).json({ error: 'Failed to completely delete directory' });
+          }
         } catch (error) {
           return res.status(500).json({ error: error.message });
         }
