@@ -350,7 +350,12 @@ function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrd
       let paginatedQuery = `${SQL.FIND_IMAGES} `;
       
       // Add ordering based on sortBy and sortOrder parameters
-      paginatedQuery += getOrderByClause(sortBy, sortOrder);
+      if (sortBy === 'name') {
+        paginatedQuery += getOrderByClause('path', sortOrder);
+      }
+      else {
+        paginatedQuery += getOrderByClause(sortBy, sortOrder);
+      }
       
       // Add pagination
       paginatedQuery += ` LIMIT ? OFFSET ?`;
@@ -388,7 +393,7 @@ function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrd
 // Helper function to generate the ORDER BY clause
 function getOrderByClause(sortBy = 'name', sortOrder = 'asc') {
   // Validate sortBy to prevent SQL injection
-  const validSortFields = ['name', 'size', 'mtime'];
+  const validSortFields = ['name', 'path', 'size', 'mtime'];
   const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
   
   // Validate sortOrder to prevent SQL injection

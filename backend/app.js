@@ -419,7 +419,12 @@ app.get('/api/images', (req, res) => {
     parallelFindImages(searchPath, basePath)
       .then(images => {
         // Sort images before pagination
-        images = sortFiles(images, sortBy, sortOrder);
+        if (sortBy === 'name') {
+          images = sortFiles(images, 'path', sortOrder);
+        }
+        else {
+          images = sortFiles(images, sortBy, sortOrder);
+        }
         
         // Apply pagination if specified
         let hasMore = false;
@@ -2215,6 +2220,11 @@ function sortFiles(files, sortBy = 'name', sortOrder = 'asc') {
       return sortOrder === 'asc'
         ? collator.compare(a.name, b.name)
         : collator.compare(b.name, a.name);
+    } else if (sortBy === 'path') {
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc'
+        ? collator.compare(a.path, b.path)
+        : collator.compare(b.path, a.path);
     } else if (sortBy === 'size') {
       return sortOrder === 'asc'
         ? a.size - b.size
