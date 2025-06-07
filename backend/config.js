@@ -23,6 +23,8 @@ module.exports = {
 
   // Background image path - can be absolute or relative to server root
   backgroundImagePath: process.env.BACKGROUND_IMAGE_PATH || path.join(__dirname, 'bg.jpg'),
+  // Background images folder - can be absolute or relative to server root
+  backgroundImagesDir: process.env.BACKGROUND_IMAGES_DIR || path.join(__dirname, 'backgrounds'),
 
   uploadCountLimit: process.env.UPLOAD_COUNT_LIMIT || 10,
   uploadSizeLimit: process.env.UPLOAD_SIZE_LIMIT || 1024 * 1024 * 100, // 100MB

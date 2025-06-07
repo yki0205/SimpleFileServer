@@ -97,10 +97,6 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/api/bg', (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  const config = require('./config');
-  
   try {
     // Get the background image path from config
     const bgImagePath = config.backgroundImagePath;
@@ -130,6 +126,97 @@ app.get('/api/bg', (req, res) => {
   } catch (error) {
     console.error('Error serving background image:', error);
     res.status(500).send('Error serving background image');
+  }
+})
+
+app.get('/api/bgs', async (req, res) => {
+  const { width, height } = req.query;
+  const bgDir = path.resolve(config.backgroundImagesDir);
+  
+  try {
+    // Check if the background images directory exists
+    if (!fs.existsSync(bgDir)) {
+      fs.mkdirSync(bgDir, { recursive: true });
+      return res.status(404).json({ error: "No background images found" });
+    }
+    
+    // Get all files in the background images directory
+    const files = fs.readdirSync(bgDir).filter(file => {
+      const filePath = path.join(bgDir, file);
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) return false;
+      
+      // Check if it's an image file
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+    });
+    
+    if (files.length === 0) {
+      return res.status(404).json({ error: "No background images found" });
+    }
+    
+    let selectedImage;
+    
+    // If both width and height are provided, find the most suitable image
+    if (width && height) {
+      const targetRatio = parseFloat(width) / parseFloat(height);
+      
+      // Get dimensions of all images (this could be optimized by caching)
+      const images = [];
+      
+      for (const file of files) {
+        try {
+          const filePath = path.join(bgDir, file);
+          // We'll use Sharp to get image dimensions if available
+          const sharp = require('sharp');
+          const metadata = await sharp(filePath).metadata();
+          
+          images.push({
+            path: filePath,
+            filename: file,
+            width: metadata.width,
+            height: metadata.height,
+            ratio: metadata.width / metadata.height
+          });
+        } catch (error) {
+          console.error(`Error processing background image ${file}:`, error);
+          // Skip this file if there's an error
+        }
+      }
+      
+      if (images.length === 0) {
+        // Fallback to random if no images could be processed
+        selectedImage = path.join(bgDir, files[Math.floor(Math.random() * files.length)]);
+      } else {
+        // Find the image with the closest aspect ratio
+        images.sort((a, b) => {
+          return Math.abs(a.ratio - targetRatio) - Math.abs(b.ratio - targetRatio);
+        });
+        
+        selectedImage = images[0].path;
+      }
+    } else {
+      // If width and height are not provided, select a random image
+      selectedImage = path.join(bgDir, files[Math.floor(Math.random() * files.length)]);
+    }
+    
+    // Serve the selected image
+    const ext = path.extname(selectedImage).toLowerCase();
+    const contentType = utils.getFileTypeByExt(ext);
+    
+    if (!contentType.startsWith('image/')) {
+      return res.status(400).json({ error: "Selected file is not an image" });
+    }
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    
+    // Stream the file to response
+    const stream = fs.createReadStream(selectedImage);
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Error serving background image:', error);
+    res.status(500).json({ error: 'Error serving background image' });
   }
 })
 
@@ -455,6 +542,28 @@ app.get('/api/images', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get('/api/images/random', (req, res) => {
+  const { dir = '' } = req.query;
+  
+  // Only allow using this endpoint if file index is enabled and built
+  if (!config.useFileIndex || !indexer.isIndexBuilt()) {
+    return res.status(400).json({ error: "This endpoint requires the file index to be enabled and built" });
+  }
+  
+  try {
+    // Get a random image from the index
+    const randomImage = indexer.getRandomImageFromIndex(dir);
+    
+    if (!randomImage) {
+      return res.status(404).json({ error: "No images found" });
+    }
+    
+    res.json({ image: randomImage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
 
 app.get('/api/download', (req, res) => {
   const { path: requestedPath, paths: requestedPaths } = req.query;

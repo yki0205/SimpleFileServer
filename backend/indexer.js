@@ -64,6 +64,14 @@ const SQL = {
   WHERE mimeType LIKE 'image/%'
   AND (? = '%' OR path LIKE ?)
   `,
+  GET_RANDOM_IMAGE: `
+  SELECT name, path, size, mtime, mimeType, isDirectory
+  FROM files
+  WHERE mimeType LIKE 'image/%'
+  AND (? = '%' OR path LIKE ?)
+  ORDER BY RANDOM()
+  LIMIT 1
+  `,
   DELETE_FILE: 'DELETE FROM files WHERE path = ?',
   DELETE_FILE_PREFIX: 'DELETE FROM files WHERE path LIKE ?',
   DELETE_ALL_FILES: 'DELETE FROM files',
@@ -1119,6 +1127,29 @@ function calculateOptimalWorkerCount() {
   return workerCount;
 }
 
+function getRandomImageFromIndex(directory = '') {
+  if (!db) return null;
+  
+  try {
+    const dirPath = directory ? `${directory}%` : '%';
+    
+    // Query to get a random image from the index
+    const result = db.prepare(SQL.GET_RANDOM_IMAGE).get(dirPath, dirPath);
+    
+    if (!result) return null;
+    
+    // Convert isDirectory to boolean and mtime to date
+    return {
+      ...result,
+      isDirectory: !!result.isDirectory,
+      mtime: new Date(result.mtime)
+    };
+  } catch (error) {
+    console.error('Error getting random image from index:', error);
+    return null;
+  }
+}
+
 // Main function to build the index
 async function buildIndex(basePath) {
   const algorithm = config.indexerSearchAlgorithm || 'bfs';
@@ -1249,6 +1280,7 @@ module.exports = {
   deleteFromIndex,
   searchIndex,
   findImagesInIndex,
+  getRandomImageFromIndex,
   getDirectoryFiles,
   saveFileBatch,
   buildIndex,

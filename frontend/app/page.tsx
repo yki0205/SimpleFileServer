@@ -20,7 +20,7 @@ import {
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
   CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck,
-  Loader2
+  Loader2, Square
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -538,6 +538,8 @@ function FileExplorerContent() {
   const searchQuery = searchParams.get('q') || '';
   const isSearching = !!searchQuery;
   const canGoBack = currentPath !== '' || isSearching;
+
+  const [useBlur, setUseBlur] = useState(true);
 
   const [isImageOnlyMode, setIsImageOnlyModeTemp] = useState(false);
   const setIsImageOnlyMode = (mode: boolean) => {
@@ -1985,83 +1987,79 @@ function FileExplorerContent() {
   }, [token, useMasonry, gridDirection, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
 
+  const [screenWidth, setScreenWidth] = useState(0);
+  const [screenHeight, setScreenHeight] = useState(0);
+  useEffect(() => {
+    setScreenWidth(window.innerWidth);
+    setScreenHeight(window.innerHeight);
+  }, []);
+  const bgImage = `api/bgs?width=${screenWidth}&height=${screenHeight}`;
 
+  if (screenWidth === 0 || screenHeight === 0) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#3c3c3c]">
+        <div className="relative group">
+          <div
+            className="text-[30vw] font-extralight font-serif text-transparent absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ WebkitTextStroke: '2px #9ca3af' }}
+          >
+            K
+          </div>
+          <div
+            className="text-[30vw] font-extralight font-serif text-gray-400 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ transform: 'translate(20px, 20px)' }}
+          >
+            K
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
-      <header className="flex flex-col md:flex-row gap-1">
+    <div style={{
+      backgroundColor: '#3c3c3c',
+      backgroundImage: `url(${bgImage})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundAttachment: 'fixed',
+    }}
+    >
+      <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
+        <header className="flex flex-col md:flex-row gap-1">
 
-        <div className="w-full flex justify-between gap-1">
-          <div className="flex-1 flex gap-1 justify-start">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goBack}
-              disabled={!canGoBack}
-              className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200"
-              )}
-            >
-              <ArrowLeft size={18} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goHome}
-              className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200"
-              )}
-            >
-              <Home size={18} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleUpload}
-              className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200",
-                "max-sm:hidden"
-              )}
-            >
-              <Upload size={18} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleFolderUpload}
-              className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200",
-                "max-sm:hidden"
-              )}
-            >
-              <FolderUp size={18} />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleMkdir}
-              className={cn(
-                "text-black",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200",
-                "max-sm:hidden"
-              )}
-            >
-              <FolderPlus size={18} />
-            </Button>
-            {useFileIndex && (
+          <div className="w-full flex justify-between gap-1">
+            <div className="flex-1 flex gap-1 justify-start">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setShowIndexDialog(true)}
+                onClick={goBack}
+                disabled={!canGoBack}
+                className={cn(
+                  "text-black",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200"
+                )}
+              >
+                <ArrowLeft size={18} />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={goHome}
+                className={cn(
+                  "text-black",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200"
+                )}
+              >
+                <Home size={18} />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleUpload}
                 className={cn(
                   "text-black",
                   "bg-white hover:bg-white/80",
@@ -2069,14 +2067,12 @@ function FileExplorerContent() {
                   "max-sm:hidden"
                 )}
               >
-                <Database size={18} />
+                <Upload size={18} />
               </Button>
-            )}
-            {useFileWatcher && (
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setShowWatcherDialog(true)}
+                onClick={handleFolderUpload}
                 className={cn(
                   "text-black",
                   "bg-white hover:bg-white/80",
@@ -2084,25 +2080,276 @@ function FileExplorerContent() {
                   "max-sm:hidden"
                 )}
               >
-                <Eye size={18} />
+                <FolderUp size={18} />
               </Button>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetchData()}
-              className={cn(
-                "group",
-                "text-blue-700 hover:text-blue-800",
-                "bg-white hover:bg-white/80",
-                "transition-colors duration-200"
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleMkdir}
+                className={cn(
+                  "text-black",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200",
+                  "max-sm:hidden"
+                )}
+              >
+                <FolderPlus size={18} />
+              </Button>
+              {useFileIndex && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowIndexDialog(true)}
+                  className={cn(
+                    "text-black",
+                    "bg-white hover:bg-white/80",
+                    "transition-colors duration-200",
+                    "max-sm:hidden"
+                  )}
+                >
+                  <Database size={18} />
+                </Button>
               )}
-            >
-              <RefreshCcw size={18} className="group-hover:animate-spin" />
-            </Button>
+              {useFileWatcher && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowWatcherDialog(true)}
+                  className={cn(
+                    "text-black",
+                    "bg-white hover:bg-white/80",
+                    "transition-colors duration-200",
+                    "max-sm:hidden"
+                  )}
+                >
+                  <Eye size={18} />
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => refetchData()}
+                className={cn(
+                  "group",
+                  "text-blue-700 hover:text-blue-800",
+                  "bg-white hover:bg-white/80",
+                  "transition-colors duration-200"
+                )}
+              >
+                <RefreshCcw size={18} className="group-hover:animate-spin" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleSearch} className="flex-1 max-md:hidden max-w-sm flex gap-1 justify-center">
+              <Input
+                name="searchQuery"
+                placeholder="Search files..."
+                defaultValue={searchQuery}
+                className={cn(
+                  "w-full",
+                  "backdrop-blur-sm",
+                  "text-white",
+                  "selection:bg-white selection:text-black",
+                  "focus-visible:ring-[1px]"
+                )}
+              />
+              <Button type="submit" variant="secondary" size="icon">
+                <Search size={18} />
+              </Button>
+              {isSearching && (
+                <Button type="button" variant="secondary" size="icon" className="text-red-500" onClick={handleClearSearch}>
+                  <X size={18} />
+                </Button>
+              )}
+            </form>
+
+            <div className="flex-1 flex gap-1 justify-end">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="flex items-center gap-1 min-w-20 h-full font-bold font-mono select-none">
+                    {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'}
+                    {sortOrder === 'asc' ? ' ↑' : ' ↓'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1">
+                  <div className="grid gap-1">
+                    <Button
+                      variant={sortBy === 'name' ? "default" : "ghost"}
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSortBy('name');
+                        setSortOrder(sortBy === 'name' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                      }}
+                    >
+                      Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                    <Button
+                      variant={sortBy === 'size' ? "default" : "ghost"}
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSortBy('size');
+                        setSortOrder(sortBy === 'size' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                      }}
+                    >
+                      Size {sortBy === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                    <Button
+                      variant={sortBy === 'date' ? "default" : "ghost"}
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSortBy('date');
+                        setSortOrder(sortBy === 'date' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
+                      }}
+                    >
+                      Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('list')}
+                className="max-sm:hidden"
+              >
+                <ListIcon size={18} />
+              </Button>
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('grid')}
+                className="max-sm:hidden"
+              >
+                <Grid3x3 size={18} />
+              </Button>
+              <Button
+                variant={viewMode === 'image' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('image')}
+                className="max-sm:hidden"
+              >
+                <ImageIcon size={18} />
+              </Button>
+              <Button
+                variant={isImageOnlyMode ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setIsImageOnlyMode(!isImageOnlyMode)}
+                className={cn(
+                  "max-sm:hidden",
+                  "text-yellow-500 hover:text-white hover:bg-yellow-500/20",
+                  isSearching && 'hidden',
+                  isImageOnlyMode && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50'
+                )}
+              >
+                <ImageIcon size={18} />
+              </Button>
+
+              <div className="flex items-center">
+                {isCheckingAuth ? (
+                  <Button variant="outline" size="icon" disabled>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </Button>
+                ) : isAuthenticated ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon">
+                        <User className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        <User className="w-4 h-4 mr-2" />
+                        {username} ({permissions})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={logout}>
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Logout
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsLoginDialogOpen(true)}
+                    title="Login"
+                    className="max-sm:hidden"
+                  >
+                    <LogIn className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <MoreHorizontal size={18} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-1">
+                  <div className="grid gap-1">
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
+                      <ListIcon size={18} /> List View
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
+                      <Grid3x3 size={18} /> Grid View
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
+                      <ImageIcon size={18} /> Image View
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
+                      <ImageIcon size={18} className="text-yellow-500" /> Image Only
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
+                      <Upload size={18} /> Upload Files
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
+                      <FolderUp size={18} /> Upload Folder
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
+                      <FolderPlus size={18} /> Create Directory
+                    </Button>
+                    {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
+                      <Database size={18} /> Index Settings
+                    </Button>}
+                    {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
+                      <Eye size={18} /> Watcher Settings
+                    </Button>}
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
+                      <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
+                      <TestTube2 size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
+                      <TestTube2 size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
+                      <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
+                      <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
+                      <TestTube2 size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseBlur(!useBlur)}>
+                      <Square size={18} /> {useBlur ? 'Disable Blur' : 'Enable Blur'}
+                    </Button>
+                    {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
+                    <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
+                  </Button> */}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
 
-          <form onSubmit={handleSearch} className="flex-1 max-md:hidden max-w-sm flex gap-1 justify-center">
+          <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
             <Input
               name="searchQuery"
               placeholder="Search files..."
@@ -2125,687 +2372,483 @@ function FileExplorerContent() {
             )}
           </form>
 
-          <div className="flex-1 flex gap-1 justify-end">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="flex items-center gap-1 min-w-20 h-full font-bold font-mono select-none">
-                  {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'}
-                  {sortOrder === 'asc' ? ' ↑' : ' ↓'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-1">
-                <div className="grid gap-1">
-                  <Button
-                    variant={sortBy === 'name' ? "default" : "ghost"}
-                    size="sm"
-                    className="justify-start"
-                    onClick={() => {
-                      setSortBy('name');
-                      setSortOrder(sortBy === 'name' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                    }}
-                  >
-                    Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
-                  <Button
-                    variant={sortBy === 'size' ? "default" : "ghost"}
-                    size="sm"
-                    className="justify-start"
-                    onClick={() => {
-                      setSortBy('size');
-                      setSortOrder(sortBy === 'size' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                    }}
-                  >
-                    Size {sortBy === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
-                  <Button
-                    variant={sortBy === 'date' ? "default" : "ghost"}
-                    size="sm"
-                    className="justify-start"
-                    onClick={() => {
-                      setSortBy('date');
-                      setSortOrder(sortBy === 'date' ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
-                    }}
-                  >
-                    Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
+        </header>
+
+        <div className="flex justify-between gap-1">
+          {!isSelecting ? (
+            <nav ref={navRef} className="flex-1">
+              {isSearching ? (
+                <div className="bg-muted p-1 rounded-md text-sm">
+                  Searching: "{searchQuery}" in {currentPath || 'root'}
                 </div>
-              </PopoverContent>
-            </Popover>
-
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-              className="max-sm:hidden"
-            >
-              <ListIcon size={18} />
-            </Button>
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-              className="max-sm:hidden"
-            >
-              <Grid3x3 size={18} />
-            </Button>
-            <Button
-              variant={viewMode === 'image' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('image')}
-              className="max-sm:hidden"
-            >
-              <ImageIcon size={18} />
-            </Button>
-            <Button
-              variant={isImageOnlyMode ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setIsImageOnlyMode(!isImageOnlyMode)}
-              className={cn(
-                "max-sm:hidden",
-                "text-yellow-500 hover:text-white hover:bg-yellow-500/20",
-                isSearching && 'hidden',
-                isImageOnlyMode && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50'
-              )}
-            >
-              <ImageIcon size={18} />
-            </Button>
-
-            <div className="flex items-center">
-              {isCheckingAuth ? (
-                <Button variant="outline" size="icon" disabled>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                </Button>
-              ) : isAuthenticated ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <User className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <User className="w-4 h-4 mr-2" />
-                      {username} ({permissions})
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={logout}>
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Logout
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               ) : (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsLoginDialogOpen(true)}
-                  title="Login"
-                  className="max-sm:hidden"
-                >
-                  <LogIn className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreHorizontal size={18} />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-1">
-                <div className="grid gap-1">
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
-                    <ListIcon size={18} /> List View
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
-                    <Grid3x3 size={18} /> Grid View
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
-                    <ImageIcon size={18} /> Image View
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
-                    <ImageIcon size={18} className="text-yellow-500" /> Image Only
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
-                    <Upload size={18} /> Upload Files
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
-                    <FolderUp size={18} /> Upload Folder
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
-                    <FolderPlus size={18} /> Create Directory
-                  </Button>
-                  {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
-                    <Database size={18} /> Index Settings
-                  </Button>}
-                  {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
-                    <Eye size={18} /> Watcher Settings
-                  </Button>}
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
-                    <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
-                    <TestTube2 size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
-                    <TestTube2 size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
-                    <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
-                    <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
-                  </Button>
-                  <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
-                    <TestTube2 size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
-                  </Button>
-                  {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
-                    <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
-                  </Button> */}
+                <div className="bg-muted p-1 rounded-md">
+                  <BreadcrumbNav
+                    currentPath={currentPath}
+                    onNavigate={navigateTo}
+                    showRootIcon
+                    onRootClick={goHome}
+                  />
                 </div>
-              </PopoverContent>
-            </Popover>
+              )}
+            </nav>
+          ) : (
+            <div className="h-9 flex-1 bg-muted px-4 py-1 rounded-md flex justify-between items-center gap-1">
+              <span className="text-sm">
+                {selectedFiles.length} files selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { handleMoveFromMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                  className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
+                >
+                  <Scissors size={18} />
+                  <span className="text-sm max-sm:hidden">Cut</span>
+                </button>
+                <button
+                  onClick={() => { handleCopyMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                  className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
+                >
+                  <ClipboardCopy size={18} />
+                  <span className="text-sm max-sm:hidden">Copy</span>
+                </button>
+                <button
+                  onClick={() => { handleDownloadMultiple2(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
+                  className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
+                >
+                  <Download size={18} />
+                  <span className="text-sm max-sm:hidden">Download</span>
+                </button>
+                <button
+                  onClick={() => { handleDeleteMultiple(selectedFiles) }}
+                  className="flex items-center gap-1 text-red-500 hover:text-red-600"
+                >
+                  <Trash2 size={18} />
+                  <span className="text-sm max-sm:hidden">Delete</span>
+                </button>
+                <button onClick={handleInvertSelection} className="flex items-center gap-1 hover:text-gray-500">
+                  <ArrowLeftRight size={18} />
+                  <span className="text-sm max-sm:hidden">Invert</span>
+                </button>
+                <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-700 hover:text-green-800">
+                  <CheckCheck size={18} />
+                  <span className="text-sm max-sm:hidden">Select All</span>
+                </button>
+                <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-700 hover:text-red-800">
+                  <X size={18} />
+                  <span className="text-sm max-sm:hidden">Clear</span>
+                </button>
+              </div>
+            </div>
+          )}
+          {!isSelecting ? (
+            <Button variant="outline" size="icon" onClick={() => setIsSelecting(true)}>
+              <CircleCheck size={18} />
+            </Button>
+          ) : (
+            <Button variant="outline" size="icon" onClick={() => {
+              setIsSelecting(false);
+              setSelectedFiles([]);
+            }}>
+              <CircleX size={18} />
+            </Button>
+          )}
+        </div>
+
+        <div className="relative w-full flex-1">
+          {isCheckingAuth ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <Loading message="Checking authentication..." />
+            </div>
+          ) : !isAuthenticated ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <Error message="Please login to continue" />
+            </div>
+          ) : isError ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <Error message="Error loading files. Please try again." />
+            </div>
+          ) : isLoading ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <Loading message="Loading files..." />
+            </div>
+          ) : isNotFound ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <NotFound message="No files found" />
+            </div>
+          ) : null}
+
+          <div className={cn(
+            "absolute inset-0 transition-all duration-300 rounded-md",
+            useBlur && "backdrop-blur-xs hover:backdrop-blur-sm",
+            (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
+          )}>
+            {viewMode === 'list' && (
+              <AutoSizer>
+                {renderList}
+              </AutoSizer>
+            )}
+            {viewMode === 'grid' && (
+              <AutoSizer>
+                {renderGrid}
+              </AutoSizer>
+            )}
+            {viewMode === 'image' && (
+              <>
+                {isImageOnlyMode && useMasonry ? (
+                  <AutoSizer>
+                    {renderMasonry}
+                  </AutoSizer>
+                ) : (
+                  <AutoSizer>
+                    {renderImageGrid}
+                  </AutoSizer>
+                )}
+              </>
+            )}
           </div>
         </div>
 
-        <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
-          <Input
-            name="searchQuery"
-            placeholder="Search files..."
-            defaultValue={searchQuery}
-            className={cn(
-              "w-full",
-              "backdrop-blur-sm",
-              "text-white",
-              "selection:bg-white selection:text-black",
-              "focus-visible:ring-[1px]"
-            )}
-          />
-          <Button type="submit" variant="secondary" size="icon">
-            <Search size={18} />
-          </Button>
-          {isSearching && (
-            <Button type="button" variant="secondary" size="icon" className="text-red-500" onClick={handleClearSearch}>
-              <X size={18} />
-            </Button>
-          )}
-        </form>
-
-      </header>
-
-      <div className="flex justify-between gap-1">
-        {!isSelecting ? (
-          <nav ref={navRef} className="flex-1">
-            {isSearching ? (
-              <div className="bg-muted p-1 rounded-md text-sm">
-                Searching: "{searchQuery}" in {currentPath || 'root'}
-              </div>
-            ) : (
-              <div className="bg-muted p-1 rounded-md">
-                <BreadcrumbNav
-                  currentPath={currentPath}
-                  onNavigate={navigateTo}
-                  showRootIcon
-                  onRootClick={goHome}
-                />
-              </div>
-            )}
-          </nav>
-        ) : (
-          <div className="h-9 flex-1 bg-muted px-4 py-1 rounded-md flex justify-between items-center gap-1">
-            <span className="text-sm">
-              {selectedFiles.length} files selected
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { handleMoveFromMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
-                className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
-              >
-                <Scissors size={18} />
-                <span className="text-sm max-sm:hidden">Cut</span>
-              </button>
-              <button
-                onClick={() => { handleCopyMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
-                className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
-              >
-                <ClipboardCopy size={18} />
-                <span className="text-sm max-sm:hidden">Copy</span>
-              </button>
-              <button
-                onClick={() => { handleDownloadMultiple2(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
-                className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
-              >
-                <Download size={18} />
-                <span className="text-sm max-sm:hidden">Download</span>
-              </button>
-              <button
-                onClick={() => { handleDeleteMultiple(selectedFiles) }}
-                className="flex items-center gap-1 text-red-500 hover:text-red-600"
-              >
-                <Trash2 size={18} />
-                <span className="text-sm max-sm:hidden">Delete</span>
-              </button>
-              <button onClick={handleInvertSelection} className="flex items-center gap-1 hover:text-gray-500">
-                <ArrowLeftRight size={18} />
-                <span className="text-sm max-sm:hidden">Invert</span>
-              </button>
-              <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-700 hover:text-green-800">
-                <CheckCheck size={18} />
-                <span className="text-sm max-sm:hidden">Select All</span>
-              </button>
-              <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-700 hover:text-red-800">
-                <X size={18} />
-                <span className="text-sm max-sm:hidden">Clear</span>
-              </button>
-            </div>
-          </div>
-        )}
-        {!isSelecting ? (
-          <Button variant="outline" size="icon" onClick={() => setIsSelecting(true)}>
-            <CircleCheck size={18} />
-          </Button>
-        ) : (
-          <Button variant="outline" size="icon" onClick={() => {
-            setIsSelecting(false);
-            setSelectedFiles([]);
-          }}>
-            <CircleX size={18} />
-          </Button>
-        )}
-      </div>
-
-      <div className="relative w-full flex-1">
-        {isCheckingAuth ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-            <Loading message="Checking authentication..." />
-          </div>
-        ) : !isAuthenticated ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-            <Error message="Please login to continue" />
-          </div>
-        ) : isError ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-            <Error message="Error loading files. Please try again." />
-          </div>
-        ) : isLoading ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-            <Loading message="Loading files..." />
-          </div>
-        ) : isNotFound ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-            <NotFound message="No files found" />
-          </div>
-        ) : null}
-
+        {/* Show total files count with loaded count */}
         <div className={cn(
-          "absolute inset-0 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md",
+          "flex justify-center text-sm text-muted/70 select-none",
           (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
         )}>
-          {viewMode === 'list' && (
-            <AutoSizer>
-              {renderList}
-            </AutoSizer>
-          )}
-          {viewMode === 'grid' && (
-            <AutoSizer>
-              {renderGrid}
-            </AutoSizer>
-          )}
-          {viewMode === 'image' && (
-            <>
-              {isImageOnlyMode && useMasonry ? (
-                <AutoSizer>
-                  {renderMasonry}
-                </AutoSizer>
-              ) : (
-                <AutoSizer>
-                  {renderImageGrid}
-                </AutoSizer>
-              )}
-            </>
-          )}
+          {usePagination ?
+            `${accumulatedFiles.length} of ${totalFiles} files loaded`
+            :
+            `${totalFiles} files found`
+          }
         </div>
-      </div>
-
-      {/* Show total files count with loaded count */}
-      <div className={cn(
-        "flex justify-center text-sm text-muted/70 select-none",
-        (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
-      )}>
-        {usePagination ?
-          `${accumulatedFiles.length} of ${totalFiles} files loaded`
-          :
-          `${totalFiles} files found`
-        }
-      </div>
 
 
-      {/* Preview Overlay */}
-      {preview.isOpen && (
-        <>
-          {/* Image preview */}
-          {preview.type === 'image' && (
-            <ImagePreview
-              isOpen={preview.isOpen}
-              title={isImageOnlyMode ? preview.path : preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-                onNext: () => navigatePreview('next'),
-                onPrev: () => navigatePreview('prev'),
-              }}
-            />
-          )}
+        {/* Preview Overlay */}
+        {preview.isOpen && (
+          <>
+            {/* Image preview */}
+            {preview.type === 'image' && (
+              <ImagePreview
+                isOpen={preview.isOpen}
+                title={isImageOnlyMode ? preview.path : preview.path.split('/').pop()}
+                src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                  onNext: () => navigatePreview('next'),
+                  onPrev: () => navigatePreview('prev'),
+                }}
+              />
+            )}
 
-          {/* Video preview */}
-          {preview.type === 'video' && (
-            <VideoPreview
-              isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-                onNext: () => navigatePreview('next'),
-                onPrev: () => navigatePreview('prev'),
-              }}
-            />
-          )}
+            {/* Video preview */}
+            {preview.type === 'video' && (
+              <VideoPreview
+                isOpen={preview.isOpen}
+                title={preview.path.split('/').pop()}
+                src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                  onNext: () => navigatePreview('next'),
+                  onPrev: () => navigatePreview('prev'),
+                }}
+              />
+            )}
 
-          {/* Audio preview */}
-          {preview.type === 'audio' && (
-            <AudioPreview
-              isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-                onNext: () => navigatePreview('next'),
-                onPrev: () => navigatePreview('prev'),
-              }}
-            />
-          )}
+            {/* Audio preview */}
+            {preview.type === 'audio' && (
+              <AudioPreview
+                isOpen={preview.isOpen}
+                title={preview.path.split('/').pop()}
+                src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                  onNext: () => navigatePreview('next'),
+                  onPrev: () => navigatePreview('prev'),
+                }}
+              />
+            )}
 
-          {/* Text preview */}
-          {(preview.type === 'text') && (
-            <TextPreview
-              isOpen={preview.isOpen}
-              fileName={preview.path.split('/').pop()}
-              fileExtension={getFileExtension(preview.path)}
-              content={previewContent}
-              isLoading={contentLoading}
-              hasError={!!contentError}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-              }}
-            />
-          )}
+            {/* Text preview */}
+            {(preview.type === 'text') && (
+              <TextPreview
+                isOpen={preview.isOpen}
+                fileName={preview.path.split('/').pop()}
+                fileExtension={getFileExtension(preview.path)}
+                content={previewContent}
+                isLoading={contentLoading}
+                hasError={!!contentError}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                }}
+              />
+            )}
 
-          {/* PDF preview */}
-          {preview.type === 'pdf' && (
-            <PDFPreview
-              isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-              }}
-            />
-          )}
+            {/* PDF preview */}
+            {preview.type === 'pdf' && (
+              <PDFPreview
+                isOpen={preview.isOpen}
+                title={preview.path.split('/').pop()}
+                src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                }}
+              />
+            )}
 
-          {/* Comic preview */}
-          {preview.type === 'comic' && (
-            <ComicPreview
-              isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-              src={`/api/comic?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onNext: () => navigatePreview('next'),
-                onPrev: () => navigatePreview('prev'),
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-              }}
-            />
-          )}
+            {/* Comic preview */}
+            {preview.type === 'comic' && (
+              <ComicPreview
+                isOpen={preview.isOpen}
+                title={preview.path.split('/').pop()}
+                src={`/api/comic?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onNext: () => navigatePreview('next'),
+                  onPrev: () => navigatePreview('prev'),
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                }}
+              />
+            )}
 
-          {preview.type === 'epub' && (
-            <EPUBPreview
-              isOpen={preview.isOpen}
-              title={preview.path.split('/').pop()}
-              src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
-              controls={{
-                onClose: closePreview,
-                onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
-              }}
-            />
-          )}
-        </>
-      )}
-
-      <Separator />
-      <footer className="flex justify-center items-center">
-        <p className="text-sm text-muted-foreground font-bold font-mono">
-          Developed by <a href="https://github.com/Kobayashi2003" className="underline">Kobayashi2003</a>
-        </p>
-        <span className="mx-2">•</span>
-        <a href="https://github.com/Kobayashi2003" className="rounded-full overflow-hidden">
-          <img src="github_icon.png" alt="GitHub" className="w-4 h-4" />
-        </a>
-      </footer>
-
-      <FloatingButtons direction="up">
-        {/* Paste here button */}
-        {filesToClone.length > 0 && (
-          <FloatingButton
-            icon={<ClipboardPaste size={18} />}
-            onClick={() => setCloneComfirmDialogOpen(true)}
-            label="Paste here"
-          />
+            {preview.type === 'epub' && (
+              <EPUBPreview
+                isOpen={preview.isOpen}
+                title={preview.path.split('/').pop()}
+                src={`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`}
+                controls={{
+                  onClose: closePreview,
+                  onDownload: () => window.open(`/api/raw?path=${encodeURIComponent(preview.path)}${token ? `&token=${token}` : ''}`, '_blank'),
+                }}
+              />
+            )}
+          </>
         )}
 
-        {/* Move here button */}
-        {filesToMove.length > 0 && (
-          <FloatingButton
-            icon={<MoveHorizontal size={18} />}
-            onClick={() => setMoveComfirmDialogOpen(true)}
-            label="Move here"
-          />
-        )}
+        <Separator />
+        <footer className="flex justify-center items-center">
+          <p className="text-sm text-muted-foreground font-bold font-mono">
+            Developed by <a href="https://github.com/Kobayashi2003" className="underline">Kobayashi2003</a>
+          </p>
+          <span className="mx-2">•</span>
+          <a href="https://github.com/Kobayashi2003" className="rounded-full overflow-hidden">
+            <img src="github_icon.png" alt="GitHub" className="w-4 h-4" />
+          </a>
+        </footer>
 
-        {/* Scroll to top button */}
-        {showScrollTop && (
-          <FloatingButton
-            icon={<ArrowUp size={24} />}
-            onClick={scrollToTop}
-            label="Scroll to top"
-          />
-        )}
+        <FloatingButtons direction="up">
+          {/* Paste here button */}
+          {filesToClone.length > 0 && (
+            <FloatingButton
+              icon={<ClipboardPaste size={18} />}
+              onClick={() => setCloneComfirmDialogOpen(true)}
+              label="Paste here"
+            />
+          )}
 
-        {/* Upload status button */}
-        {uploadFiles.length > 0 && (
-          <FloatingButton
-            icon={<Upload size={20} />}
-            onClick={() => setShowUploadDialog(true)}
-            label="Show upload progress"
-          />
-        )}
+          {/* Move here button */}
+          {filesToMove.length > 0 && (
+            <FloatingButton
+              icon={<MoveHorizontal size={18} />}
+              onClick={() => setMoveComfirmDialogOpen(true)}
+              label="Move here"
+            />
+          )}
 
-        {/* Download status button */}
-        {downloadFiles.length > 0 && (
-          <FloatingButton
-            icon={<Download size={20} />}
-            onClick={() => setShowDownloadDialog(true)}
-            label="Show download progress"
-          />
-        )}
-      </FloatingButtons>
+          {/* Scroll to top button */}
+          {showScrollTop && (
+            <FloatingButton
+              icon={<ArrowUp size={24} />}
+              onClick={scrollToTop}
+              label="Scroll to top"
+            />
+          )}
 
-      {/* Upload dialog */}
-      <UploadDialog
-        open={showUploadDialog}
-        setOpen={setShowUploadDialog}
-        files={uploadFiles}
-        onCancel={cancelUpload}
-        onCancelAll={cancelAllUploads}
-        removeTask={removeUploadTask}
-      />
+          {/* Upload status button */}
+          {uploadFiles.length > 0 && (
+            <FloatingButton
+              icon={<Upload size={20} />}
+              onClick={() => setShowUploadDialog(true)}
+              label="Show upload progress"
+            />
+          )}
 
-      {/* Download dialog */}
-      <DownloadDialog
-        open={showDownloadDialog}
-        setOpen={setShowDownloadDialog}
-        files={downloadFiles}
-        onCancel={cancelDownload}
-        onCancelAll={cancelAllDownloads}
-        removeTask={removeDownloadTask}
-      />
+          {/* Download status button */}
+          {downloadFiles.length > 0 && (
+            <FloatingButton
+              icon={<Download size={20} />}
+              onClick={() => setShowDownloadDialog(true)}
+              label="Show download progress"
+            />
+          )}
+        </FloatingButtons>
 
-      {/* Details dialog */}
-      {fileToShowDetails && (
-        <DetailsDialog
-          open={detailsDialogOpen}
-          setOpen={setDetailsDialogOpen}
-          file={fileToShowDetails}
+        {/* Upload dialog */}
+        <UploadDialog
+          open={showUploadDialog}
+          setOpen={setShowUploadDialog}
+          files={uploadFiles}
+          onCancel={cancelUpload}
+          onCancelAll={cancelAllUploads}
+          removeTask={removeUploadTask}
         />
-      )}
 
-      {/* Download confirm dialog */}
-      <ConfirmDialog
-        open={downloadComfirmDialogOpen}
-        setOpen={setDownloadComfirmDialogOpen}
-        title="Download"
-        description="This type of file is not supported, do you want to download it?"
-        confirmText="Download"
-        cancelText="Cancel"
-        onConfirm={() => {
-          // window.open(`/api/raw?path=${encodeURIComponent(fileToDownload)}${token ? `&token=${token}` : ''}`, '_blank');
-          handleDownload(fileToDownload);
-          setFileToDownload('');
-          setDownloadComfirmDialogOpen(false);
-        }}
-        onCancel={() => {
-          setFileToDownload('');
-          setDownloadComfirmDialogOpen(false);
-        }}
-      />
+        {/* Download dialog */}
+        <DownloadDialog
+          open={showDownloadDialog}
+          setOpen={setShowDownloadDialog}
+          files={downloadFiles}
+          onCancel={cancelDownload}
+          onCancelAll={cancelAllDownloads}
+          removeTask={removeDownloadTask}
+        />
 
-      {/* Download multiple files dialog */}
-      <ConfirmDialog
-        open={downloadMultipleDialogOpen}
-        setOpen={setDownloadMultipleDialogOpen}
-        title="Download"
-        description={`Are you sure you want to download ${selectedFiles.length} files?`}
-        confirmText="Download"
-        cancelText="Cancel"
-        onConfirm={() => {
-          handleDownloadMultiple2(selectedFiles);
-          setSelectedFiles([]);
-          setDownloadMultipleDialogOpen(false);
-        }}
-        onCancel={() => {
-          setSelectedFiles([]);
-          setDownloadMultipleDialogOpen(false);
-        }}
-      />
+        {/* Details dialog */}
+        {fileToShowDetails && (
+          <DetailsDialog
+            open={detailsDialogOpen}
+            setOpen={setDetailsDialogOpen}
+            file={fileToShowDetails}
+          />
+        )}
 
-      {/* Delete confirm dialog */}
-      <ConfirmDialog
-        open={deleteComfirmDialogOpen}
-        setOpen={setDeleteComfirmDialogOpen}
-        title="Delete"
-        description="Are you sure you want to delete this file?"
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={() => handleDeleteConfirm(fileToDelete)}
-        onCancel={handleDeleteCancel}
-      />
+        {/* Download confirm dialog */}
+        <ConfirmDialog
+          open={downloadComfirmDialogOpen}
+          setOpen={setDownloadComfirmDialogOpen}
+          title="Download"
+          description="This type of file is not supported, do you want to download it?"
+          confirmText="Download"
+          cancelText="Cancel"
+          onConfirm={() => {
+            // window.open(`/api/raw?path=${encodeURIComponent(fileToDownload)}${token ? `&token=${token}` : ''}`, '_blank');
+            handleDownload(fileToDownload);
+            setFileToDownload('');
+            setDownloadComfirmDialogOpen(false);
+          }}
+          onCancel={() => {
+            setFileToDownload('');
+            setDownloadComfirmDialogOpen(false);
+          }}
+        />
 
-      {/* Delete multiple files dialog */}
-      <ConfirmDialog
-        open={deleteMultipleDialogOpen}
-        setOpen={setDeleteMultipleDialogOpen}
-        title="Delete"
-        description={`Are you sure you want to delete ${selectedFiles.length} files?`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={() => handleDeleteMultipleConfirm(selectedFiles)}
-        onCancel={handleDeleteMultipleCancel}
-      />
+        {/* Download multiple files dialog */}
+        <ConfirmDialog
+          open={downloadMultipleDialogOpen}
+          setOpen={setDownloadMultipleDialogOpen}
+          title="Download"
+          description={`Are you sure you want to download ${selectedFiles.length} files?`}
+          confirmText="Download"
+          cancelText="Cancel"
+          onConfirm={() => {
+            handleDownloadMultiple2(selectedFiles);
+            setSelectedFiles([]);
+            setDownloadMultipleDialogOpen(false);
+          }}
+          onCancel={() => {
+            setSelectedFiles([]);
+            setDownloadMultipleDialogOpen(false);
+          }}
+        />
 
-      {/* Paste here dialog */}
-      <ConfirmDialog
-        open={cloneComfirmDialogOpen}
-        setOpen={setCloneComfirmDialogOpen}
-        title="Paste here"
-        description="Are you sure you want to paste these files here?"
-        confirmText="Paste"
-        cancelText="Cancel"
-        onConfirm={() => handlePasteConfirm(currentPath)}
-        onCancel={handlePasteCancel}
-      />
+        {/* Delete confirm dialog */}
+        <ConfirmDialog
+          open={deleteComfirmDialogOpen}
+          setOpen={setDeleteComfirmDialogOpen}
+          title="Delete"
+          description="Are you sure you want to delete this file?"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => handleDeleteConfirm(fileToDelete)}
+          onCancel={handleDeleteCancel}
+        />
 
-      {/* Move here dialog */}
-      <ConfirmDialog
-        open={moveComfirmDialogOpen}
-        setOpen={setMoveComfirmDialogOpen}
-        title="Move here"
-        description="Are you sure you want to move these files here?"
-        confirmText="Move"
-        cancelText="Cancel"
-        onConfirm={() => handleMoveHereComfirm(currentPath)}
-        onCancel={handleMoveHereCancel}
-      />
+        {/* Delete multiple files dialog */}
+        <ConfirmDialog
+          open={deleteMultipleDialogOpen}
+          setOpen={setDeleteMultipleDialogOpen}
+          title="Delete"
+          description={`Are you sure you want to delete ${selectedFiles.length} files?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => handleDeleteMultipleConfirm(selectedFiles)}
+          onCancel={handleDeleteMultipleCancel}
+        />
 
-      {/* Index settings dialog */}
-      <IndexSettingsDialog
-        open={showIndexDialog}
-        setOpen={setShowIndexDialog}
-      />
+        {/* Paste here dialog */}
+        <ConfirmDialog
+          open={cloneComfirmDialogOpen}
+          setOpen={setCloneComfirmDialogOpen}
+          title="Paste here"
+          description="Are you sure you want to paste these files here?"
+          confirmText="Paste"
+          cancelText="Cancel"
+          onConfirm={() => handlePasteConfirm(currentPath)}
+          onCancel={handlePasteCancel}
+        />
 
-      {/* Watcher settings dialog */}
-      <WatcherSettingsDialog
-        open={showWatcherDialog}
-        setOpen={setShowWatcherDialog}
-      />
+        {/* Move here dialog */}
+        <ConfirmDialog
+          open={moveComfirmDialogOpen}
+          setOpen={setMoveComfirmDialogOpen}
+          title="Move here"
+          description="Are you sure you want to move these files here?"
+          confirmText="Move"
+          cancelText="Cancel"
+          onConfirm={() => handleMoveHereComfirm(currentPath)}
+          onCancel={handleMoveHereCancel}
+        />
 
-      {/* Login dialog */}
-      <LoginDialog
-        open={isLoginDialogOpen}
-        setOpen={setIsLoginDialogOpen}
-      />
+        {/* Index settings dialog */}
+        <IndexSettingsDialog
+          open={showIndexDialog}
+          setOpen={setShowIndexDialog}
+        />
 
-      {/* Rename input dialog */}
-      <InputDialog
-        open={renameInputDialogOpen}
-        setOpen={setRenameInputDialogOpen}
-        title="Rename"
-        description="Enter the new name for the file"
-        confirmText="Rename"
-        cancelText="Cancel"
-        defaultValue={fileToRename.split('/').pop()}
-        placeholder="New name"
-        onConfirm={(newName) => handleRenameConfirm(newName.trim())}
-        onCancel={handleRenameCancel}
-      />
+        {/* Watcher settings dialog */}
+        <WatcherSettingsDialog
+          open={showWatcherDialog}
+          setOpen={setShowWatcherDialog}
+        />
 
-      {/* Mkdir input dialog */}
-      <InputDialog
-        open={mkdirInputDialogOpen}
-        setOpen={setMkdirInputDialogOpen}
-        title="Mkdir"
-        description="Enter the name for the new directory"
-        confirmText="Create"
-        cancelText="Cancel"
-        defaultValue={currentPath.split('/').pop()}
-        placeholder="New directory name"
-        onConfirm={(name) => handleMkdirConfirm(currentPath, name.trim())}
-        onCancel={handleMkdirCancel}
-      />
-    </main>
+        {/* Login dialog */}
+        <LoginDialog
+          open={isLoginDialogOpen}
+          setOpen={setIsLoginDialogOpen}
+        />
+
+        {/* Rename input dialog */}
+        <InputDialog
+          open={renameInputDialogOpen}
+          setOpen={setRenameInputDialogOpen}
+          title="Rename"
+          description="Enter the new name for the file"
+          confirmText="Rename"
+          cancelText="Cancel"
+          defaultValue={fileToRename.split('/').pop()}
+          placeholder="New name"
+          onConfirm={(newName) => handleRenameConfirm(newName.trim())}
+          onCancel={handleRenameCancel}
+        />
+
+        {/* Mkdir input dialog */}
+        <InputDialog
+          open={mkdirInputDialogOpen}
+          setOpen={setMkdirInputDialogOpen}
+          title="Mkdir"
+          description="Enter the name for the new directory"
+          confirmText="Create"
+          cancelText="Cancel"
+          defaultValue={currentPath.split('/').pop()}
+          placeholder="New directory name"
+          onConfirm={(name) => handleMkdirConfirm(currentPath, name.trim())}
+          onCancel={handleMkdirCancel}
+        />
+      </main>
+    </div>
   );
 }
 
