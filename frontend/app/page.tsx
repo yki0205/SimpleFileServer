@@ -649,7 +649,7 @@ function FileExplorerContent() {
 
 
   // Pagination state
-  const [usePagination, setUsePagination] = useState(true);
+  const [usePagination, setUsePagination] = useState(false);
   const [page, setPage] = useState(1);
   const pageRef = useRef(page);
   const [accumulatedFiles, setAccumulatedFiles] = useState<FileData[]>([]);
@@ -1633,11 +1633,11 @@ function FileExplorerContent() {
   };
 
   const loadNextPage = useCallback(() => {
-    if (isLoadingMore || !hasMoreFiles) return;
+    if (!usePagination || isLoadingMore || !hasMoreFiles) return;
 
     setIsLoadingMore(true);
     setPage(prevPage => prevPage + 1);
-  }, [isLoadingMore, hasMoreFiles]);
+  }, [isLoadingMore, hasMoreFiles, usePagination]);
 
   // Handle end of list detection to load more data
   const handleItemsRendered = useCallback(({ visibleStartIndex, visibleStopIndex }: { visibleStartIndex: number, visibleStopIndex: number }) => {
