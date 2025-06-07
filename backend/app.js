@@ -1671,70 +1671,7 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
   }
 });
 
-async function indexDirectoryRecursively(dirPath, basePath) {
-  if (!config.useFileIndex || !indexer.isIndexBuilt()) return 0;
-  
-  try {
-    const fileBatch = [];
-    const stack = [dirPath];
-    let indexedCount = 0;
-    
-    while (stack.length > 0) {
-      const currentDir = stack.pop();
-      const entries = fs.readdirSync(currentDir);
-      
-      for (const entry of entries) {
-        const entryPath = path.join(currentDir, entry);
-        const entryStats = fs.statSync(entryPath);
-        const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
-        
-        if (entryStats.isDirectory()) {
-          // Add directory to batch
-          fileBatch.push({
-            name: entry,
-            path: relativePath,
-            size: entryStats.size,
-            mtime: entryStats.mtime.toISOString(),
-            mimeType: 'directory',
-            isDirectory: true
-          });
-          
-          // Add to stack for processing
-          stack.push(entryPath);
-        } else {
-          // Get file type and add to batch
-          const mimeType = await utils.getFileType(entryPath);
-          fileBatch.push({
-            name: entry,
-            path: relativePath,
-            size: entryStats.size,
-            mtime: entryStats.mtime.toISOString(),
-            mimeType: mimeType,
-            isDirectory: false
-          });
-        }
-        
-        indexedCount++;
-        
-        // Save batch when it reaches a reasonable size
-        if (fileBatch.length >= 100) {
-          indexer.saveFileBatch(fileBatch);
-          fileBatch.length = 0;
-        }
-      }
-    }
-    
-    // Save any remaining files
-    if (fileBatch.length > 0) {
-      indexer.saveFileBatch(fileBatch);
-    }
-    
-    return indexedCount;
-  } catch (error) {
-    console.error(`Error indexing directory ${dirPath}:`, error);
-    return 0;
-  }
-}
+
 
 app.get('/api/index-status', (req, res) => {
   if (!config.useFileIndex) {
@@ -2061,6 +1998,71 @@ if (!isMainThread) {
 
       parentPort.postMessage(results);
     })();
+  }
+}
+
+async function indexDirectoryRecursively(dirPath, basePath) {
+  if (!config.useFileIndex || !indexer.isIndexBuilt()) return 0;
+  
+  try {
+    const fileBatch = [];
+    const stack = [dirPath];
+    let indexedCount = 0;
+    
+    while (stack.length > 0) {
+      const currentDir = stack.pop();
+      const entries = fs.readdirSync(currentDir);
+      
+      for (const entry of entries) {
+        const entryPath = path.join(currentDir, entry);
+        const entryStats = fs.statSync(entryPath);
+        const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
+        
+        if (entryStats.isDirectory()) {
+          // Add directory to batch
+          fileBatch.push({
+            name: entry,
+            path: relativePath,
+            size: entryStats.size,
+            mtime: entryStats.mtime.toISOString(),
+            mimeType: 'directory',
+            isDirectory: true
+          });
+          
+          // Add to stack for processing
+          stack.push(entryPath);
+        } else {
+          // Get file type and add to batch
+          const mimeType = await utils.getFileType(entryPath);
+          fileBatch.push({
+            name: entry,
+            path: relativePath,
+            size: entryStats.size,
+            mtime: entryStats.mtime.toISOString(),
+            mimeType: mimeType,
+            isDirectory: false
+          });
+        }
+        
+        indexedCount++;
+        
+        // Save batch when it reaches a reasonable size
+        if (fileBatch.length >= 100) {
+          indexer.saveFileBatch(fileBatch);
+          fileBatch.length = 0;
+        }
+      }
+    }
+    
+    // Save any remaining files
+    if (fileBatch.length > 0) {
+      indexer.saveFileBatch(fileBatch);
+    }
+    
+    return indexedCount;
+  } catch (error) {
+    console.error(`Error indexing directory ${dirPath}:`, error);
+    return 0;
   }
 }
 
