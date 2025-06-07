@@ -67,6 +67,16 @@ const SQL = {
   DELETE_FILE: 'DELETE FROM files WHERE path = ?',
   DELETE_FILE_PREFIX: 'DELETE FROM files WHERE path LIKE ?',
   DELETE_ALL_FILES: 'DELETE FROM files',
+  GET_DIRECTORY_FILES: `
+  SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE path LIKE ? AND path NOT LIKE ?
+  `,
+  COUNT_DIRECTORY_FILES: `
+  SELECT COUNT(*) as count 
+  FROM files 
+  WHERE path LIKE ? AND path NOT LIKE ?
+  `,
 };
 
 let db = null;
@@ -386,6 +396,123 @@ function getOrderByClause(sortBy = 'name', sortOrder = 'asc') {
   
   // Always list directories first, then sort by the specified field
   return `ORDER BY isDirectory DESC, ${sortField} ${order}`;
+}
+
+async function getDirectoryFiles(directory = '', page, limit, sortBy = 'name', sortOrder = 'asc', includeCover = false) {
+  if (!db) return { files: [], total: 0, hasMore: false };
+  
+  try {
+    const dirPath = directory ? directory : '';
+    
+    // build sql query params
+    // 1. if root directory, find all top-level files and folders
+    // 2. if subdirectory, find all direct subfiles and subfolders
+    let pathPattern, excludePattern;
+    
+    if (dirPath === '') {
+      // root directory: match paths without slashes (top-level files and folders)
+      pathPattern = '%';
+      excludePattern = '%/%'; // exclude paths with slashes (subdirectory contents)
+    } else {
+      // subdirectory: match direct subfiles and subfolders
+      const normalizedPath = dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+      pathPattern = `${normalizedPath}%`;
+      excludePattern = `${normalizedPath}%/%`; // exclude deeper paths
+    }
+    
+    const totalCount = db.prepare(SQL.COUNT_DIRECTORY_FILES)
+      .get(pathPattern, excludePattern).count;
+    
+    // handle pagination
+    let files;
+    let hasMore = false;
+    
+    if (page !== undefined) {
+      // convert to number and validate
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 100;
+      
+      // calculate offset
+      const offset = (pageNum - 1) * limitNum;
+      
+      // query with pagination and sorting
+      let paginatedQuery = `${SQL.GET_DIRECTORY_FILES} `;
+      
+      // add sorting condition
+      paginatedQuery += getOrderByClause(sortBy, sortOrder);
+      
+      // add pagination
+      paginatedQuery += ` LIMIT ? OFFSET ?`;
+      
+      files = db.prepare(paginatedQuery)
+        .all(pathPattern, excludePattern, limitNum, offset);
+      
+      // check if there are more results
+      hasMore = offset + files.length < totalCount;
+    } else {
+      // query without pagination
+      let fullQuery = `${SQL.GET_DIRECTORY_FILES} `;
+      
+      // add sorting condition
+      fullQuery += getOrderByClause(sortBy, sortOrder);
+      
+      files = db.prepare(fullQuery)
+        .all(pathPattern, excludePattern);
+    }
+    
+    // convert isDirectory to boolean
+    const result = files.map(file => ({
+      ...file,
+      isDirectory: !!file.isDirectory,
+      mtime: new Date(file.mtime) // convert to date object to match original API
+    }));
+    
+    // if need to get directory cover
+    if (includeCover && result.length > 0) {
+      await addDirectoryCovers(result, dirPath);
+    }
+    
+    return {
+      files: result,
+      total: totalCount,
+      hasMore
+    };
+  } catch (error) {
+    console.error('Error getting directory files from index:', error);
+    return { files: [], total: 0, hasMore: false };
+  }
+}
+
+// helper function: add directory covers
+async function addDirectoryCovers(files, parentDir) {
+  // only process directory type files
+  const directories = files.filter(file => file.isDirectory);
+  
+  if (directories.length === 0) return;
+  
+  for (const dir of directories) {
+    try {
+      const dirPath = dir.path;
+      
+      // find image files in the directory
+      const imagesQuery = `
+        SELECT path
+        FROM files
+        WHERE path LIKE ? AND mimeType LIKE 'image/%'
+        ORDER BY name ASC
+        LIMIT 1
+      `;
+      
+      const dirPattern = `${dirPath}/%`;
+      const coverImage = db.prepare(imagesQuery).get(dirPattern);
+      
+      if (coverImage) {
+        dir.cover = coverImage.path;
+      }
+    } catch (error) {
+      console.error(`Error finding cover for directory ${dir.path}:`, error);
+    }
+  }
 }
 
 function saveFileBatch(files) {
@@ -1117,6 +1244,7 @@ module.exports = {
   deleteFromIndex,
   searchIndex,
   findImagesInIndex,
+  getDirectoryFiles,
   saveFileBatch,
   buildIndex,
 }; 

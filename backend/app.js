@@ -202,6 +202,18 @@ app.get('/api/files', async (req, res) => {
   }
 
   try {
+    // Use file index if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      // Get directory files from index with pagination
+      const result = await indexer.getDirectoryFiles(dir, page, limit, sortBy, sortOrder, cover === 'true');
+      return res.json({
+        files: result.files,
+        total: result.total,
+        hasMore: result.hasMore
+      });
+    }
+
+    // Original file system based logic when indexer is not used
     if (config.parallelFileProcessing) {
       const stats = await fs.promises.stat(fullPath);
       if (!stats.isDirectory()) {
@@ -253,27 +265,14 @@ app.get('/api/files', async (req, res) => {
         .filter(r => r.status === 'fulfilled')
         .map(r => r.value);
       
-      // Sort files before pagination
+      // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
       
-      // Handle pagination if specified
-      const total = fileDetails.length;
-      let hasMore = false;
-      
-      if (page !== undefined) {
-        const pageNum = parseInt(page) || 1;
-        const limitNum = parseInt(limit) || 100;
-        const startIndex = (pageNum - 1) * limitNum;
-        const endIndex = startIndex + limitNum;
-        
-        hasMore = endIndex < total;
-        fileDetails = fileDetails.slice(startIndex, endIndex);
-      }
-
+      // Note: No pagination when not using indexer
       res.json({ 
         files: fileDetails,
-        total: total,
-        hasMore: hasMore
+        total: fileDetails.length,
+        hasMore: false
       });
 
     } else {
@@ -331,27 +330,14 @@ app.get('/api/files', async (req, res) => {
 
       let fileDetails = await Promise.all(fileDetailsPromises);
       
-      // Sort files before pagination
+      // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
       
-      // Handle pagination if specified
-      const total = fileDetails.length;
-      let hasMore = false;
-      
-      if (page !== undefined) {
-        const pageNum = parseInt(page) || 1;
-        const limitNum = parseInt(limit) || 100;
-        const startIndex = (pageNum - 1) * limitNum;
-        const endIndex = startIndex + limitNum;
-        
-        hasMore = endIndex < total;
-        fileDetails = fileDetails.slice(startIndex, endIndex);
-      }
-
+      // Note: No pagination when not using indexer
       res.json({
         files: fileDetails,
-        total: total,
-        hasMore: hasMore
+        total: fileDetails.length,
+        hasMore: false
       });
     }
   } catch (error) {
@@ -1035,6 +1021,27 @@ app.post('/api/upload', writePermissionMiddleware, (req, res) => {
       mimetype: file.mimetype
     }));
 
+    // Update indexer if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      try {
+        // Prepare files for indexer in the required format
+        const filesForIndex = uploadedFiles.map(file => ({
+          name: file.name,
+          path: file.path,
+          size: file.size,
+          mtime: new Date().toISOString(),
+          mimeType: file.mimetype,
+          isDirectory: false
+        }));
+        
+        // Add files to the index
+        indexer.saveFileBatch(filesForIndex);
+        console.log(`Added ${filesForIndex.length} uploaded files to the index`);
+      } catch (error) {
+        console.error('Error updating index with uploaded files:', error);
+      }
+    }
+
     res.status(200).json({
       message: 'Files uploaded successfully',
       files: uploadedFiles
@@ -1132,6 +1139,56 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
       };
     });
 
+    // Update indexer if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      try {
+        // Prepare files for indexer in the required format
+        const filesForIndex = uploadedFiles.map(file => ({
+          name: file.name,
+          path: file.path,
+          size: file.size,
+          mtime: new Date().toISOString(),
+          mimeType: file.mimetype,
+          isDirectory: false
+        }));
+        
+        // We also need to add created directories to the index
+        const createdDirs = new Set();
+        uploadedFiles.forEach(file => {
+          const filePath = file.path;
+          const dirPath = path.dirname(filePath);
+          
+          if (dirPath !== '.' && dirPath !== '' && !createdDirs.has(dirPath)) {
+            // Collect all parent directories
+            let currentDir = dirPath;
+            while (currentDir !== '.' && currentDir !== '') {
+              createdDirs.add(currentDir);
+              currentDir = path.dirname(currentDir);
+            }
+          }
+        });
+        
+        // Add directories to the index files
+        createdDirs.forEach(dirPath => {
+          const dirName = path.basename(dirPath);
+          filesForIndex.push({
+            name: dirName,
+            path: dirPath,
+            size: 0, // Directories have no size
+            mtime: new Date().toISOString(),
+            mimeType: 'directory',
+            isDirectory: true
+          });
+        });
+        
+        // Add files to the index
+        indexer.saveFileBatch(filesForIndex);
+        console.log(`Added ${filesForIndex.length} uploaded files and directories to the index`);
+      } catch (error) {
+        console.error('Error updating index with uploaded files:', error);
+      }
+    }
+
     res.status(200).json({
       message: 'Files and folders uploaded successfully',
       files: uploadedFiles
@@ -1150,13 +1207,35 @@ app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
 
   try {
     fs.mkdirSync(fullPath, { recursive: true });
+    
+    // Update indexer if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      try {
+        const stats = fs.statSync(fullPath);
+        const relativePath = path.join(dirPath, dirName).replace(/\\/g, '/');
+        
+        // Add directory to the index
+        indexer.saveFileBatch([{
+          name: dirName,
+          path: relativePath,
+          size: stats.size,
+          mtime: stats.mtime.toISOString(),
+          mimeType: 'directory',
+          isDirectory: true
+        }]);
+        console.log(`Added new directory "${relativePath}" to the index`);
+      } catch (error) {
+        console.error('Error updating index with new directory:', error);
+      }
+    }
+    
     res.status(200).json({ message: 'Directory created successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 })
 
-app.post('/api/rename', writePermissionMiddleware, (req, res) => {
+app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
   const { path: filePath, newName } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, filePath);
@@ -1167,7 +1246,103 @@ app.post('/api/rename', writePermissionMiddleware, (req, res) => {
   }
 
   try {
+    // Get stats before renaming to determine if it's a directory
+    const stats = fs.existsSync(fullPath) ? fs.statSync(fullPath) : null;
+    const isDirectory = stats ? stats.isDirectory() : false;
+    
     fs.renameSync(fullPath, newPath);
+    
+    // Update indexer if enabled
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      try {
+        // Delete the old entry
+        indexer.deleteFromIndex(filePath);
+        
+        if (isDirectory) {
+          // For directories, we need to update all child paths too
+          // This is handled by the deleteFromIndex function already
+          
+          // Now add the new directory
+          const newStats = fs.statSync(newPath);
+          indexer.saveFileBatch([{
+            name: path.basename(newName),
+            path: newName,
+            size: newStats.size,
+            mtime: newStats.mtime.toISOString(),
+            mimeType: 'directory',
+            isDirectory: true
+          }]);
+          
+          // Reindex the directory contents with updated paths
+          const reindexDirectory = async (dirPath, baseDirPath) => {
+            try {
+              const entries = fs.readdirSync(dirPath);
+              const fileBatch = [];
+              
+              for (const entry of entries) {
+                const entryPath = path.join(dirPath, entry);
+                const entryStats = fs.statSync(entryPath);
+                const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
+                
+                if (entryStats.isDirectory()) {
+                  // Add directory entry
+                  fileBatch.push({
+                    name: entry,
+                    path: relativePath,
+                    size: entryStats.size,
+                    mtime: entryStats.mtime.toISOString(),
+                    mimeType: 'directory',
+                    isDirectory: true
+                  });
+                  
+                  // Recursively process subdirectories
+                  await reindexDirectory(entryPath, baseDirPath);
+                } else {
+                  // Add file entry
+                  const mimeType = await utils.getFileType(entryPath);
+                  fileBatch.push({
+                    name: entry,
+                    path: relativePath,
+                    size: entryStats.size,
+                    mtime: entryStats.mtime.toISOString(),
+                    mimeType: mimeType,
+                    isDirectory: false
+                  });
+                }
+              }
+              
+              // Save batch of files/directories to the index
+              if (fileBatch.length > 0) {
+                indexer.saveFileBatch(fileBatch);
+              }
+            } catch (error) {
+              console.error(`Error reindexing directory ${dirPath}:`, error);
+            }
+          };
+          
+          // Start reindexing the moved directory
+          await reindexDirectory(newPath, basePath);
+        } else {
+          // For files, just add the new entry
+          const newStats = fs.statSync(newPath);
+          const mimeType = await utils.getFileType(newPath);
+          
+          indexer.saveFileBatch([{
+            name: path.basename(newName),
+            path: newName,
+            size: newStats.size,
+            mtime: newStats.mtime.toISOString(),
+            mimeType: mimeType,
+            isDirectory: false
+          }]);
+        }
+        
+        console.log(`Updated index for renamed item from "${filePath}" to "${newName}"`);
+      } catch (error) {
+        console.error('Error updating index after rename:', error);
+      }
+    }
+    
     res.status(200).json({ message: 'File renamed successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1189,52 +1364,79 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (fs.statSync(fullPath).isDirectory()) {
-      try {
+    try {
+      const isDirectory = fs.statSync(fullPath).isDirectory();
+      
+      if (isDirectory) {
         const success = utils.safeDeleteDirectory(fullPath);
+        
+        // Update indexer if enabled
+        if (config.useFileIndex && indexer.isIndexBuilt()) {
+          indexer.deleteFromIndex(filePath);
+          console.log(`Removed directory "${filePath}" from index`);
+        }
+        
         if (success) {
           res.status(200).json({ message: 'Directory deleted successfully' });
         } else {
           res.status(500).json({ error: 'Failed to completely delete directory' });
         }
-      } catch (error) {
-        res.status(500).json({ error: error.message });
+      } else {
+        fs.unlinkSync(fullPath);
+        
+        // Update indexer if enabled
+        if (config.useFileIndex && indexer.isIndexBuilt()) {
+          indexer.deleteFromIndex(filePath);
+          console.log(`Removed file "${filePath}" from index`);
+        }
+        
+        res.status(200).json({ message: 'File deleted successfully' });
       }
-      return;
-    }
-
-    try {
-      fs.unlinkSync(fullPath);
-      res.status(200).json({ message: 'File deleted successfully' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
+    return;
   } else {
     const basePath = path.resolve(config.baseDirectory);
     const fullPaths = filePaths.split('|').map(p => path.join(basePath, p.trim()));
+    const relativePaths = filePaths.split('|').map(p => p.trim());
 
-    for (const fullPath of fullPaths) {
+    for (let i = 0; i < fullPaths.length; i++) {
+      const fullPath = fullPaths[i];
+      const relativePath = relativePaths[i];
+      
       if (!fullPath.startsWith(basePath)) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      if (fs.statSync(fullPath).isDirectory()) {
-        try {
+      try {
+        const isDirectory = fs.statSync(fullPath).isDirectory();
+        
+        if (isDirectory) {
           const success = utils.safeDeleteDirectory(fullPath);
           if (!success) {
             return res.status(500).json({ error: 'Failed to completely delete directory' });
           }
-        } catch (error) {
-          return res.status(500).json({ error: error.message });
+          
+          // Update indexer if enabled
+          if (config.useFileIndex && indexer.isIndexBuilt()) {
+            indexer.deleteFromIndex(relativePath);
+          }
+        } else {
+          fs.unlinkSync(fullPath);
+          
+          // Update indexer if enabled
+          if (config.useFileIndex && indexer.isIndexBuilt()) {
+            indexer.deleteFromIndex(relativePath);
+          }
         }
-        continue;
-      }
-
-      try {
-        fs.unlinkSync(fullPath);
       } catch (error) {
-        res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message });
       }
+    }
+    
+    if (config.useFileIndex && indexer.isIndexBuilt()) {
+      console.log(`Removed ${fullPaths.length} items from index`);
     }
 
     res.status(200).json({ message: 'Files deleted successfully' });
@@ -1254,7 +1456,23 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
     const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
+      
+      // Add new directory to index if it didn't exist before
+      if (config.useFileIndex && indexer.isIndexBuilt()) {
+        const destStats = fs.statSync(destDir);
+        indexer.saveFileBatch([{
+          name: path.basename(destination),
+          path: destination,
+          size: destStats.size,
+          mtime: destStats.mtime.toISOString(),
+          mimeType: 'directory',
+          isDirectory: true
+        }]);
+      }
     }
+
+    // Collect all files to be indexed after cloning
+    const filesToIndex = [];
 
     for (const source of sources) {
       const sourcePath = path.join(basePath, source);
@@ -1272,15 +1490,67 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
         }
 
         const stats = fs.statSync(sourcePath);
+        const relativeDest = path.relative(basePath, destPath).replace(/\\/g, '/');
+        
         if (stats.isDirectory()) {
           copyFolderRecursiveSync(sourcePath, destPath);
+          
+          // For indexing, we need to collect all files in the directory
+          if (config.useFileIndex && indexer.isIndexBuilt()) {
+            // First add the directory itself
+            filesToIndex.push({
+              name: path.basename(source),
+              path: relativeDest,
+              size: stats.size,
+              mtime: new Date().toISOString(),
+              mimeType: 'directory',
+              isDirectory: true
+            });
+            
+            // Schedule the directory content for indexing
+            setTimeout(() => {
+              indexDirectoryRecursively(destPath, basePath)
+                .then(indexedCount => {
+                  console.log(`Indexed ${indexedCount} items from cloned directory ${relativeDest}`);
+                })
+                .catch(err => {
+                  console.error(`Error indexing cloned directory ${relativeDest}:`, err);
+                });
+            }, 0);
+          }
         } else {
           fs.copyFileSync(sourcePath, destPath);
+          
+          // Add file to index
+          if (config.useFileIndex && indexer.isIndexBuilt()) {
+            const newStats = fs.statSync(destPath);
+            // Get file type asynchronously but don't wait for it, add to index after
+            utils.getFileType(destPath)
+              .then(mimeType => {
+                indexer.saveFileBatch([{
+                  name: path.basename(source),
+                  path: relativeDest,
+                  size: newStats.size,
+                  mtime: newStats.mtime.toISOString(),
+                  mimeType: mimeType,
+                  isDirectory: false
+                }]);
+              })
+              .catch(err => {
+                console.error(`Error getting file type for ${destPath}:`, err);
+              });
+          }
         }
         results.push({ source, status: 'success', destination: path.relative(basePath, destPath) });
       } catch (error) {
         results.push({ source, status: 'failed', error: error.message });
       }
+    }
+
+    // Add non-directory files to index in a batch
+    if (config.useFileIndex && indexer.isIndexBuilt() && filesToIndex.length > 0) {
+      indexer.saveFileBatch(filesToIndex);
+      console.log(`Added ${filesToIndex.length} cloned items to the index`);
     }
 
     res.json({ results });
@@ -1294,7 +1564,6 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
   const basePath = path.resolve(config.baseDirectory);
 
   if (!sources || !Array.isArray(sources) || sources.length === 0) {
-    console
     return res.status(400).json({ error: 'No sources provided' });
   }
 
@@ -1303,6 +1572,19 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
     const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
+      
+      // Add new directory to index if it didn't exist before
+      if (config.useFileIndex && indexer.isIndexBuilt()) {
+        const destStats = fs.statSync(destDir);
+        indexer.saveFileBatch([{
+          name: path.basename(destination),
+          path: destination,
+          size: destStats.size,
+          mtime: destStats.mtime.toISOString(),
+          mimeType: 'directory',
+          isDirectory: true
+        }]);
+      }
     }
 
     for (const source of sources) {
@@ -1320,7 +1602,63 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
           continue;
         }
 
+        // Check if it's a directory before moving for indexer update
+        const isDirectory = fs.statSync(sourcePath).isDirectory();
+        const relativeDest = path.relative(basePath, destPath).replace(/\\/g, '/');
+        
         fs.renameSync(sourcePath, destPath);
+        
+        // Update index if enabled
+        if (config.useFileIndex && indexer.isIndexBuilt()) {
+          try {
+            // Delete the old entry (and all its children if it's a directory)
+            indexer.deleteFromIndex(source);
+            
+            if (isDirectory) {
+              // Add the moved directory
+              const newStats = fs.statSync(destPath);
+              indexer.saveFileBatch([{
+                name: path.basename(source),
+                path: relativeDest,
+                size: newStats.size,
+                mtime: newStats.mtime.toISOString(),
+                mimeType: 'directory',
+                isDirectory: true
+              }]);
+              
+              // Schedule directory reindexing
+              setTimeout(() => {
+                indexDirectoryRecursively(destPath, basePath)
+                  .then(indexedCount => {
+                    console.log(`Indexed ${indexedCount} items from moved directory ${relativeDest}`);
+                  })
+                  .catch(err => {
+                    console.error(`Error indexing moved directory ${relativeDest}:`, err);
+                  });
+              }, 0);
+            } else {
+              // Add the moved file
+              const newStats = fs.statSync(destPath);
+              utils.getFileType(destPath)
+                .then(mimeType => {
+                  indexer.saveFileBatch([{
+                    name: path.basename(source),
+                    path: relativeDest,
+                    size: newStats.size,
+                    mtime: newStats.mtime.toISOString(),
+                    mimeType: mimeType,
+                    isDirectory: false
+                  }]);
+                })
+                .catch(err => {
+                  console.error(`Error getting file type for ${destPath}:`, err);
+                });
+            }
+          } catch (error) {
+            console.error(`Error updating index for moved item ${source}:`, error);
+          }
+        }
+        
         results.push({ source, status: 'success', destination: path.relative(basePath, destPath) });
       } catch (error) {
         results.push({ source, status: 'failed', error: error.message });
@@ -1332,6 +1670,71 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+async function indexDirectoryRecursively(dirPath, basePath) {
+  if (!config.useFileIndex || !indexer.isIndexBuilt()) return 0;
+  
+  try {
+    const fileBatch = [];
+    const stack = [dirPath];
+    let indexedCount = 0;
+    
+    while (stack.length > 0) {
+      const currentDir = stack.pop();
+      const entries = fs.readdirSync(currentDir);
+      
+      for (const entry of entries) {
+        const entryPath = path.join(currentDir, entry);
+        const entryStats = fs.statSync(entryPath);
+        const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
+        
+        if (entryStats.isDirectory()) {
+          // Add directory to batch
+          fileBatch.push({
+            name: entry,
+            path: relativePath,
+            size: entryStats.size,
+            mtime: entryStats.mtime.toISOString(),
+            mimeType: 'directory',
+            isDirectory: true
+          });
+          
+          // Add to stack for processing
+          stack.push(entryPath);
+        } else {
+          // Get file type and add to batch
+          const mimeType = await utils.getFileType(entryPath);
+          fileBatch.push({
+            name: entry,
+            path: relativePath,
+            size: entryStats.size,
+            mtime: entryStats.mtime.toISOString(),
+            mimeType: mimeType,
+            isDirectory: false
+          });
+        }
+        
+        indexedCount++;
+        
+        // Save batch when it reaches a reasonable size
+        if (fileBatch.length >= 100) {
+          indexer.saveFileBatch(fileBatch);
+          fileBatch.length = 0;
+        }
+      }
+    }
+    
+    // Save any remaining files
+    if (fileBatch.length > 0) {
+      indexer.saveFileBatch(fileBatch);
+    }
+    
+    return indexedCount;
+  } catch (error) {
+    console.error(`Error indexing directory ${dirPath}:`, error);
+    return 0;
+  }
+}
 
 app.get('/api/index-status', (req, res) => {
   if (!config.useFileIndex) {

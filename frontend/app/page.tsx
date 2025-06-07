@@ -662,7 +662,6 @@ function FileExplorerContent() {
   // Buffer to trigger next page load before reaching the end
   const SCROLL_BUFFER = 10;
 
-
   // isChangingPath will be true when navigateTo is called or the browser uses the forward/backward logic,
   // and false when the searchQuery or currentPath triggers the useEffect.
   // **Purpose**: Prevent the operation of canceling ImageOnlyMode from triggering an extra data fetch before the path change.
@@ -672,7 +671,6 @@ function FileExplorerContent() {
   const { data: filesExplorerData, isLoading: isLoadingData, error: errorData, refetch: refetchData, isRefetching: isRefetchingData } = useQuery({
     queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination, sortBy, sortOrder],
     queryFn: async () => {
-
       if (!isAuthenticated) {
         return { files: [], hasMore: false, total: 0 };
       }
@@ -769,17 +767,18 @@ function FileExplorerContent() {
   }, [filesExplorerData, isRefetchingData, page, currentPath, searchQuery]);
 
   useEffect(() => {
-    if (isUpdatingAccumulated) {
+    if (isUpdatingAccumulated && !isLoadingData && !isRefetchingData) {
       setIsUpdatingAccumulated(false);
     }
-  }, [accumulatedFiles, isUpdatingAccumulated])
+  }, [accumulatedFiles, isUpdatingAccumulated, isLoadingData, isRefetchingData])
 
-  const _isLoading = isLoadingData || isUpdatingAccumulated;
+  const _isLoading = isLoadingData || isRefetchingData || isUpdatingAccumulated || isChangingPath;
   const isLoading = showLoadingIndicator && _isLoading;
   const isError = errorData;
   const isNotFound = !_isLoading && !isError && totalFiles === 0;
 
-  console.log({ isLoading, _isLoading, isLoadingData, isUpdatingAccumulated })
+  // console.log({ isLoading, _isLoading, isLoadingData, isUpdatingAccumulated, accumulatedFiles, totalFiles })
+  // console.log({ isLoading, _isLoading, isImageOnlyMode, isChangingPath, accumulatedFiles, totalFiles })
 
   // Add a delay before showing loading indicator
   useEffect(() => {
@@ -2440,7 +2439,7 @@ function FileExplorerContent() {
 
         <div className={cn(
           "absolute inset-0 backdrop-blur-xs hover:backdrop-blur-sm transition-all duration-300 rounded-md",
-          (!isAuthenticated || isLoading || isError || isNotFound) && "opacity-0"
+          (!isAuthenticated || _isLoading || isError || isNotFound) && "opacity-0"
         )}>
           {viewMode === 'list' && (
             <AutoSizer>
