@@ -528,7 +528,7 @@ function FileExplorerContent() {
 
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
-  
+
   useEffect(() => {
     if (!isAuthenticated && !isCheckingAuth) {
       setIsLoginDialogOpen(true);
@@ -1819,13 +1819,16 @@ function FileExplorerContent() {
     }
   }, [isImageOnlyMode, useMasonry, viewMode, isLoadingMore, hasMoreFiles, loadNextPage]);
 
-  // close preview when currentPath or searchQuery changes
+  // close preview when currentPath
   useEffect(() => {
     closePreview();
-    setIsChangingPath(false);
   }, [currentPath, searchQuery])
 
-
+  useEffect(() => {
+    if (isChangingPath) {
+      setIsChangingPath(false);
+    }
+  }, [currentPath, searchQuery, isChangingPath])
 
   const renderList = useCallback(({ height, width }: { height: number; width: number }) => (
     <List
@@ -2003,9 +2006,9 @@ function FileExplorerContent() {
     console.log('handleDragEnter');
     e.preventDefault();
     e.stopPropagation();
-    
+
     dragCounterRef.current++;
-    
+
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       setIsDragging(true);
     }
@@ -2015,9 +2018,9 @@ function FileExplorerContent() {
     console.log('handleDragLeave');
     e.preventDefault();
     e.stopPropagation();
-    
+
     dragCounterRef.current--;
-    
+
     if (dragCounterRef.current === 0) {
       setIsDragging(false);
     }
@@ -2033,14 +2036,14 @@ function FileExplorerContent() {
     console.log('handleDrop');
     e.preventDefault();
     e.stopPropagation();
-    
+
     setIsDragging(false);
     dragCounterRef.current = 0;
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const items = e.dataTransfer.items;
       let containsFolder = false;
-      
+
       if (items) {
         for (let i = 0; i < items.length; i++) {
           const item = items[i].webkitGetAsEntry?.();
@@ -2050,7 +2053,7 @@ function FileExplorerContent() {
           }
         }
       }
-      
+
       const uploadList = Array.from(e.dataTransfer.files).map(file => ({
         id: generateUniqueId(),
         name: file.name,
@@ -2059,40 +2062,40 @@ function FileExplorerContent() {
         status: 'pending' as const,
         file: file
       }));
-      
+
       setUploadFiles(uploadList);
       setShowUploadDialog(true);
-      
+
       uploadList.forEach(async (fileData) => {
         const xhr = new XMLHttpRequest();
-        
+
         xhrRefsRef.current.set(fileData.id, xhr);
-        
+
         const formData = new FormData();
         formData.append('files', fileData.file);
-        
+
         setUploadFiles(prev => prev.map(f =>
           f.id === fileData.id ? { ...f, status: 'uploading' } : f
         ));
-        
+
         xhr.upload.addEventListener('progress', (event) => {
           if (event.lengthComputable) {
             const progress = Math.round((event.loaded / event.total) * 100);
-            
+
             setUploadFiles(prev => prev.map(f =>
               f.id === fileData.id ? { ...f, progress } : f
             ));
           }
         });
-        
+
         xhr.addEventListener('load', () => {
           xhrRefsRef.current.delete(fileData.id);
-          
+
           if (xhr.status >= 200 && xhr.status < 300) {
             setUploadFiles(prev => prev.map(f =>
               f.id === fileData.id ? { ...f, progress: 100, status: 'completed' } : f
             ));
-            
+
             refetchData();
           } else {
             setUploadFiles(prev => prev.map(f =>
@@ -2104,10 +2107,10 @@ function FileExplorerContent() {
             ));
           }
         });
-        
+
         xhr.addEventListener('error', () => {
           xhrRefsRef.current.delete(fileData.id);
-          
+
           setUploadFiles(prev => prev.map(f =>
             f.id === fileData.id ? {
               ...f,
@@ -2116,10 +2119,10 @@ function FileExplorerContent() {
             } : f
           ));
         });
-        
+
         xhr.addEventListener('abort', () => {
           xhrRefsRef.current.delete(fileData.id);
-          
+
           setUploadFiles(prev => prev.map(f =>
             f.id === fileData.id ? {
               ...f,
@@ -2128,11 +2131,11 @@ function FileExplorerContent() {
             } : f
           ));
         });
-        
-        const endpoint = containsFolder 
+
+        const endpoint = containsFolder
           ? `/api/upload-folder?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`
           : `/api/upload?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`;
-          
+
         xhr.open('POST', endpoint);
         xhr.send(formData);
       });

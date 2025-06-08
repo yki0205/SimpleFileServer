@@ -100,6 +100,9 @@ export const DirectionMenu = forwardRef<DirectionMenuHandle, DirectionMenuProps>
     if (!isVisible && visibleTimeoutRef.current) {
       clearTimeout(visibleTimeoutRef.current);
       visibleTimeoutRef.current = null;
+      setIsVisible(false);
+      updateSelectedDirection(null);
+      isMouseDown.current = false;
       return;
     }
 
@@ -118,6 +121,8 @@ export const DirectionMenu = forwardRef<DirectionMenuHandle, DirectionMenuProps>
           break;
         case 'bottom':
           onBottomAction();
+          break;
+        default:
           break;
       }
     }
