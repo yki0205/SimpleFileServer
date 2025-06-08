@@ -16,11 +16,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  List as ListIcon, Grid3x3, Image as ImageIcon, Search, ArrowLeft, ArrowUp, Home, X,
+  List as ListIcon, Grid3x3 as Grid3x3Icon, Image as ImageIcon, Search, ArrowLeft, ArrowUp,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
   CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck,
-  Loader2, Square
+  Loader2, Square, Home, X, Menu
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -32,6 +32,7 @@ import {
   ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog,
   IndexSettingsDialog, WatcherSettingsDialog, LoginDialog, InputDialog
 } from "@/components/dialog";
+import { DirectionMenu, DirectionMenuHint } from "@/components/menu";
 
 import { useAuth } from '@/context/auth-context';
 
@@ -540,6 +541,7 @@ function FileExplorerContent() {
   const canGoBack = currentPath !== '' || isSearching;
 
   const [useBlur, setUseBlur] = useState(true);
+  const [useDirectionMenu, setUseDirectionMenu] = useState(true);
 
   const [isImageOnlyMode, setIsImageOnlyModeTemp] = useState(false);
   const setIsImageOnlyMode = (mode: boolean) => {
@@ -664,6 +666,8 @@ function FileExplorerContent() {
   // Buffer to trigger next page load before reaching the end
   const SCROLL_BUFFER = 10;
 
+  const [recursiveSearch, setRecursiveSearch] = useState(true);
+
   // isChangingPath will be true when navigateTo is called or the browser uses the forward/backward logic,
   // and false when the searchQuery or currentPath triggers the useEffect.
   // **Purpose**: Prevent the operation of canceling ImageOnlyMode from triggering an extra data fetch before the path change.
@@ -671,7 +675,7 @@ function FileExplorerContent() {
 
 
   const { data: filesExplorerData, isLoading: isLoadingData, error: errorData, refetch: refetchData, isRefetching: isRefetchingData } = useQuery({
-    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination, sortBy, sortOrder],
+    queryKey: ['fileExplorer', currentPath, searchQuery, isImageOnlyMode, page, showDirectoryCovers, usePagination, sortBy, sortOrder, recursiveSearch],
     queryFn: async () => {
       if (!isAuthenticated) {
         return { files: [], hasMore: false, total: 0 };
@@ -690,12 +694,14 @@ function FileExplorerContent() {
             page: page,
             limit: PAGE_SIZE,
             sortBy,
-            sortOrder
+            sortOrder,
+            recursive: recursiveSearch ? 'true' : 'false'
           } : {
             query: searchQuery,
             dir: currentPath,
             sortBy,
-            sortOrder
+            sortOrder,
+            recursive: recursiveSearch ? 'true' : 'false'
           }
         });
         return {
@@ -711,11 +717,13 @@ function FileExplorerContent() {
             page: page,
             limit: PAGE_SIZE,
             sortBy,
-            sortOrder
+            sortOrder,
+            recursive: recursiveSearch ? 'true' : 'false'
           } : {
             dir: currentPath,
             sortBy,
-            sortOrder
+            sortOrder,
+            recursive: recursiveSearch ? 'true' : 'false'
           }
         });
         return {
@@ -2017,14 +2025,16 @@ function FileExplorerContent() {
   }
 
   return (
-    <div style={{
-      backgroundColor: '#3c3c3c',
-      backgroundImage: `url(${bgImage})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-      backgroundAttachment: 'fixed',
-    }}
+    <div
+      style={{
+        backgroundColor: '#3c3c3c',
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+      }}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
         <header className="flex flex-col md:flex-row gap-1">
@@ -2224,7 +2234,7 @@ function FileExplorerContent() {
                 onClick={() => setViewMode('grid')}
                 className="max-sm:hidden"
               >
-                <Grid3x3 size={18} />
+                <Grid3x3Icon size={18} />
               </Button>
               <Button
                 variant={viewMode === 'image' ? 'default' : 'outline'}
@@ -2296,7 +2306,7 @@ function FileExplorerContent() {
                       <ListIcon size={18} /> List View
                     </Button>
                     <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
-                      <Grid3x3 size={18} /> Grid View
+                      <Grid3x3Icon size={18} /> Grid View
                     </Button>
                     <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
                       <ImageIcon size={18} /> Image View
@@ -2339,6 +2349,12 @@ function FileExplorerContent() {
                     </Button>
                     <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseBlur(!useBlur)}>
                       <Square size={18} /> {useBlur ? 'Disable Blur' : 'Enable Blur'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseDirectionMenu(!useDirectionMenu)}>
+                      <Menu size={18} /> {useDirectionMenu ? 'Disable Direction Menu' : 'Enable Direction Menu'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setRecursiveSearch(!recursiveSearch)}>
+                      <Search size={18} /> {recursiveSearch ? 'Disable Recursive Search' : 'Enable Recursive Search'}
                     </Button>
                     {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
                     <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
@@ -2848,6 +2864,40 @@ function FileExplorerContent() {
           onCancel={handleMkdirCancel}
         />
       </main>
+
+      {/* Direction Menu for view mode selection */}
+      <DirectionMenu
+        topNode={
+          <div className="flex flex-col items-center">
+            <Grid3x3Icon size={24} />
+            <span className="text-xs mt-1">Grid</span>
+          </div>
+        }
+        rightNode={
+          <div className="flex flex-col items-center">
+            <ImageIcon size={24} />
+            <span className="text-xs mt-1">Image</span>
+          </div>
+        }
+        bottomNode={
+          <div className="flex flex-col items-center">
+            <ImageIcon size={24} className={isImageOnlyMode ? 'text-yellow-500' : ''} />
+            <span className="text-xs mt-1">Image Only</span>
+          </div>
+        }
+        leftNode={
+          <div className="flex flex-col items-center">
+            <ListIcon size={24} />
+            <span className="text-xs mt-1">List</span>
+          </div>
+        }
+        onTopAction={() => setViewMode('grid')}
+        onRightAction={() => setViewMode('image')}
+        onBottomAction={() => setIsImageOnlyMode(!isImageOnlyMode)}
+        onLeftAction={() => setViewMode('list')}
+        centerLabel="View"
+      />
+      {/* <DirectionMenuHint /> */}
     </div>
   );
 }

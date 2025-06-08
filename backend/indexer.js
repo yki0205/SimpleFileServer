@@ -52,6 +52,20 @@ const SQL = {
   WHERE (name LIKE ? OR path LIKE ?) 
   AND (? = '%' OR path LIKE ?)
   `,
+  SEARCH_FILES_NON_RECURSIVE: `
+  SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE (name LIKE ? OR path LIKE ?) 
+  AND (? = '%' OR path LIKE ?)
+  AND (? IS NULL OR path NOT LIKE ?)
+  `,
+  SEARCH_FILES_COUNT_NON_RECURSIVE: `
+  SELECT COUNT(*) as count 
+  FROM files 
+  WHERE (name LIKE ? OR path LIKE ?) 
+  AND (? = '%' OR path LIKE ?) 
+  AND (? IS NULL OR path NOT LIKE ?)
+  `,
   FIND_IMAGES: `
   SELECT name, path, size, mtime, mimeType, isDirectory 
   FROM files 
@@ -63,6 +77,20 @@ const SQL = {
   FROM files 
   WHERE mimeType LIKE 'image/%'
   AND (? = '%' OR path LIKE ?)
+  `,
+  FIND_IMAGES_NON_RECURSIVE: `
+  SELECT name, path, size, mtime, mimeType, isDirectory 
+  FROM files 
+  WHERE mimeType LIKE 'image/%'
+  AND (? = '%' OR path LIKE ?)
+  AND (? IS NULL OR path NOT LIKE ?)
+  `,
+  FIND_IMAGES_COUNT_NON_RECURSIVE: `
+  SELECT COUNT(*) as count 
+  FROM files 
+  WHERE mimeType LIKE 'image/%'
+  AND (? = '%' OR path LIKE ?)
+  AND (? IS NULL OR path NOT LIKE ?)
   `,
   GET_RANDOM_IMAGE: `
   SELECT name, path, size, mtime, mimeType, isDirectory
@@ -270,16 +298,43 @@ function deleteFromIndex(filePath) {
 }
 
 
-function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOrder = 'asc') {
+function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOrder = 'asc', recursive = true) {
   if (!db) return { results: [], total: 0, hasMore: false };
   
   try {
     const searchTerm = `%${query}%`;
-    const dirPath = directory ? `${directory}%` : '%';
+    let dirPath, excludePattern;
+    
+    if (recursive) {
+      // Recursive search - use existing behavior
+      dirPath = directory ? `${directory}%` : '%';
+      excludePattern = null; // No exclusion pattern for recursive search
+    } else {
+      // Non-recursive search - only search in the specified directory
+      if (directory === '') {
+        // Root directory: match paths without slashes (top-level files and folders)
+        dirPath = '%';
+        excludePattern = '%/%'; // exclude paths with slashes (subdirectory contents)
+      } else {
+        // Subdirectory: match direct subfiles and subfolders
+        const normalizedPath = directory.endsWith('/') ? directory : `${directory}/`;
+        dirPath = `${normalizedPath}%`;
+        excludePattern = `${normalizedPath}%/%`; // exclude deeper paths
+      }
+    }
+    
+    // Prepare the SQL count query based on recursive flag
+    let countSql, countParams;
+    if (recursive) {
+      countSql = SQL.SEARCH_FILES_COUNT;
+      countParams = [searchTerm, searchTerm, dirPath, dirPath];
+    } else {
+      countSql = SQL.SEARCH_FILES_COUNT_NON_RECURSIVE;
+      countParams = [searchTerm, searchTerm, dirPath, dirPath, excludePattern, excludePattern];
+    }
     
     // Get total count for pagination info
-    const totalCount = db.prepare(SQL.SEARCH_FILES_COUNT)
-      .get(searchTerm, searchTerm, dirPath, dirPath).count;
+    const totalCount = db.prepare(countSql).get(...countParams).count;
     
     let results;
     let hasMore = false;
@@ -293,8 +348,13 @@ function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOr
       // Calculate offset
       const offset = (pageNum - 1) * limitNum;
       
-      // Paginated query with sorting
-      let paginatedQuery = `${SQL.SEARCH_FILES} `;
+      // Prepare the paginated query based on recursive flag
+      let paginatedQuery;
+      if (recursive) {
+        paginatedQuery = `${SQL.SEARCH_FILES} `;
+      } else {
+        paginatedQuery = `${SQL.SEARCH_FILES_NON_RECURSIVE} `;
+      }
       
       // Add ordering based on sortBy and sortOrder parameters
       paginatedQuery += getOrderByClause(sortBy, sortOrder);
@@ -302,20 +362,35 @@ function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOr
       // Add pagination
       paginatedQuery += ` LIMIT ? OFFSET ?`;
       
-      results = db.prepare(paginatedQuery)
-        .all(searchTerm, searchTerm, dirPath, dirPath, limitNum, offset);
+      if (recursive) {
+        results = db.prepare(paginatedQuery)
+          .all(searchTerm, searchTerm, dirPath, dirPath, limitNum, offset);
+      } else {
+        results = db.prepare(paginatedQuery)
+          .all(searchTerm, searchTerm, dirPath, dirPath, excludePattern, excludePattern, limitNum, offset);
+      }
       
       // Check if there are more results
       hasMore = offset + results.length < totalCount;
     } else {
       // Backward compatibility: return all results if no pagination specified
-      let fullQuery = `${SQL.SEARCH_FILES} `;
+      let fullQuery;
+      if (recursive) {
+        fullQuery = `${SQL.SEARCH_FILES} `;
+      } else {
+        fullQuery = `${SQL.SEARCH_FILES_NON_RECURSIVE} `;
+      }
       
       // Add ordering based on sortBy and sortOrder parameters
       fullQuery += getOrderByClause(sortBy, sortOrder);
       
-      results = db.prepare(fullQuery)
-        .all(searchTerm, searchTerm, dirPath, dirPath);
+      if (recursive) {
+        results = db.prepare(fullQuery)
+          .all(searchTerm, searchTerm, dirPath, dirPath);
+      } else {
+        results = db.prepare(fullQuery)
+          .all(searchTerm, searchTerm, dirPath, dirPath, excludePattern, excludePattern);
+      }
     }
     
     return {
@@ -332,15 +407,42 @@ function searchIndex(query, directory = '', page, limit, sortBy = 'name', sortOr
   }
 }
 
-function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrder = 'asc') {
+function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrder = 'asc', recursive = true) {
   if (!db) return { images: [], total: 0, hasMore: false };
   
   try {
-    const dirPath = directory ? `${directory}%` : '%';
+    let dirPath, excludePattern;
+    
+    if (recursive) {
+      // Recursive search - use existing behavior
+      dirPath = directory ? `${directory}%` : '%';
+      excludePattern = null; // No exclusion pattern for recursive search
+    } else {
+      // Non-recursive search - only search in the specified directory
+      if (directory === '') {
+        // Root directory: match paths without slashes (top-level files and folders)
+        dirPath = '%';
+        excludePattern = '%/%'; // exclude paths with slashes (subdirectory contents)
+      } else {
+        // Subdirectory: match direct subfiles and subfolders
+        const normalizedPath = directory.endsWith('/') ? directory : `${directory}/`;
+        dirPath = `${normalizedPath}%`;
+        excludePattern = `${normalizedPath}%/%`; // exclude deeper paths
+      }
+    }
+    
+    // Prepare the SQL count query based on recursive flag
+    let countSql, countParams;
+    if (recursive) {
+      countSql = SQL.FIND_IMAGES_COUNT;
+      countParams = [dirPath, dirPath];
+    } else {
+      countSql = SQL.FIND_IMAGES_COUNT_NON_RECURSIVE;
+      countParams = [dirPath, dirPath, excludePattern, excludePattern];
+    }
     
     // Get total count for pagination info
-    const totalCount = db.prepare(SQL.FIND_IMAGES_COUNT)
-      .get(dirPath, dirPath).count;
+    const totalCount = db.prepare(countSql).get(...countParams).count;
     
     let results;
     let hasMore = false;
@@ -354,8 +456,13 @@ function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrd
       // Calculate offset
       const offset = (pageNum - 1) * limitNum;
       
-      // Paginated query with sorting
-      let paginatedQuery = `${SQL.FIND_IMAGES} `;
+      // Prepare the paginated query based on recursive flag
+      let paginatedQuery;
+      if (recursive) {
+        paginatedQuery = `${SQL.FIND_IMAGES} `;
+      } else {
+        paginatedQuery = `${SQL.FIND_IMAGES_NON_RECURSIVE} `;
+      }
       
       // Add ordering based on sortBy and sortOrder parameters
       if (sortBy === 'name') {
@@ -368,20 +475,35 @@ function findImagesInIndex(directory = '', page, limit, sortBy = 'name', sortOrd
       // Add pagination
       paginatedQuery += ` LIMIT ? OFFSET ?`;
       
-      results = db.prepare(paginatedQuery)
-        .all(dirPath, dirPath, limitNum, offset);
+      if (recursive) {
+        results = db.prepare(paginatedQuery)
+          .all(dirPath, dirPath, limitNum, offset);
+      } else {
+        results = db.prepare(paginatedQuery)
+          .all(dirPath, dirPath, excludePattern, excludePattern, limitNum, offset);
+      }
       
       // Check if there are more results
       hasMore = offset + results.length < totalCount;
     } else {
       // Backward compatibility: return all results if no pagination specified
-      let fullQuery = `${SQL.FIND_IMAGES} `;
+      let fullQuery;
+      if (recursive) {
+        fullQuery = `${SQL.FIND_IMAGES} `;
+      } else {
+        fullQuery = `${SQL.FIND_IMAGES_NON_RECURSIVE} `;
+      }
       
       // Add ordering based on sortBy and sortOrder parameters
       fullQuery += getOrderByClause(sortBy, sortOrder);
       
-      results = db.prepare(fullQuery)
-        .all(dirPath, dirPath);
+      if (recursive) {
+        results = db.prepare(fullQuery)
+          .all(dirPath, dirPath);
+      } else {
+        results = db.prepare(fullQuery)
+          .all(dirPath, dirPath, excludePattern, excludePattern);
+      }
     }
     
     return {

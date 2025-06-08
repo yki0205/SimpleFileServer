@@ -21,9 +21,5 @@
 
 加载协调问题：
 
-1. fetchData到accmulatedFiles的间隔
-2. imageOnlyMode启用时的闪烁
-
-# TODO
-
-- ~全局的右键菜单~（不再需要，放弃实现）
+1. ~fetchData到accmulatedFiles的间隔~（已修改，待测试）
+2. ~imageOnlyMode启用时的闪烁~（已修改，待测试）

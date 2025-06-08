@@ -355,11 +355,25 @@ app.get('/api/files', async (req, res) => {
       // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
       
-      // Note: No pagination when not using indexer
+      // Apply pagination
+      const total = fileDetails.length;
+      let hasMore = false;
+      let paginatedFiles = fileDetails;
+      
+      if (page !== undefined) {
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 100;
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        
+        hasMore = endIndex < total;
+        paginatedFiles = fileDetails.slice(startIndex, endIndex);
+      }
+      
       res.json({ 
-        files: fileDetails,
-        total: fileDetails.length,
-        hasMore: false
+        files: paginatedFiles,
+        total: total,
+        hasMore: hasMore
       });
 
     } else {
@@ -420,11 +434,25 @@ app.get('/api/files', async (req, res) => {
       // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
       
-      // Note: No pagination when not using indexer
+      // Apply pagination
+      const total = fileDetails.length;
+      let hasMore = false;
+      let paginatedFiles = fileDetails;
+      
+      if (page !== undefined) {
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 100;
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        
+        hasMore = endIndex < total;
+        paginatedFiles = fileDetails.slice(startIndex, endIndex);
+      }
+      
       res.json({
-        files: fileDetails,
-        total: fileDetails.length,
-        hasMore: false
+        files: paginatedFiles,
+        total: total,
+        hasMore: hasMore
       });
     }
   } catch (error) {
@@ -433,7 +461,7 @@ app.get('/api/files', async (req, res) => {
 });
 
 app.get('/api/search', (req, res) => {
-  const { query, dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc' } = req.query;
+  const { query, dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc', recursive = 'false' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -442,51 +470,87 @@ app.get('/api/search', (req, res) => {
   }
 
   try {
+    const isRecursive = recursive === 'true';
+    
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      // Call searchIndex with pagination and sorting parameters
-      const searchResult = indexer.searchIndex(query, dir, page, limit, sortBy, sortOrder);
+      const searchResult = indexer.searchIndex(query, dir, page, limit, sortBy, sortOrder, isRecursive);
       return res.json(searchResult);
     }
 
     // Otherwise, use real-time search
-    parallelSearch(searchPath, query, basePath)
-      .then(results => {
-        // Sort results before pagination
-        results = sortFiles(results, sortBy, sortOrder);
-        
-        // Apply pagination if specified
-        let hasMore = false;
-        let total = results.length;
-        let paginatedResults = results;
-        
-        if (page !== undefined) {
-          const pageNum = parseInt(page) || 1;
-          const limitNum = parseInt(limit) || 100;
-          const startIndex = (pageNum - 1) * limitNum;
-          const endIndex = startIndex + limitNum;
+    if (isRecursive) {
+      // Use existing recursive search implementation
+      parallelSearch(searchPath, query, basePath)
+        .then(results => {
+          // Sort results before pagination
+          results = sortFiles(results, sortBy, sortOrder);
           
-          hasMore = endIndex < total;
-          paginatedResults = results.slice(startIndex, endIndex);
-        }
-        
-        // Format response to match the structure of paginated results
-        res.json({ 
-          results: paginatedResults, 
-          total: total,
-          hasMore: hasMore
+          // Apply pagination if specified
+          let hasMore = false;
+          let total = results.length;
+          let paginatedResults = results;
+          
+          if (page !== undefined) {
+            const pageNum = parseInt(page) || 1;
+            const limitNum = parseInt(limit) || 100;
+            const startIndex = (pageNum - 1) * limitNum;
+            const endIndex = startIndex + limitNum;
+            
+            hasMore = endIndex < total;
+            paginatedResults = results.slice(startIndex, endIndex);
+          }
+          
+          // Format response to match the structure of paginated results
+          res.json({ 
+            results: paginatedResults, 
+            total: total,
+            hasMore: hasMore
+          });
+        })
+        .catch(error => {
+          res.status(500).json({ error: error.message });
         });
-      })
-      .catch(error => {
-        res.status(500).json({ error: error.message });
-      });
+    } else {
+      // Non-recursive search - only search in the current directory
+      searchFilesInDirectory(searchPath, query, basePath)
+        .then(results => {
+          // Sort results before pagination
+          results = sortFiles(results, sortBy, sortOrder);
+          
+          // Apply pagination if specified
+          let hasMore = false;
+          let total = results.length;
+          let paginatedResults = results;
+          
+          if (page !== undefined) {
+            const pageNum = parseInt(page) || 1;
+            const limitNum = parseInt(limit) || 100;
+            const startIndex = (pageNum - 1) * limitNum;
+            const endIndex = startIndex + limitNum;
+            
+            hasMore = endIndex < total;
+            paginatedResults = results.slice(startIndex, endIndex);
+          }
+          
+          // Format response to match the structure of paginated results
+          res.json({ 
+            results: paginatedResults, 
+            total: total,
+            hasMore: hasMore
+          });
+        })
+        .catch(error => {
+          res.status(500).json({ error: error.message });
+        });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
 });
 
 app.get('/api/images', (req, res) => {
-  const { dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc' } = req.query;
+  const { dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc', recursive = 'false' } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const searchPath = path.join(basePath, dir);
 
@@ -495,49 +559,90 @@ app.get('/api/images', (req, res) => {
   }
 
   try {
+    const isRecursive = recursive === 'true';
+    
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
-      // Call findImagesInIndex with pagination and sorting parameters
-      const imagesResult = indexer.findImagesInIndex(dir, page, limit, sortBy, sortOrder);
+      const imagesResult = indexer.findImagesInIndex(dir, page, limit, sortBy, sortOrder, isRecursive);
       return res.json(imagesResult);
     }
 
     // Otherwise, use real-time search
-    parallelFindImages(searchPath, basePath)
-      .then(images => {
-        // Sort images before pagination
-        if (sortBy === 'name') {
-          images = sortFiles(images, 'path', sortOrder);
-        }
-        else {
-          images = sortFiles(images, sortBy, sortOrder);
-        }
-        
-        // Apply pagination if specified
-        let hasMore = false;
-        let total = images.length;
-        let paginatedImages = images;
-        
-        if (page !== undefined) {
-          const pageNum = parseInt(page) || 1;
-          const limitNum = parseInt(limit) || 100;
-          const startIndex = (pageNum - 1) * limitNum;
-          const endIndex = startIndex + limitNum;
+    if (isRecursive) {
+      // Use existing recursive search
+      parallelFindImages(searchPath, basePath)
+        .then(images => {
+          // Sort images before pagination
+          if (sortBy === 'name') {
+            images = sortFiles(images, 'path', sortOrder);
+          }
+          else {
+            images = sortFiles(images, sortBy, sortOrder);
+          }
           
-          hasMore = endIndex < total;
-          paginatedImages = images.slice(startIndex, endIndex);
-        }
-        
-        // Format response to match the structure of paginated results
-        res.json({ 
-          images: paginatedImages, 
-          total: total,
-          hasMore: hasMore
+          // Apply pagination if specified
+          let hasMore = false;
+          let total = images.length;
+          let paginatedImages = images;
+          
+          if (page !== undefined) {
+            const pageNum = parseInt(page) || 1;
+            const limitNum = parseInt(limit) || 100;
+            const startIndex = (pageNum - 1) * limitNum;
+            const endIndex = startIndex + limitNum;
+            
+            hasMore = endIndex < total;
+            paginatedImages = images.slice(startIndex, endIndex);
+          }
+          
+          // Format response to match the structure of paginated results
+          res.json({ 
+            images: paginatedImages, 
+            total: total,
+            hasMore: hasMore
+          });
+        })
+        .catch(error => {
+          res.status(500).json({ error: error.message });
         });
-      })
-      .catch(error => {
-        res.status(500).json({ error: error.message });
-      });
+    } else {
+      // Non-recursive search - only find images in the current directory
+      findImagesInDirectory(searchPath, basePath)
+        .then(images => {
+          // Sort images before pagination
+          if (sortBy === 'name') {
+            images = sortFiles(images, 'path', sortOrder);
+          }
+          else {
+            images = sortFiles(images, sortBy, sortOrder);
+          }
+          
+          // Apply pagination if specified
+          let hasMore = false;
+          let total = images.length;
+          let paginatedImages = images;
+          
+          if (page !== undefined) {
+            const pageNum = parseInt(page) || 1;
+            const limitNum = parseInt(limit) || 100;
+            const startIndex = (pageNum - 1) * limitNum;
+            const endIndex = startIndex + limitNum;
+            
+            hasMore = endIndex < total;
+            paginatedImages = images.slice(startIndex, endIndex);
+          }
+          
+          // Format response to match the structure of paginated results
+          res.json({ 
+            images: paginatedImages, 
+            total: total,
+            hasMore: hasMore
+          });
+        })
+        .catch(error => {
+          res.status(500).json({ error: error.message });
+        });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1933,7 +2038,7 @@ async function searchFilesInDirectory(dir, query, basePath) {
       const fullPath = path.join(dir, file);
       const stats = fs.statSync(fullPath);
 
-      if (!stats.isDirectory() && file.toLowerCase().includes(query.toLowerCase())) {
+      if (file.toLowerCase().includes(query.toLowerCase())) {
         const mimeType = await utils.getFileType(fullPath);
         results.push({
           name: file,
@@ -1941,7 +2046,7 @@ async function searchFilesInDirectory(dir, query, basePath) {
           size: stats.size,
           mtime: stats.mtime,
           mimeType: mimeType,
-          isDirectory: false
+          isDirectory: stats.isDirectory()
         });
       }
     }
