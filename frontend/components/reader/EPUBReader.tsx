@@ -216,16 +216,29 @@ export const EPUBReader = ({
             <p>Loading...</p>
           </div>}
           readerStyles={
-            pageTransition 
-              ? darkMode 
-                ? { ...pageTransitionStyles, ...darkReaderTheme } 
+            pageTransition
+              ? darkMode
+                ? { ...pageTransitionStyles, ...darkReaderTheme }
                 : { ...pageTransitionStyles, ...lightReaderTheme }
-              : darkMode 
-                ? darkReaderTheme 
+              : darkMode
+                ? darkReaderTheme
                 : lightReaderTheme
           }
           getRendition={(rendition) => {
             renditionRef.current = rendition;
+
+            const spine_get = rendition.book.spine.get.bind(rendition.book.spine);
+            rendition.book.spine.get = (target: string) => {
+              let t = spine_get(target);
+              console.log(t);
+              while ((t == null) && target.startsWith("../")) {
+                target = target.substring(3);
+                t = spine_get(target);
+              }
+
+              return t;
+            }
+
             rendition.themes.fontSize(`${fontSize}%`);
 
             if (darkMode) {
@@ -242,7 +255,7 @@ export const EPUBReader = ({
                 // Set scroll behavior based on user preference
                 // @ts-ignore - manager type is missing in epubjs Rendition
                 rendition.manager.container.style['scroll-behavior'] = smoothScrolling ? 'smooth' : 'auto';
-                
+
                 // Handle context menu disabling
                 if (disableContextMenu) {
                   const body = document.querySelector('body');

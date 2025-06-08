@@ -1236,17 +1236,24 @@ app.get('/api/comic', async (req, res) => {
       try {
         // Read RAR file
         const rarData = fs.readFileSync(fullPath);
-
-        // Create extractor
-        const extractor = await unrar.createExtractorFromData({ data: rarData });
+        
+        // Create extractor with buffer data
+        const extractor = await unrar.createExtractorFromData({
+          data: rarData.buffer,
+          password: undefined // Add password here if needed
+        });
+        
+        // Get file list
         const list = extractor.getFileList();
-
-        if (!list.success) {
+        if (!list || !list.fileHeaders) {
           throw new Error('Failed to read CBR file list');
         }
 
+        // Convert iterable to array for processing
+        const fileHeadersArray = [...list.fileHeaders];
+        
         // Filter image files
-        const imageEntries = list.fileHeaders.filter(header => {
+        const imageEntries = fileHeadersArray.filter(header => {
           const ext = path.extname(header.name).toLowerCase();
           return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
         });
@@ -1270,24 +1277,32 @@ app.get('/api/comic', async (req, res) => {
         const tempDir = path.join(tempDirBase, tempDirName);
         fs.mkdirSync(tempDir, { recursive: true });
 
-        // Extract files
-        const extraction = extractor.extractAll({
-          targetPath: tempDir,
-          overwrite: true
-        });
-
-        if (!extraction.success) {
-          throw new Error('Failed to extract CBR file');
-        }
-
-        // Create URLs for each image
-        for (const entry of imageEntries) {
-          const entryPath = path.join(tempDir, entry.name);
-
-          // Check if file exists after extraction
-          if (!fs.existsSync(entryPath)) {
+        // Extract the files - we need to extract all files, and then filter
+        const extracted = extractor.extract();
+        const files = [...extracted.files];
+        
+        // Process each file
+        for (const file of files) {
+          // Skip if not an image file
+          const ext = path.extname(file.fileHeader.name).toLowerCase();
+          if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
             continue;
           }
+          
+          // Get content
+          if (!file.extraction) {
+            continue;
+          }
+          
+          // Save to temp file
+          const entryPath = path.join(tempDir, file.fileHeader.name);
+          
+          // Create directory structure if needed
+          const entryDir = path.dirname(entryPath);
+          fs.mkdirSync(entryDir, { recursive: true });
+          
+          // Write the file
+          fs.writeFileSync(entryPath, file.extraction);
 
           // Create a direct raw URL for the image - don't use relative path since it's a temp file
           pages.push(`/api/raw?path=${encodeURIComponent(entryPath)}${token ? `&token=${token}` : ''}`);
