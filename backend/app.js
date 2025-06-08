@@ -100,13 +100,13 @@ app.get('/api/bg', (req, res) => {
   try {
     // Get the background image path from config
     const bgImagePath = config.backgroundImagePath;
-    
+
     // Check if file exists
     if (!fs.existsSync(bgImagePath)) {
       console.error(`Background image not found at path: ${bgImagePath}`);
       return res.status(404).send('Background image not found');
     }
-    
+
     // Determine content type based on file extension
     const ext = path.extname(bgImagePath).toLowerCase();
     const contentType = utils.getFileTypeByExt(ext);
@@ -119,7 +119,7 @@ app.get('/api/bg', (req, res) => {
     // Set appropriate headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-    
+
     // Stream the file to response
     const stream = fs.createReadStream(bgImagePath);
     stream.pipe(res);
@@ -132,45 +132,45 @@ app.get('/api/bg', (req, res) => {
 app.get('/api/bgs', async (req, res) => {
   const { width, height } = req.query;
   const bgDir = path.resolve(config.backgroundImagesDir);
-  
+
   try {
     // Check if the background images directory exists
     if (!fs.existsSync(bgDir)) {
       fs.mkdirSync(bgDir, { recursive: true });
       return res.status(404).json({ error: "No background images found" });
     }
-    
+
     // Get all files in the background images directory
     const files = fs.readdirSync(bgDir).filter(file => {
       const filePath = path.join(bgDir, file);
       const stats = fs.statSync(filePath);
       if (!stats.isFile()) return false;
-      
+
       // Check if it's an image file
       const ext = path.extname(file).toLowerCase();
       return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
     });
-    
+
     if (files.length === 0) {
       return res.status(404).json({ error: "No background images found" });
     }
-    
+
     let selectedImage;
-    
+
     // If both width and height are provided, find the most suitable image
     if (width && height) {
       const targetRatio = parseFloat(width) / parseFloat(height);
-      
+
       // Get dimensions of all images (this could be optimized by caching)
       const images = [];
-      
+
       for (const file of files) {
         try {
           const filePath = path.join(bgDir, file);
           // We'll use Sharp to get image dimensions if available
           const sharp = require('sharp');
           const metadata = await sharp(filePath).metadata();
-          
+
           images.push({
             path: filePath,
             filename: file,
@@ -183,7 +183,7 @@ app.get('/api/bgs', async (req, res) => {
           // Skip this file if there's an error
         }
       }
-      
+
       if (images.length === 0) {
         // Fallback to random if no images could be processed
         selectedImage = path.join(bgDir, files[Math.floor(Math.random() * files.length)]);
@@ -192,25 +192,25 @@ app.get('/api/bgs', async (req, res) => {
         images.sort((a, b) => {
           return Math.abs(a.ratio - targetRatio) - Math.abs(b.ratio - targetRatio);
         });
-        
+
         selectedImage = images[0].path;
       }
     } else {
       // If width and height are not provided, select a random image
       selectedImage = path.join(bgDir, files[Math.floor(Math.random() * files.length)]);
     }
-    
+
     // Serve the selected image
     const ext = path.extname(selectedImage).toLowerCase();
     const contentType = utils.getFileTypeByExt(ext);
-    
+
     if (!contentType.startsWith('image/')) {
       return res.status(400).json({ error: "Selected file is not an image" });
     }
-    
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-    
+
     // Stream the file to response
     const stream = fs.createReadStream(selectedImage);
     stream.pipe(res);
@@ -351,26 +351,26 @@ app.get('/api/files', async (req, res) => {
       let fileDetails = results
         .filter(r => r.status === 'fulfilled')
         .map(r => r.value);
-      
+
       // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
-      
+
       // Apply pagination
       const total = fileDetails.length;
       let hasMore = false;
       let paginatedFiles = fileDetails;
-      
+
       if (page !== undefined) {
         const pageNum = parseInt(page) || 1;
         const limitNum = parseInt(limit) || 100;
         const startIndex = (pageNum - 1) * limitNum;
         const endIndex = startIndex + limitNum;
-        
+
         hasMore = endIndex < total;
         paginatedFiles = fileDetails.slice(startIndex, endIndex);
       }
-      
-      res.json({ 
+
+      res.json({
         files: paginatedFiles,
         total: total,
         hasMore: hasMore
@@ -430,25 +430,25 @@ app.get('/api/files', async (req, res) => {
       });
 
       let fileDetails = await Promise.all(fileDetailsPromises);
-      
+
       // Sort files
       fileDetails = sortFiles(fileDetails, sortBy, sortOrder);
-      
+
       // Apply pagination
       const total = fileDetails.length;
       let hasMore = false;
       let paginatedFiles = fileDetails;
-      
+
       if (page !== undefined) {
         const pageNum = parseInt(page) || 1;
         const limitNum = parseInt(limit) || 100;
         const startIndex = (pageNum - 1) * limitNum;
         const endIndex = startIndex + limitNum;
-        
+
         hasMore = endIndex < total;
         paginatedFiles = fileDetails.slice(startIndex, endIndex);
       }
-      
+
       res.json({
         files: paginatedFiles,
         total: total,
@@ -471,7 +471,7 @@ app.get('/api/search', (req, res) => {
 
   try {
     const isRecursive = recursive === 'true';
-    
+
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
       const searchResult = indexer.searchIndex(query, dir, page, limit, sortBy, sortOrder, isRecursive);
@@ -485,25 +485,25 @@ app.get('/api/search', (req, res) => {
         .then(results => {
           // Sort results before pagination
           results = sortFiles(results, sortBy, sortOrder);
-          
+
           // Apply pagination if specified
           let hasMore = false;
           let total = results.length;
           let paginatedResults = results;
-          
+
           if (page !== undefined) {
             const pageNum = parseInt(page) || 1;
             const limitNum = parseInt(limit) || 100;
             const startIndex = (pageNum - 1) * limitNum;
             const endIndex = startIndex + limitNum;
-            
+
             hasMore = endIndex < total;
             paginatedResults = results.slice(startIndex, endIndex);
           }
-          
+
           // Format response to match the structure of paginated results
-          res.json({ 
-            results: paginatedResults, 
+          res.json({
+            results: paginatedResults,
             total: total,
             hasMore: hasMore
           });
@@ -517,25 +517,25 @@ app.get('/api/search', (req, res) => {
         .then(results => {
           // Sort results before pagination
           results = sortFiles(results, sortBy, sortOrder);
-          
+
           // Apply pagination if specified
           let hasMore = false;
           let total = results.length;
           let paginatedResults = results;
-          
+
           if (page !== undefined) {
             const pageNum = parseInt(page) || 1;
             const limitNum = parseInt(limit) || 100;
             const startIndex = (pageNum - 1) * limitNum;
             const endIndex = startIndex + limitNum;
-            
+
             hasMore = endIndex < total;
             paginatedResults = results.slice(startIndex, endIndex);
           }
-          
+
           // Format response to match the structure of paginated results
-          res.json({ 
-            results: paginatedResults, 
+          res.json({
+            results: paginatedResults,
             total: total,
             hasMore: hasMore
           });
@@ -560,7 +560,7 @@ app.get('/api/images', (req, res) => {
 
   try {
     const isRecursive = recursive === 'true';
-    
+
     // Use file index if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
       const imagesResult = indexer.findImagesInIndex(dir, page, limit, sortBy, sortOrder, isRecursive);
@@ -579,25 +579,25 @@ app.get('/api/images', (req, res) => {
           else {
             images = sortFiles(images, sortBy, sortOrder);
           }
-          
+
           // Apply pagination if specified
           let hasMore = false;
           let total = images.length;
           let paginatedImages = images;
-          
+
           if (page !== undefined) {
             const pageNum = parseInt(page) || 1;
             const limitNum = parseInt(limit) || 100;
             const startIndex = (pageNum - 1) * limitNum;
             const endIndex = startIndex + limitNum;
-            
+
             hasMore = endIndex < total;
             paginatedImages = images.slice(startIndex, endIndex);
           }
-          
+
           // Format response to match the structure of paginated results
-          res.json({ 
-            images: paginatedImages, 
+          res.json({
+            images: paginatedImages,
             total: total,
             hasMore: hasMore
           });
@@ -616,25 +616,25 @@ app.get('/api/images', (req, res) => {
           else {
             images = sortFiles(images, sortBy, sortOrder);
           }
-          
+
           // Apply pagination if specified
           let hasMore = false;
           let total = images.length;
           let paginatedImages = images;
-          
+
           if (page !== undefined) {
             const pageNum = parseInt(page) || 1;
             const limitNum = parseInt(limit) || 100;
             const startIndex = (pageNum - 1) * limitNum;
             const endIndex = startIndex + limitNum;
-            
+
             hasMore = endIndex < total;
             paginatedImages = images.slice(startIndex, endIndex);
           }
-          
+
           // Format response to match the structure of paginated results
-          res.json({ 
-            images: paginatedImages, 
+          res.json({
+            images: paginatedImages,
             total: total,
             hasMore: hasMore
           });
@@ -650,21 +650,144 @@ app.get('/api/images', (req, res) => {
 
 app.get('/api/images/random', (req, res) => {
   const { dir = '' } = req.query;
-  
+
   // Only allow using this endpoint if file index is enabled and built
   if (!config.useFileIndex || !indexer.isIndexBuilt()) {
     return res.status(400).json({ error: "This endpoint requires the file index to be enabled and built" });
   }
-  
+
   try {
     // Get a random image from the index
     const randomImage = indexer.getRandomImageFromIndex(dir);
-    
+
     if (!randomImage) {
       return res.status(404).json({ error: "No images found" });
     }
-    
+
     res.json({ image: randomImage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.get('/api/audios', (req, res) => {
+  const { dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc'  } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const searchPath = path.join(basePath, dir);
+
+  if (!searchPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  try {
+    findAudiosInDirectory(searchPath, basePath)
+      .then(audios => {
+        audios = sortFiles(audios, sortBy, sortOrder);
+
+        let hasMore = false;
+        let total = audios.length;
+        let paginatedAudios = audios;
+
+        if (page !== undefined) {
+          const pageNum = parseInt(page) || 1;
+          const limitNum = parseInt(limit) || 100;
+          const startIndex = (pageNum - 1) * limitNum;
+          const endIndex = startIndex + limitNum;
+
+          hasMore = endIndex < total;
+          paginatedAudios = audios.slice(startIndex, endIndex);
+        }
+
+        res.json({
+          audios: paginatedAudios,
+          total: total,
+          hasMore: hasMore
+        });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+
+})
+
+app.get('/api/audios/random', (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const searchPath = path.join(basePath, dir);
+
+  try {
+    findAudiosInDirectory(searchPath, basePath)
+      .then(audios => {
+        const randomAudio = audios[Math.floor(Math.random() * audios.length)];
+        res.json({ audio: randomAudio });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.get('/api/videos', (req, res) => {
+  const { dir = '', page, limit = 100, sortBy = 'name', sortOrder = 'asc'  } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const searchPath = path.join(basePath, dir);
+
+  if (!searchPath.startsWith(basePath)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  try {
+    findVideosInDirectory(searchPath, basePath)
+      .then(videos => {
+        videos = sortFiles(videos, sortBy, sortOrder);
+
+        let hasMore = false;
+        let total = videos.length;
+        let paginatedVideos = videos;
+
+        if (page !== undefined) {
+          const pageNum = parseInt(page) || 1;
+          const limitNum = parseInt(limit) || 100;
+          const startIndex = (pageNum - 1) * limitNum;
+          const endIndex = startIndex + limitNum;
+
+          hasMore = endIndex < total;
+          paginatedVideos = videos.slice(startIndex, endIndex);
+        }
+
+        res.json({
+          videos: paginatedVideos,
+          total: total,
+          hasMore: hasMore
+        });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.get('/api/videos/random', (req, res) => {
+  const { dir = '' } = req.query;
+  const basePath = path.resolve(config.baseDirectory);
+  const searchPath = path.join(basePath, dir);
+
+  try {
+    findVideosInDirectory(searchPath, basePath)
+      .then(videos => {
+        const randomVideo = videos[Math.floor(Math.random() * videos.length)];
+        res.json({ video: randomVideo });
+      })
+      .catch(error => {
+        res.status(500).json({ error: error.message });
+      });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -762,15 +885,15 @@ app.get('/api/raw', async (req, res) => {
     } else {
       const fileName = path.basename(fullPath);
       const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, ' ');
-      
+
       // Get file mime type
       const mimeType = await utils.getFileType(fullPath);
-      
+
       // Check if this is a PSD file that needs processing
       if (mimeType === 'image/vnd.adobe.photoshop' && config.processPsd) {
         // Process PSD file
         const processedFilePath = await processPsdFile(fullPath);
-        
+
         if (processedFilePath) {
           // If processing was successful, serve the processed file
           const processedMimeType = config.psdFormat === 'png' ? 'image/png' : 'image/jpeg';
@@ -780,7 +903,7 @@ app.get('/api/raw', async (req, res) => {
         }
         // If processing failed, fall back to original behavior
       }
-      
+
       // Normal file handling
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
@@ -872,28 +995,28 @@ app.get('/api/thumbnail', async (req, res) => {
         // If PSD processing is enabled, try to use the processed version for thumbnail
         if (config.processPsd) {
           const processedFilePath = await processPsdFile(fullPath);
-          
+
           if (processedFilePath) {
             // Use the processed file to generate thumbnail with Sharp
             const sharp = require('sharp');
-            
+
             // Cache mechanism: generate cache path
             const cacheDir = config.thumbnailCacheDir || path.join(os.tmpdir(), 'thumbnails');
             if (!fs.existsSync(cacheDir)) {
               fs.mkdirSync(cacheDir, { recursive: true });
             }
-            
+
             // Create cache filename for the processed PSD
             const cacheKey = `psd_${Buffer.from(fullPath).toString('base64').replace(/[=]/g, '').replace(/[\\/]/g, '_')}_w${width}_${height || 'auto'}_q${quality}`;
             const cachePath = path.join(cacheDir, `${cacheKey}.jpg`);
-            
+
             // If cache exists, return cached thumbnail directly
             if (fs.existsSync(cachePath)) {
               res.setHeader('Content-Type', 'image/jpeg');
               res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for one year
               return fs.createReadStream(cachePath).pipe(res);
             }
-            
+
             // Process with Sharp
             let transformer = sharp(processedFilePath)
               .rotate() // Auto-rotate based on EXIF data
@@ -904,7 +1027,7 @@ app.get('/api/thumbnail', async (req, res) => {
                 withoutEnlargement: true
               })
               .jpeg({ quality: parseInt(quality) });
-              
+
             // Save to cache
             transformer
               .clone()
@@ -915,14 +1038,14 @@ app.get('/api/thumbnail', async (req, res) => {
                   fs.unlinkSync(cachePath);
                 }
               });
-              
+
             // Send to client
             res.setHeader('Content-Type', 'image/jpeg');
             res.setHeader('Cache-Control', 'public, max-age=31536000');
             return transformer.pipe(res);
           }
         }
-        
+
         // If processing is disabled or failed, return the original file
         res.setHeader('Content-Type', 'image/vnd.adobe.photoshop');
         return fs.createReadStream(fullPath).pipe(res);
@@ -1182,6 +1305,9 @@ app.get('/api/comic', async (req, res) => {
   }
 });
 
+app.get('/api/archive', (req, res) => {
+  // TODO: Implement archive endpoint
+})
 
 
 app.post('/api/upload', writePermissionMiddleware, (req, res) => {
@@ -1252,7 +1378,7 @@ app.post('/api/upload', writePermissionMiddleware, (req, res) => {
           mimeType: file.mimetype,
           isDirectory: false
         }));
-        
+
         // Add files to the index
         indexer.saveFileBatch(filesForIndex);
         console.log(`Added ${filesForIndex.length} uploaded files to the index`);
@@ -1301,7 +1427,7 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
 
       // Create full directory path
       const fullPath = path.join(uploadPath, relativePath);
-      
+
       // Create nested directories if they don't exist
       try {
         fs.mkdirSync(fullPath, { recursive: true });
@@ -1320,7 +1446,7 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
       } else if (file.webkitRelativePath) {
         fileName = file.webkitRelativePath.split('/').pop();
       }
-      
+
       const decodedName = Buffer.from(fileName, 'latin1').toString('utf8');
       cb(null, decodedName);
     }
@@ -1370,13 +1496,13 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
           mimeType: file.mimetype,
           isDirectory: false
         }));
-        
+
         // We also need to add created directories to the index
         const createdDirs = new Set();
         uploadedFiles.forEach(file => {
           const filePath = file.path;
           const dirPath = path.dirname(filePath);
-          
+
           if (dirPath !== '.' && dirPath !== '' && !createdDirs.has(dirPath)) {
             // Collect all parent directories
             let currentDir = dirPath;
@@ -1386,7 +1512,7 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
             }
           }
         });
-        
+
         // Add directories to the index files
         createdDirs.forEach(dirPath => {
           const dirName = path.basename(dirPath);
@@ -1399,7 +1525,7 @@ app.post('/api/upload-folder', writePermissionMiddleware, (req, res) => {
             isDirectory: true
           });
         });
-        
+
         // Add files to the index
         indexer.saveFileBatch(filesForIndex);
         console.log(`Added ${filesForIndex.length} uploaded files and directories to the index`);
@@ -1426,13 +1552,13 @@ app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
 
   try {
     fs.mkdirSync(fullPath, { recursive: true });
-    
+
     // Update indexer if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
       try {
         const stats = fs.statSync(fullPath);
         const relativePath = path.join(dirPath, dirName).replace(/\\/g, '/');
-        
+
         // Add directory to the index
         indexer.saveFileBatch([{
           name: dirName,
@@ -1447,7 +1573,7 @@ app.post('/api/mkdir', writePermissionMiddleware, (req, res) => {
         console.error('Error updating index with new directory:', error);
       }
     }
-    
+
     res.status(200).json({ message: 'Directory created successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1468,19 +1594,19 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
     // Get stats before renaming to determine if it's a directory
     const stats = fs.existsSync(fullPath) ? fs.statSync(fullPath) : null;
     const isDirectory = stats ? stats.isDirectory() : false;
-    
+
     fs.renameSync(fullPath, newPath);
-    
+
     // Update indexer if enabled
     if (config.useFileIndex && indexer.isIndexBuilt()) {
       try {
         // Delete the old entry
         indexer.deleteFromIndex(filePath);
-        
+
         if (isDirectory) {
           // For directories, we need to update all child paths too
           // This is handled by the deleteFromIndex function already
-          
+
           // Now add the new directory
           const newStats = fs.statSync(newPath);
           indexer.saveFileBatch([{
@@ -1491,18 +1617,18 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
             mimeType: 'directory',
             isDirectory: true
           }]);
-          
+
           // Reindex the directory contents with updated paths
           const reindexDirectory = async (dirPath, baseDirPath) => {
             try {
               const entries = fs.readdirSync(dirPath);
               const fileBatch = [];
-              
+
               for (const entry of entries) {
                 const entryPath = path.join(dirPath, entry);
                 const entryStats = fs.statSync(entryPath);
                 const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
-                
+
                 if (entryStats.isDirectory()) {
                   // Add directory entry
                   fileBatch.push({
@@ -1513,7 +1639,7 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
                     mimeType: 'directory',
                     isDirectory: true
                   });
-                  
+
                   // Recursively process subdirectories
                   await reindexDirectory(entryPath, baseDirPath);
                 } else {
@@ -1529,7 +1655,7 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
                   });
                 }
               }
-              
+
               // Save batch of files/directories to the index
               if (fileBatch.length > 0) {
                 indexer.saveFileBatch(fileBatch);
@@ -1538,14 +1664,14 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
               console.error(`Error reindexing directory ${dirPath}:`, error);
             }
           };
-          
+
           // Start reindexing the moved directory
           await reindexDirectory(newPath, basePath);
         } else {
           // For files, just add the new entry
           const newStats = fs.statSync(newPath);
           const mimeType = await utils.getFileType(newPath);
-          
+
           indexer.saveFileBatch([{
             name: path.basename(newName),
             path: newName,
@@ -1555,13 +1681,13 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
             isDirectory: false
           }]);
         }
-        
+
         console.log(`Updated index for renamed item from "${filePath}" to "${newName}"`);
       } catch (error) {
         console.error('Error updating index after rename:', error);
       }
     }
-    
+
     res.status(200).json({ message: 'File renamed successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1585,16 +1711,16 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
 
     try {
       const isDirectory = fs.statSync(fullPath).isDirectory();
-      
+
       if (isDirectory) {
         const success = utils.safeDeleteDirectory(fullPath);
-        
+
         // Update indexer if enabled
         if (config.useFileIndex && indexer.isIndexBuilt()) {
           indexer.deleteFromIndex(filePath);
           console.log(`Removed directory "${filePath}" from index`);
         }
-        
+
         if (success) {
           res.status(200).json({ message: 'Directory deleted successfully' });
         } else {
@@ -1602,13 +1728,13 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
         }
       } else {
         fs.unlinkSync(fullPath);
-        
+
         // Update indexer if enabled
         if (config.useFileIndex && indexer.isIndexBuilt()) {
           indexer.deleteFromIndex(filePath);
           console.log(`Removed file "${filePath}" from index`);
         }
-        
+
         res.status(200).json({ message: 'File deleted successfully' });
       }
     } catch (error) {
@@ -1623,27 +1749,27 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
     for (let i = 0; i < fullPaths.length; i++) {
       const fullPath = fullPaths[i];
       const relativePath = relativePaths[i];
-      
+
       if (!fullPath.startsWith(basePath)) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
       try {
         const isDirectory = fs.statSync(fullPath).isDirectory();
-        
+
         if (isDirectory) {
           const success = utils.safeDeleteDirectory(fullPath);
           if (!success) {
             return res.status(500).json({ error: 'Failed to completely delete directory' });
           }
-          
+
           // Update indexer if enabled
           if (config.useFileIndex && indexer.isIndexBuilt()) {
             indexer.deleteFromIndex(relativePath);
           }
         } else {
           fs.unlinkSync(fullPath);
-          
+
           // Update indexer if enabled
           if (config.useFileIndex && indexer.isIndexBuilt()) {
             indexer.deleteFromIndex(relativePath);
@@ -1653,7 +1779,7 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
         return res.status(500).json({ error: error.message });
       }
     }
-    
+
     if (config.useFileIndex && indexer.isIndexBuilt()) {
       console.log(`Removed ${fullPaths.length} items from index`);
     }
@@ -1665,7 +1791,7 @@ app.delete('/api/delete', writePermissionMiddleware, (req, res) => {
 app.post('/api/clone', writePermissionMiddleware, (req, res) => {
   const { sources, destination } = req.body;
   const basePath = path.resolve(config.baseDirectory);
-  
+
   if (!sources || !Array.isArray(sources) || sources.length === 0) {
     return res.status(400).json({ error: 'No sources provided' });
   }
@@ -1675,7 +1801,7 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
     const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
-      
+
       // Add new directory to index if it didn't exist before
       if (config.useFileIndex && indexer.isIndexBuilt()) {
         const destStats = fs.statSync(destDir);
@@ -1710,10 +1836,10 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
 
         const stats = fs.statSync(sourcePath);
         const relativeDest = path.relative(basePath, destPath).replace(/\\/g, '/');
-        
+
         if (stats.isDirectory()) {
           copyFolderRecursiveSync(sourcePath, destPath);
-          
+
           // For indexing, we need to collect all files in the directory
           if (config.useFileIndex && indexer.isIndexBuilt()) {
             // First add the directory itself
@@ -1725,7 +1851,7 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
               mimeType: 'directory',
               isDirectory: true
             });
-            
+
             // Schedule the directory content for indexing
             setTimeout(() => {
               indexDirectoryRecursively(destPath, basePath)
@@ -1739,7 +1865,7 @@ app.post('/api/clone', writePermissionMiddleware, (req, res) => {
           }
         } else {
           fs.copyFileSync(sourcePath, destPath);
-          
+
           // Add file to index
           if (config.useFileIndex && indexer.isIndexBuilt()) {
             const newStats = fs.statSync(destPath);
@@ -1791,7 +1917,7 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
     const destDir = path.join(basePath, destination);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
-      
+
       // Add new directory to index if it didn't exist before
       if (config.useFileIndex && indexer.isIndexBuilt()) {
         const destStats = fs.statSync(destDir);
@@ -1824,15 +1950,15 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
         // Check if it's a directory before moving for indexer update
         const isDirectory = fs.statSync(sourcePath).isDirectory();
         const relativeDest = path.relative(basePath, destPath).replace(/\\/g, '/');
-        
+
         fs.renameSync(sourcePath, destPath);
-        
+
         // Update index if enabled
         if (config.useFileIndex && indexer.isIndexBuilt()) {
           try {
             // Delete the old entry (and all its children if it's a directory)
             indexer.deleteFromIndex(source);
-            
+
             if (isDirectory) {
               // Add the moved directory
               const newStats = fs.statSync(destPath);
@@ -1844,7 +1970,7 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
                 mimeType: 'directory',
                 isDirectory: true
               }]);
-              
+
               // Schedule directory reindexing
               setTimeout(() => {
                 indexDirectoryRecursively(destPath, basePath)
@@ -1877,7 +2003,7 @@ app.post('/api/move', writePermissionMiddleware, (req, res) => {
             console.error(`Error updating index for moved item ${source}:`, error);
           }
         }
-        
+
         results.push({ source, status: 'success', destination: path.relative(basePath, destPath) });
       } catch (error) {
         results.push({ source, status: 'failed', error: error.message });
@@ -2088,6 +2214,68 @@ async function findImagesInDirectory(dir, basePath) {
   return results;
 }
 
+async function findAudiosInDirectory(dir, basePath) {
+  let results = [];
+
+  try {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isDirectory()) {
+        const mimeType = await utils.getFileType(fullPath);
+        if (mimeType.startsWith('audio/')) {
+          results.push({
+            name: file,
+            path: utils.normalizePath(path.relative(basePath, fullPath)),
+            size: stats.size,
+            mtime: stats.mtime,
+            mimeType: mimeType,
+            isDirectory: false
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error finding audios in directory:', error);
+  }
+
+  return results;
+}
+
+async function findVideosInDirectory(dir, basePath) {
+  let results = [];
+
+  try {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isDirectory()) {
+        const mimeType = await utils.getFileType(fullPath);
+        if (mimeType.startsWith('video/')) {
+          results.push({
+            name: file,
+            path: utils.normalizePath(path.relative(basePath, fullPath)),
+            size: stats.size,
+            mtime: stats.mtime,
+            mimeType: mimeType,
+            isDirectory: false
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error finding audios in directory:', error);
+  }
+
+  return results;
+}
+
 async function parallelSearch(dir, query, basePath) {
   if (isMainThread) {
     try {
@@ -2222,21 +2410,21 @@ if (!isMainThread) {
 
 async function indexDirectoryRecursively(dirPath, basePath) {
   if (!config.useFileIndex || !indexer.isIndexBuilt()) return 0;
-  
+
   try {
     const fileBatch = [];
     const stack = [dirPath];
     let indexedCount = 0;
-    
+
     while (stack.length > 0) {
       const currentDir = stack.pop();
       const entries = fs.readdirSync(currentDir);
-      
+
       for (const entry of entries) {
         const entryPath = path.join(currentDir, entry);
         const entryStats = fs.statSync(entryPath);
         const relativePath = path.relative(basePath, entryPath).replace(/\\/g, '/');
-        
+
         if (entryStats.isDirectory()) {
           // Add directory to batch
           fileBatch.push({
@@ -2247,7 +2435,7 @@ async function indexDirectoryRecursively(dirPath, basePath) {
             mimeType: 'directory',
             isDirectory: true
           });
-          
+
           // Add to stack for processing
           stack.push(entryPath);
         } else {
@@ -2262,9 +2450,9 @@ async function indexDirectoryRecursively(dirPath, basePath) {
             isDirectory: false
           });
         }
-        
+
         indexedCount++;
-        
+
         // Save batch when it reaches a reasonable size
         if (fileBatch.length >= 100) {
           indexer.saveFileBatch(fileBatch);
@@ -2272,12 +2460,12 @@ async function indexDirectoryRecursively(dirPath, basePath) {
         }
       }
     }
-    
+
     // Save any remaining files
     if (fileBatch.length > 0) {
       indexer.saveFileBatch(fileBatch);
     }
-    
+
     return indexedCount;
   } catch (error) {
     console.error(`Error indexing directory ${dirPath}:`, error);
@@ -2346,19 +2534,19 @@ async function processPsdFile(psdPath) {
   if (!config.processPsd) {
     return null;
   }
-  
+
   try {
     // Generate a hash of the file path and last modified time to create a unique cache key
     const stats = fs.statSync(psdPath);
     const hashInput = `${psdPath}-${stats.mtimeMs}`;
     const cacheKey = crypto.createHash('md5').update(hashInput).digest('hex');
-    
+
     const outputPath = path.join(config.psdCacheDir, `${cacheKey}.png`);
-    
+
     if (fs.existsSync(outputPath)) {
       return outputPath;
     }
-    
+
     if (config.psdProcessor === 'imagemagick') {
       return await processWithImageMagick(psdPath, outputPath);
     } else {
@@ -2383,7 +2571,7 @@ async function processWithImageMagick(psdPath, outputPath) {
     const pngOutputPath = outputPath.replace(/\.[^.]+$/, '.png');
     // execSync(`magick "${psdPath}" "${pngOutputPath}"`);
     execSync(`magick "${psdPath}"[0] "${pngOutputPath}"`);
-    
+
     if (fs.existsSync(pngOutputPath)) {
       return pngOutputPath;
     } else {
@@ -2403,13 +2591,13 @@ async function processWithPsdLibrary(psdPath, outputPath) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
-    
+
     const pngOutputPath = outputPath.replace(/\.[^.]+$/, '.png');
-    
+
     await PSD.open(psdPath).then(psd => {
       return psd.image.saveAsPng(pngOutputPath);
     });
-    
+
     if (fs.existsSync(pngOutputPath)) {
       return pngOutputPath;
     } else {
@@ -2428,7 +2616,7 @@ function sortFiles(files, sortBy = 'name', sortOrder = 'asc') {
     // Always put directories first
     if (a.isDirectory && !b.isDirectory) return -1;
     if (!a.isDirectory && b.isDirectory) return 1;
-    
+
     if (sortBy === 'name') {
       const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
       return sortOrder === 'asc'
