@@ -32,7 +32,7 @@ import {
   ConfirmDialog, DetailsDialog, DownloadDialog, UploadDialog,
   IndexSettingsDialog, WatcherSettingsDialog, LoginDialog, InputDialog
 } from "@/components/dialog";
-import { DirectionMenu, DirectionMenuHint } from "@/components/menu";
+import { DirectionMenu } from "@/components/menu";
 
 import { useAuth } from '@/context/auth-context';
 
@@ -2143,34 +2143,39 @@ function FileExplorerContent() {
   }, [currentPath, token, refetchData]);
 
 
+  const useAdaptiveBg = true;
+
+  let bgImage = 'api/bg';
 
   const [screenWidth, setScreenWidth] = useState(0);
   const [screenHeight, setScreenHeight] = useState(0);
   useEffect(() => {
+    if (!useAdaptiveBg) return;
     setScreenWidth(window.innerWidth);
     setScreenHeight(window.innerHeight);
   }, []);
-  const bgImage = `api/bgs?width=${screenWidth}&height=${screenHeight}`;
-
-  if (screenWidth === 0 || screenHeight === 0) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-[#3c3c3c]">
-        <div className="relative group">
-          <div
-            className="text-[30vw] font-extralight font-serif text-transparent absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ WebkitTextStroke: '2px #9ca3af' }}
-          >
-            K
-          </div>
-          <div
-            className="text-[30vw] font-extralight font-serif text-gray-400 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ transform: 'translate(20px, 20px)' }}
-          >
-            K
+  if (useAdaptiveBg) {
+    bgImage = `api/bgs?width=${screenWidth}&height=${screenHeight}`;
+    if (screenWidth === 0 || screenHeight === 0) {
+      return (
+        <div className="w-screen h-screen flex items-center justify-center bg-[#3c3c3c]">
+          <div className="relative group">
+            <div
+              className="text-[30vw] font-extralight font-serif text-transparent absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ WebkitTextStroke: '2px #9ca3af' }}
+            >
+              K
+            </div>
+            <div
+              className="text-[30vw] font-extralight font-serif text-gray-400 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ transform: 'translate(20px, 20px)' }}
+            >
+              K
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   return (
@@ -3021,7 +3026,7 @@ function FileExplorerContent() {
           description="Enter the name for the new directory"
           confirmText="Create"
           cancelText="Cancel"
-          defaultValue={currentPath.split('/').pop()}
+          defaultValue={"New Folder"}
           placeholder="New directory name"
           onConfirm={(name) => handleMkdirConfirm(currentPath, name.trim())}
           onCancel={handleMkdirCancel}
@@ -3029,7 +3034,7 @@ function FileExplorerContent() {
       </main>
 
       {/* Direction Menu for view mode selection */}
-      <DirectionMenu
+      {useDirectionMenu && <DirectionMenu
         topNode={
           <div className="flex flex-col items-center">
             <Grid3x3Icon size={24} />
@@ -3059,15 +3064,31 @@ function FileExplorerContent() {
         onBottomAction={() => setIsImageOnlyMode(!isImageOnlyMode)}
         onLeftAction={() => setViewMode('list')}
         centerLabel="View"
-      />
-      {/* <DirectionMenuHint /> */}
+      />}
     </div>
   );
 }
 
 export default function FileExplorer() {
   return (
-    <Suspense fallback={<Loading message="Loading..." />}>
+    <Suspense fallback={
+      <div className="w-screen h-screen flex items-center justify-center bg-[#3c3c3c]">
+        <div className="relative group">
+          <div
+            className="text-[30vw] font-extralight font-serif text-transparent absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ WebkitTextStroke: '2px #9ca3af' }}
+          >
+            K
+          </div>
+          <div
+            className="text-[30vw] font-extralight font-serif text-gray-400 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ transform: 'translate(20px, 20px)' }}
+          >
+            K
+          </div>
+        </div>
+      </div>
+    }>
       <FileExplorerContent />
     </Suspense>
   );

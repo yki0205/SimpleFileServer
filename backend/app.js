@@ -1584,7 +1584,7 @@ app.post('/api/rename', writePermissionMiddleware, async (req, res) => {
   const { path: filePath, newName } = req.query;
   const basePath = path.resolve(config.baseDirectory);
   const fullPath = path.join(basePath, filePath);
-  const newPath = path.join(basePath, newName);
+  const newPath = path.join(path.dirname(fullPath), newName);
 
   if (!fullPath.startsWith(basePath) || !newPath.startsWith(basePath)) {
     return res.status(403).json({ error: 'Access denied' });
