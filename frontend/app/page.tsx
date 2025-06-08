@@ -526,6 +526,9 @@ function FileExplorerContent() {
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+  
   useEffect(() => {
     if (!isAuthenticated && !isCheckingAuth) {
       setIsLoginDialogOpen(true);
@@ -1995,6 +1998,149 @@ function FileExplorerContent() {
   }, [token, useMasonry, gridDirection, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
 
 
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    console.log('handleDragEnter');
+    e.preventDefault();
+    e.stopPropagation();
+    
+    dragCounterRef.current++;
+    
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    console.log('handleDragLeave');
+    e.preventDefault();
+    e.stopPropagation();
+    
+    dragCounterRef.current--;
+    
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    console.log('handleDragOver');
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    console.log('handleDrop');
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const items = e.dataTransfer.items;
+      let containsFolder = false;
+      
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i].webkitGetAsEntry?.();
+          if (item && item.isDirectory) {
+            containsFolder = true;
+            break;
+          }
+        }
+      }
+      
+      const uploadList = Array.from(e.dataTransfer.files).map(file => ({
+        id: generateUniqueId(),
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: 'pending' as const,
+        file: file
+      }));
+      
+      setUploadFiles(uploadList);
+      setShowUploadDialog(true);
+      
+      uploadList.forEach(async (fileData) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhrRefsRef.current.set(fileData.id, xhr);
+        
+        const formData = new FormData();
+        formData.append('files', fileData.file);
+        
+        setUploadFiles(prev => prev.map(f =>
+          f.id === fileData.id ? { ...f, status: 'uploading' } : f
+        ));
+        
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? { ...f, progress } : f
+            ));
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          xhrRefsRef.current.delete(fileData.id);
+          
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? { ...f, progress: 100, status: 'completed' } : f
+            ));
+            
+            refetchData();
+          } else {
+            setUploadFiles(prev => prev.map(f =>
+              f.id === fileData.id ? {
+                ...f,
+                status: 'error',
+                error: `Error: ${xhr.status} ${xhr.statusText}`
+              } : f
+            ));
+          }
+        });
+        
+        xhr.addEventListener('error', () => {
+          xhrRefsRef.current.delete(fileData.id);
+          
+          setUploadFiles(prev => prev.map(f =>
+            f.id === fileData.id ? {
+              ...f,
+              status: 'error',
+              error: 'Network error occurred'
+            } : f
+          ));
+        });
+        
+        xhr.addEventListener('abort', () => {
+          xhrRefsRef.current.delete(fileData.id);
+          
+          setUploadFiles(prev => prev.map(f =>
+            f.id === fileData.id ? {
+              ...f,
+              status: 'error',
+              error: 'Upload cancelled'
+            } : f
+          ));
+        });
+        
+        const endpoint = containsFolder 
+          ? `/api/upload-folder?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`
+          : `/api/upload?dir=${encodeURIComponent(currentPath)}${token ? `&token=${token}` : ''}`;
+          
+        xhr.open('POST', endpoint);
+        xhr.send(formData);
+      });
+    }
+  }, [currentPath, token, refetchData]);
+
+
+
   const [screenWidth, setScreenWidth] = useState(0);
   const [screenHeight, setScreenHeight] = useState(0);
   useEffect(() => {
@@ -2035,7 +2181,21 @@ function FileExplorerContent() {
         backgroundAttachment: 'fixed',
       }}
       onContextMenu={(e) => e.preventDefault()}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {/* Drag and Drop indicator */}
+      {isDragging && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+          <div className="bg-white/90 p-8 rounded-lg shadow-lg text-center">
+            <Upload size={64} className="mx-auto mb-4 text-blue-500" />
+            <h2 className="text-xl font-bold mb-2">Drop files to upload...</h2>
+            <p className="text-gray-600">Files will be uploaded to the current directory</p>
+          </div>
+        </div>
+      )}
       <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
         <header className="flex flex-col md:flex-row gap-1">
 

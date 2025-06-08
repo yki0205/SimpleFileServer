@@ -37,14 +37,14 @@ export const DirectionMenu = forwardRef<DirectionMenuHandle, DirectionMenuProps>
     setSelectedDirection(direction);
     selectedDirectionRef.current = direction;
   };
-  
+
   const startPosition = useRef({ x: 0, y: 0 });
   const isMouseDown = useRef(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const visibleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+
 
   // Distance threshold to activate a direction - reduced from 60 to 30 for easier activation
   const THRESHOLD = 30;
@@ -81,32 +81,22 @@ export const DirectionMenu = forwardRef<DirectionMenuHandle, DirectionMenuProps>
       const angle = Math.atan2(dy, dx) * 180 / Math.PI;
 
       if (angle > -45 && angle <= 45) {
-        if (selectedDirection !== 'right') {
-          updateSelectedDirection('right');
-        }
+        updateSelectedDirection('right');
       } else if (angle > 45 && angle <= 135) {
-        if (selectedDirection !== 'bottom') {
-          updateSelectedDirection('bottom');
-        }
+        updateSelectedDirection('bottom');
       } else if (angle > 135 || angle <= -135) {
-        if (selectedDirection !== 'left') {
-          updateSelectedDirection('left');
-        }
+        updateSelectedDirection('left');
       } else {
-        if (selectedDirection !== 'top') {
-          updateSelectedDirection('top');
-        }
+        updateSelectedDirection('top');
       }
     } else {
-      if (selectedDirection) {
-        updateSelectedDirection(null);
-      }
+      updateSelectedDirection(null);
     }
   };
 
   const handleRightMouseUp = (e: MouseEvent) => {
     if (e.button !== 2) return;
-    
+
     if (!isVisible && visibleTimeoutRef.current) {
       clearTimeout(visibleTimeoutRef.current);
       visibleTimeoutRef.current = null;
