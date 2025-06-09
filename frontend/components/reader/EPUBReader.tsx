@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contents, Rendition, NavItem } from 'epubjs';
-import { ReactReader, ReactReaderStyle, type IReactReaderStyle } from 'react-reader';
+import { ReactReader, ReactReaderStyle, EpubViewStyle, 
+  type IReactReaderStyle, type IEpubViewStyle } from 'react-reader';
 import { cn } from "@/lib/utils";
 import { Settings, ArrowRightToLine, ArrowLeftToLine, Search, Sun, Moon, RotateCcw, MousePointer, MoreHorizontal, MousePointer2 } from 'lucide-react';
 
@@ -12,6 +13,75 @@ interface EPUBReaderProps {
 }
 
 type SearchResult = { cfi: string; excerpt: string };
+
+const lightReaderTheme: IReactReaderStyle = {
+  ...ReactReaderStyle,
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    transition: undefined,
+  },
+}
+
+const darkReaderTheme: IReactReaderStyle = {
+  ...ReactReaderStyle,
+  arrow: {
+    ...ReactReaderStyle.arrow,
+    color: 'white',
+  },
+  arrowHover: {
+    ...ReactReaderStyle.arrowHover,
+    color: '#ccc',
+  },
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    backgroundColor: '#000',
+    transition: undefined,
+  },
+  titleArea: {
+    ...ReactReaderStyle.titleArea,
+    color: '#ccc',
+  },
+  tocArea: {
+    ...ReactReaderStyle.tocArea,
+    background: '#111',
+  },
+  tocButtonExpanded: {
+    ...ReactReaderStyle.tocButtonExpanded,
+    background: '#222',
+  },
+  tocButtonBar: {
+    ...ReactReaderStyle.tocButtonBar,
+    background: '#fff',
+  },
+  tocButton: {
+    ...ReactReaderStyle.tocButton,
+    color: 'white',
+  },
+}
+
+const pageTransitionStyles: Partial<IReactReaderStyle> = {
+  readerArea: {
+    ...ReactReaderStyle.readerArea,
+    transition: 'transform 0.5s ease',
+  },
+  prev: {
+    ...ReactReaderStyle.prev,
+    transition: 'transform 0.3s ease-out',
+  },
+  next: {
+    ...ReactReaderStyle.next,
+    transition: 'transform 0.3s ease-out',
+  },
+}
+
+const testEpubViewStyle: IEpubViewStyle = {
+  ...EpubViewStyle,
+  view: {
+    ...EpubViewStyle.view,
+    display: 'flex',
+    justifyContent: 'center',
+  },
+}
 
 export const EPUBReader = ({
   src,
@@ -27,6 +97,7 @@ export const EPUBReader = ({
   const [smoothScrolling, setSmoothScrolling] = useState(false);
   const [pageTransition, setPageTransition] = useState(true);
   const [disableContextMenu, setDisableContextMenu] = useState(false);
+  const [isFixedLayout, setIsFixedLayout] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -37,61 +108,50 @@ export const EPUBReader = ({
   const tocRef = useRef<NavItem[]>([]);
   const prevResultsRef = useRef<SearchResult[]>([]);
 
+  const handleTocChanged = (toc: NavItem[]) => {
+    tocRef.current = toc;
+  };
+
   const handleLocationChanged = (loc: string) => {
     setLocation(loc);
     localStorage.setItem(`epub-${src}`, loc);
 
     if (renditionRef.current && tocRef.current) {
       const { displayed, href } = renditionRef.current.location.start;
-      const chapter = tocRef.current.find((item) => item.href === href);
+      const chapter = tocRef.current.find((item) => {
+        let itemHref = item.href;
+        while (itemHref.startsWith("../")) {
+          itemHref = itemHref.substring(3);
+        }
+        let hrefHref = href;
+        while (hrefHref.startsWith("../")) {
+          hrefHref = hrefHref.substring(3);
+        }
+        return itemHref === hrefHref;
+      });
+      console.log({displayed, href, chapter});
       setPageInfo(
-        `Page ${displayed.page} of ${displayed.total}${chapter ? ` in ${chapter.label}` : ''}`
+        `${displayed.page} / ${displayed.total}${chapter ? ` - ${chapter.label}` : ''}`
       );
     }
   };
 
   useEffect(() => {
-    const savedLocation = localStorage.getItem(`epub-${src}`);
-    if (savedLocation) {
-      setLocation(savedLocation);
-    }
+    const loadSetting = <T,>(key: string, defaultValue: T, parser?: (value: string) => T): T => {
+      const saved = localStorage.getItem(`epub-${key}-${src}`);
+      if (saved === null) return defaultValue;
+      return parser ? parser(saved) : (saved as unknown as T);
+    };
 
-    const savedDirection = localStorage.getItem(`epub-direction-${src}`);
-    if (savedDirection) {
-      setIsRTL(savedDirection === 'rtl');
-    }
-
-    const savedFontSize = localStorage.getItem(`epub-fontsize-${src}`);
-    if (savedFontSize) {
-      setFontSize(parseInt(savedFontSize, 10));
-    }
-
-    const savedTheme = localStorage.getItem(`epub-theme-${src}`);
-    if (savedTheme) {
-      setDarkMode(savedTheme === 'dark');
-    }
-
-    const savedPageTurnOnScroll = localStorage.getItem(`epub-pageturn-${src}`);
-    if (savedPageTurnOnScroll) {
-      setPageTurnOnScroll(savedPageTurnOnScroll === 'true');
-    }
-
-    const savedSmoothScrolling = localStorage.getItem(`epub-smoothscroll-${src}`);
-    if (savedSmoothScrolling) {
-      setSmoothScrolling(savedSmoothScrolling === 'true');
-    }
-
-    const savedPageTransition = localStorage.getItem(`epub-pagetransition-${src}`);
-    if (savedPageTransition !== null) {
-      setPageTransition(savedPageTransition === 'true');
-    } else {
-      setPageTransition(true); // Default to true if not set
-    }
-
-    const savedDisableContextMenu = localStorage.getItem(`epub-disablecontextmenu-${src}`);
-    if (savedDisableContextMenu) {
-      setDisableContextMenu(savedDisableContextMenu === 'true');
-    }
+    setLocation(loadSetting('', null));
+    setIsRTL(loadSetting('direction', false, value => value === 'rtl'));
+    setFontSize(loadSetting('fontsize', 100, value => parseInt(value, 10)));
+    setDarkMode(loadSetting('theme', true, value => value === 'dark'));
+    setPageTurnOnScroll(loadSetting('pageturn', true, value => value === 'true'));
+    setSmoothScrolling(loadSetting('smoothscroll', false, value => value === 'true'));
+    setPageTransition(loadSetting('pagetransition', true, value => value === 'true'));
+    setDisableContextMenu(loadSetting('disablecontextmenu', false, value => value === 'true'));
+    setIsFixedLayout(loadSetting('fixedlayout', false, value => value === 'true'));
   }, [src]);
 
   useEffect(() => {
@@ -195,92 +255,175 @@ export const EPUBReader = ({
     localStorage.setItem(`epub-disablecontextmenu-${src}`, newValue.toString());
   };
 
+  const setupRendition = (rendition: Rendition) => {
+    renditionRef.current = rendition;
+
+    const spine_get = rendition.book.spine.get.bind(rendition.book.spine);
+    rendition.book.spine.get = (target: string) => {
+      let t = spine_get(target);
+
+      if (!t && target.startsWith("../")) {
+        t = spine_get(target.substring(3));
+      }
+
+      if (!t) {
+        t = spine_get(undefined);
+      }
+
+      return t;
+    }
+
+    // Check if this is a fixed layout EPUB
+    const book = rendition.book as any;
+    const fixedLayout = book.package?.metadata?.layout === "pre-paginated";
+    setIsFixedLayout(fixedLayout);
+    
+    if (fixedLayout) {
+      console.log("Detected fixed layout EPUB - using single page mode");
+      localStorage.setItem(`epub-fixedlayout-${src}`, 'true');
+      
+      const originalNext = rendition.next.bind(rendition);
+      const originalPrev = rendition.prev.bind(rendition);
+      
+      rendition.next = () => {
+        try {
+          console.log("Custom next method for fixed layout");
+          const currentLoc = (rendition as any).currentLocation();
+          if (currentLoc?.start) {
+            const currentIndex = currentLoc.start.index;
+            const nextIndex = currentIndex + 1;
+            
+            const nextSpineItem = rendition.book.spine.get(nextIndex);
+            if (nextSpineItem) {
+              return rendition.display(nextSpineItem.href);
+            }
+          }
+          return originalNext();
+        } catch (e) {
+          console.error("Error in custom next:", e);
+          return Promise.resolve();
+        }
+      };
+      
+      rendition.prev = () => {
+        try {
+          console.log("Custom prev method for fixed layout");
+          const currentLoc = (rendition as any).currentLocation();
+          if (currentLoc?.start) {
+            const currentIndex = currentLoc.start.index;
+            if (currentIndex > 0) {
+              const prevIndex = currentIndex - 1;
+              const prevSpineItem = rendition.book.spine.get(prevIndex);
+              if (prevSpineItem) {
+                return rendition.display(prevSpineItem.href);
+              }
+            }
+          }
+          return originalPrev();
+        } catch (e) {
+          console.error("Error in custom prev:", e);
+          return Promise.resolve();
+        }
+      };
+    } else {
+      localStorage.setItem(`epub-fixedlayout-${src}`, 'false');
+    }
+
+    rendition.themes.fontSize(`${fontSize}%`);
+
+    if (darkMode) {
+      rendition.themes.override('color', '#fff');
+      rendition.themes.override('background', '#000');
+    } else {
+      rendition.themes.override('color', '#000');
+      rendition.themes.override('background', '#fff');
+    }
+
+    rendition.hooks.content.register((contents: Contents) => {
+      const document = contents.window.document;
+      if (document) {
+        // Set scroll behavior based on user preference
+        // @ts-ignore - manager type is missing in epubjs Rendition
+        rendition.manager.container.style['scroll-behavior'] = smoothScrolling ? 'smooth' : 'auto';
+
+        if (disableContextMenu) {
+          const body = document.querySelector('body');
+          if (body) {
+            body.oncontextmenu = () => false;
+          }
+        }
+      }
+    });
+  };
+
+  const currentReaderStyles = pageTransition
+    ? darkMode
+      ? { ...pageTransitionStyles, ...darkReaderTheme }
+      : { ...pageTransitionStyles, ...lightReaderTheme }
+    : darkMode
+      ? darkReaderTheme
+      : lightReaderTheme;
+
+  const loadingView = (
+    <div className={cn("flex flex-col items-center justify-center h-full",
+      darkMode ? "text-white" : "text-black")}>
+      <RotateCcw className="animate-spin" />
+      <p>Loading...</p>
+    </div>
+  );
+
+  const goToNextPage = () => {
+    if (!renditionRef.current) return;
+    
+    console.log("Custom next navigation");
+    renditionRef.current.next();
+  };
+  
+  const goToPrevPage = () => {
+    if (!renditionRef.current) return;
+    
+    console.log("Custom prev navigation");
+    renditionRef.current.prev();
+  };
+
   return (
     <div className={cn("h-full w-full relative", className)}>
       <div className="h-full">
         <ReactReader
           url={src}
+          loadingView={loadingView}
+          readerStyles={{
+            ...currentReaderStyles,
+            arrow: { display: 'none' },
+            prev: { display: 'none' },
+            next: { display: 'none' },
+          }}
+          epubViewStyles={testEpubViewStyle}
+          tocChanged={handleTocChanged}
+          getRendition={setupRendition}
           location={location}
           locationChanged={handleLocationChanged}
-          epubOptions={{
-            flow: "paginated",
-            manager: "default"
-          }}
           epubInitOptions={{
             openAs: 'epub',
           }}
-          isRTL={isRTL}
-          pageTurnOnScroll={pageTurnOnScroll}
-          loadingView={<div className="flex flex-col items-center justify-center h-full">
-            <RotateCcw className="animate-spin" />
-            <p>Loading...</p>
-          </div>}
-          readerStyles={
-            pageTransition
-              ? darkMode
-                ? { ...pageTransitionStyles, ...darkReaderTheme }
-                : { ...pageTransitionStyles, ...lightReaderTheme }
-              : darkMode
-                ? darkReaderTheme
-                : lightReaderTheme
-          }
-          getRendition={(rendition) => {
-            renditionRef.current = rendition;
-
-            const spine_get = rendition.book.spine.get.bind(rendition.book.spine);
-            rendition.book.spine.get = (target: string) => {
-              let t = spine_get(target);
-              console.log(t);
-              while ((t == null) && target.startsWith("../")) {
-                target = target.substring(3);
-                t = spine_get(target);
-              }
-
-              return t;
-            }
-
-            rendition.themes.fontSize(`${fontSize}%`);
-
-            if (darkMode) {
-              rendition.themes.override('color', '#fff');
-              rendition.themes.override('background', '#000');
-            } else {
-              rendition.themes.override('color', '#000');
-              rendition.themes.override('background', '#fff');
-            }
-
-            rendition.hooks.content.register((contents: Contents) => {
-              const document = contents.window.document;
-              if (document) {
-                // Set scroll behavior based on user preference
-                // @ts-ignore - manager type is missing in epubjs Rendition
-                rendition.manager.container.style['scroll-behavior'] = smoothScrolling ? 'smooth' : 'auto';
-
-                // Handle context menu disabling
-                if (disableContextMenu) {
-                  const body = document.querySelector('body');
-                  if (body) {
-                    body.oncontextmenu = () => false;
-                  }
-                }
-              }
-            });
-          }}
-          tocChanged={(toc) => {
-            tocRef.current = toc;
+          epubOptions={{
+            flow: "paginated",
+            manager: "default",
+            allowScriptedContent: true,
+            // spread: isFixedLayout ? "none" : "auto",
           }}
           searchQuery={searchQuery}
           onSearchResults={setSearchResults}
+          isRTL={isRTL}
+          pageTurnOnScroll={pageTurnOnScroll}
           contextLength={30}
         />
       </div>
 
-      {/* Page info display */}
       <div className="absolute bottom-4 left-4 p-2 text-sm bg-black/70 text-white rounded-md z-10">
         {pageInfo}
       </div>
 
-      {/* Search panel */}
       {showSearch && (
         <div className="absolute top-12 z-20 right-4 w-64 p-3 rounded-md bg-black/70 text-white">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -305,16 +448,16 @@ export const EPUBReader = ({
               </div>
               <div className="flex items-center justify-center gap-1">
                 <button
-                  onClick={goToNextResult}
-                  className="w-full py-1 px-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-                >
-                  Next
-                </button>
-                <button
                   onClick={goToPreviousResult}
                   className="w-full py-1 px-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
                 >
                   Prev
+                </button>
+                <button
+                  onClick={goToNextResult}
+                  className="w-full py-1 px-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                >
+                  Next
                 </button>
               </div>
             </div>
@@ -322,7 +465,6 @@ export const EPUBReader = ({
         </div>
       )}
 
-      {/* Settings button */}
       <div className="absolute bottom-4 right-4 z-10 flex flex-col gap-2 items-end">
         <button
           onClick={() => {
@@ -437,68 +579,28 @@ export const EPUBReader = ({
           </div>
         )}
       </div>
+
+      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10">
+        <button 
+          onClick={isRTL ? goToNextPage : goToPrevPage}
+          className="bg-black/50 text-white p-3 rounded-r-lg hover:bg-black/70 transition-colors"
+          aria-label="Previous Page"
+        >
+          <ArrowLeftToLine size={24} />
+        </button>
+      </div>
+
+      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
+        <button 
+          onClick={isRTL ? goToPrevPage : goToNextPage}
+          className="bg-black/50 text-white p-3 rounded-l-lg hover:bg-black/70 transition-colors"
+          aria-label="Next Page"
+        >
+          <ArrowRightToLine size={24} />
+        </button>
+      </div>
     </div>
   );
 };
-
-const lightReaderTheme: IReactReaderStyle = {
-  ...ReactReaderStyle,
-  readerArea: {
-    ...ReactReaderStyle.readerArea,
-    transition: undefined,
-  },
-}
-
-const darkReaderTheme: IReactReaderStyle = {
-  ...ReactReaderStyle,
-  arrow: {
-    ...ReactReaderStyle.arrow,
-    color: 'white',
-  },
-  arrowHover: {
-    ...ReactReaderStyle.arrowHover,
-    color: '#ccc',
-  },
-  readerArea: {
-    ...ReactReaderStyle.readerArea,
-    backgroundColor: '#000',
-    transition: undefined,
-  },
-  titleArea: {
-    ...ReactReaderStyle.titleArea,
-    color: '#ccc',
-  },
-  tocArea: {
-    ...ReactReaderStyle.tocArea,
-    background: '#111',
-  },
-  tocButtonExpanded: {
-    ...ReactReaderStyle.tocButtonExpanded,
-    background: '#222',
-  },
-  tocButtonBar: {
-    ...ReactReaderStyle.tocButtonBar,
-    background: '#fff',
-  },
-  tocButton: {
-    ...ReactReaderStyle.tocButton,
-    color: 'white',
-  },
-}
-
-const pageTransitionStyles: Partial<IReactReaderStyle> = {
-  readerArea: {
-    ...ReactReaderStyle.readerArea,
-    transition: 'transform 0.5s ease',
-  },
-  prev: {
-    ...ReactReaderStyle.prev,
-    transition: 'transform 0.3s ease-out',
-  },
-  next: {
-    ...ReactReaderStyle.next,
-    transition: 'transform 0.3s ease-out',
-  },
-}
 
 export default EPUBReader;
