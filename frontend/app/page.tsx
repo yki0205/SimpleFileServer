@@ -2009,7 +2009,8 @@ function FileExplorerContent() {
 
     dragCounterRef.current++;
 
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+    // if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setIsDragging(true);
     }
   }, []);
@@ -2206,7 +2207,6 @@ function FileExplorerContent() {
       )}
       <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
         <header className="flex flex-col md:flex-row gap-1">
-
           <div className="w-full flex justify-between gap-1">
             <div className="flex-1 flex gap-1 justify-start">
               <Button
@@ -2319,18 +2319,59 @@ function FileExplorerContent() {
             </div>
 
             <form onSubmit={handleSearch} className="flex-1 max-md:hidden max-w-sm flex gap-1 justify-center">
-              <Input
-                name="searchQuery"
-                placeholder="Search files..."
-                defaultValue={searchQuery}
-                className={cn(
-                  "w-full",
-                  "backdrop-blur-sm",
-                  "text-white",
-                  "selection:bg-white selection:text-black",
-                  "focus-visible:ring-[1px]"
-                )}
-              />
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <Input
+                    name="searchQuery"
+                    placeholder="Search files..."
+                    defaultValue={searchQuery}
+                    className={cn(
+                      "w-full",
+                      "backdrop-blur-sm",
+                      "text-white",
+                      "selection:bg-white selection:text-black",
+                      "focus-visible:ring-[1px]"
+                    )}
+                  />
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={() => {
+                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                    if (input) {
+                      navigator.clipboard.writeText(input.value);
+                    }
+                  }}>
+                    <ClipboardCopy size={18} /> Copy
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => {
+                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                    if (input) {
+                      navigator.clipboard.writeText(input.value);
+                      input.value = '';
+                      input.focus();
+                    }
+                  }}>
+                    <Scissors size={18} /> Cut
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={async () => {
+                    try {
+                      const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                      if (input) {
+                        const text = await navigator.clipboard.readText();
+                        input.value = text;
+                        input.focus();
+                      }
+                    } catch (err) {
+                      console.error('Failed to read clipboard contents: ', err);
+                    }
+                  }}>
+                    <ClipboardPaste size={18} /> Paste
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => setRecursiveSearch(!recursiveSearch)}>
+                    <Search size={18} /><span className={cn(!recursiveSearch && 'line-through')}>Recursive</span>
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               <Button type="submit" variant="secondary" size="icon">
                 <Search size={18} />
               </Button>
@@ -2534,18 +2575,59 @@ function FileExplorerContent() {
           </div>
 
           <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
-            <Input
-              name="searchQuery"
-              placeholder="Search files..."
-              defaultValue={searchQuery}
-              className={cn(
-                "w-full",
-                "backdrop-blur-sm",
-                "text-white",
-                "selection:bg-white selection:text-black",
-                "focus-visible:ring-[1px]"
-              )}
-            />
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <Input
+                  name="searchQuery"
+                  placeholder="Search files..."
+                  defaultValue={searchQuery}
+                  className={cn(
+                    "w-full",
+                    "backdrop-blur-sm",
+                    "text-white",
+                    "selection:bg-white selection:text-black",
+                    "focus-visible:ring-[1px]"
+                  )}
+                />
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => {
+                  const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                  if (input) {
+                    navigator.clipboard.writeText(input.value);
+                  }
+                }}>
+                  <ClipboardCopy size={18} /> Copy
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => {
+                  const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                  if (input) {
+                    navigator.clipboard.writeText(input.value);
+                    input.value = '';
+                    input.focus();
+                  }
+                }}>
+                  <Scissors size={18} /> Cut
+                </ContextMenuItem>
+                <ContextMenuItem onClick={async () => {
+                  try {
+                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+                    if (input) {
+                      const text = await navigator.clipboard.readText();
+                      input.value = text;
+                      input.focus();
+                    }
+                  } catch (err) {
+                    console.error('Failed to read clipboard contents: ', err);
+                  }
+                }}>
+                  <ClipboardPaste size={18} /> Paste
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setRecursiveSearch(!recursiveSearch)}>
+                  <Search size={18} /><span className={cn(!recursiveSearch && 'line-through')}>Recursive</span>
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
             <Button type="submit" variant="secondary" size="icon">
               <Search size={18} />
             </Button>
