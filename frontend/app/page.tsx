@@ -872,7 +872,7 @@ function FileExplorerContent() {
     if (isSelecting) {
       setIsSelecting(false);
       setSelectedFiles([]);
-    } 
+    }
 
     // NOTE: It's not a good idea, but it works
     setIsChangingPath(true);
@@ -1900,6 +1900,8 @@ function FileExplorerContent() {
           if (isSelecting) {
             setIsSelecting(false);
             setSelectedFiles([]);
+          } else {
+            setFocusedFileIndex(null);
           }
           break;
         case 's': // Toggle selection mode
@@ -1937,7 +1939,7 @@ function FileExplorerContent() {
           }
           break;
         case 'd': // download selected files
-        if (isSelecting && selectedFiles.length > 0) {
+          if (isSelecting && selectedFiles.length > 0) {
             e.preventDefault();
             handleDownloadMultiple2(selectedFiles);
           } else if (focusedFileIndex !== null && accumulatedFiles[focusedFileIndex]) {
@@ -1987,13 +1989,19 @@ function FileExplorerContent() {
 
         case 'arrowup': // Navigate up
           e.preventDefault(); // Prevent page scroll
-          if (focusedFileIndex !== null && focusedFileIndex > 0) {
+          if (focusedFileIndex !== null) {
             let newIndex;
             if (viewMode === 'list') {
               // List view: Simply move to the previous item
-              newIndex = focusedFileIndex - 1;
+              // newIndex = (focusedFileIndex - 1 + accumulatedFiles.length) % accumulatedFiles.length;
+              if (focusedFileIndex > 0) {
+                newIndex = focusedFileIndex - 1;
+              } else {
+                newIndex = focusedFileIndex;
+              }
             } else {
               // Grid view: Move to the previous row in the same column
+              // NOTE: BUG here, when the window width is changed, the columnCount is not updated, so the newIndex is not correct
               const columnCount = getColumnCount(window.innerWidth);
               if (focusedFileIndex >= columnCount) {
                 newIndex = focusedFileIndex - columnCount;
@@ -2004,19 +2012,27 @@ function FileExplorerContent() {
             setFocusedFileIndex(newIndex);
             scrollToFocusedItem(newIndex);
           } else if (focusedFileIndex === null && accumulatedFiles.length > 0) {
-            setFocusedFileIndex(0);
-            scrollToFocusedItem(0);
+            // setFocusedFileIndex(0);
+            // scrollToFocusedItem(0);
+            setFocusedFileIndex(accumulatedFiles.length - 1);
+            scrollToFocusedItem(accumulatedFiles.length - 1);
           }
           break;
         case 'arrowdown': // Navigation through files
           e.preventDefault(); // Prevent page scroll
-          if (focusedFileIndex !== null && focusedFileIndex < accumulatedFiles.length - 1) {
+          if (focusedFileIndex !== null) {
             let newIndex;
             if (viewMode === 'list') {
               // List view: Simply move to the next item
-              newIndex = focusedFileIndex + 1;
+              // newIndex = (focusedFileIndex + 1) % accumulatedFiles.length;
+              if (focusedFileIndex < accumulatedFiles.length - 1) {
+                newIndex = focusedFileIndex + 1;
+              } else {
+                newIndex = focusedFileIndex;
+              }
             } else {
               // Grid view: Move to the next row in the same column
+              // NOTE: BUG here, when the window width is changed, the columnCount is not updated, so the newIndex is not correct
               const columnCount = getColumnCount(window.innerWidth);
               const nextRowIndex = focusedFileIndex + columnCount;
               if (nextRowIndex < accumulatedFiles.length) {
