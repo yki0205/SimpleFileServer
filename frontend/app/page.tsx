@@ -72,12 +72,14 @@ interface FileRowProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
+    focusedIndex: number | null;
   };
 }
 
 const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
-  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename } = data;
+  const { files, selectedFiles, isSelecting, isSearching, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, focusedIndex } = data;
   const file = files[index];
+  const isFocused = focusedIndex === index;
 
   return (
     <div style={style}>
@@ -89,7 +91,8 @@ const FileRow = React.memo(({ index, style, data }: FileRowProps) => {
             onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
             className={cn(
               "text-white hover:text-black hover:bg-accent",
-              isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-white hover:bg-blue-500/20"
+              isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-white hover:bg-blue-500/20",
+              isFocused && "border-l-4 border-yellow-500"
             )}
           />
         </ContextMenuTrigger>
@@ -145,15 +148,17 @@ interface FileCellProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
+    focusedIndex: number | null;
   };
 }
 
 const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename } = data;
+  const { files, selectedFiles, isSelecting, columnCount, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, focusedIndex } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
   const file = files[index];
+  const isFocused = focusedIndex === index;
 
   return (
     <div style={style} className="p-1">
@@ -165,7 +170,8 @@ const FileCell = React.memo(({ columnIndex, rowIndex, style, data }: FileCellPro
             onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
             className={cn(
               "text-black hover:text-gray-600 hover:bg-accent",
-              isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
+              isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20",
+              isFocused && "border-2 border-yellow-500"
             )}
           />
         </ContextMenuTrigger>
@@ -223,11 +229,12 @@ interface ImageCellProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
+    focusedIndex: number | null;
   };
 }
 
 const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token, focusedIndex } = data;
   const index = rowIndex * columnCount + columnIndex;
   if (index >= files.length) return null;
 
@@ -245,7 +252,8 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className={cn(
                 "w-full h-full object-cover rounded-md cursor-pointer",
-                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
+                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20",
+                focusedIndex === index && "border-2 border-yellow-500"
               )}
               loading="eager"
               disablePreview={!useImageQuickPreview || isSelecting}
@@ -295,7 +303,8 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className={cn(
                 "w-full h-full object-cover rounded-md cursor-pointer",
-                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
+                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20",
+                focusedIndex === index && "border-2 border-yellow-500"
               )}
               loading="eager"
             />
@@ -344,7 +353,8 @@ const ImageCell = React.memo(({ columnIndex, rowIndex, style, data }: ImageCellP
               onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
               className={cn(
                 "text-black hover:text-gray-600 hover:bg-accent",
-                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
+                isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20",
+                focusedIndex === index && "border-2 border-yellow-500"
               )}
             />
           </ContextMenuTrigger>
@@ -404,11 +414,12 @@ interface MasonryCellProps {
     onShowDetails: (file: FileData) => void;
     onQuickSelect: (path: string) => void;
     onRename: (path: string) => void;
+    focusedIndex: number | null;
   };
 }
 
 const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
-  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token } = data;
+  const { files, selectedFiles, isSelecting, columnCount, columnWidth, direction, useImageQuickPreview, onFileClick, onCopy, onCut, onDownload, onDelete, onShowDetails, onQuickSelect, onRename, token, focusedIndex } = data;
   // Each index represents a column of images
   if (index >= columnCount) return null;
 
@@ -440,7 +451,8 @@ const MasonryCell = React.memo(({ index, style, data }: MasonryCellProps) => {
                 onClick={() => onFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory)}
                 className={cn(
                   "w-full h-auto rounded-md",
-                  isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20"
+                  isSelecting && selectedFiles.includes(file.path) && "border-2 border-blue-500 bg-blue-500/10 hover:text-black hover:bg-blue-500/20",
+                  focusedIndex === files.indexOf(file) && "border-2 border-yellow-500"
                 )}
                 loading="lazy"
                 disablePreview={!useImageQuickPreview}
@@ -528,6 +540,8 @@ function FileExplorerContent() {
 
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+
+  const [focusedFileIndex, setFocusedFileIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated && !isCheckingAuth) {
@@ -858,7 +872,7 @@ function FileExplorerContent() {
     if (isSelecting) {
       setIsSelecting(false);
       setSelectedFiles([]);
-    }
+    } 
 
     // NOTE: It's not a good idea, but it works
     setIsChangingPath(true);
@@ -1819,9 +1833,9 @@ function FileExplorerContent() {
     }
   }, [isImageOnlyMode, useMasonry, viewMode, isLoadingMore, hasMoreFiles, loadNextPage]);
 
-  // close preview when currentPath
   useEffect(() => {
     closePreview();
+    setFocusedFileIndex(null);
   }, [currentPath, searchQuery])
 
   useEffect(() => {
@@ -1829,6 +1843,256 @@ function FileExplorerContent() {
       setIsChangingPath(false);
     }
   }, [currentPath, searchQuery, isChangingPath])
+
+
+  // Add this function before the keyboard handler useEffect
+  const scrollToFocusedItem = useCallback((index: number) => {
+    if (index < 0 || index >= accumulatedFiles.length) return;
+
+    if (viewMode === 'list') {
+      listRef.current?.scrollToItem(index, "center");
+    } else if (viewMode === 'grid') {
+      const columnCount = getColumnCount(window.innerWidth);
+      const rowIndex = Math.floor(index / columnCount);
+      const columnIndex = index % columnCount;
+      gridRef.current?.scrollToItem({ columnIndex, rowIndex, align: "center" });
+    } else if (viewMode === 'image') {
+      if (isImageOnlyMode && useMasonry) {
+        // Masonry view doesn't support scrollToItem, we'd need a more complex solution
+        // For now, we just highlight the item without scrolling
+      } else {
+        const columnCount = getColumnCount(window.innerWidth);
+        const rowIndex = Math.floor(index / columnCount);
+        const columnIndex = index % columnCount;
+        imageGridRef.current?.scrollToItem({ columnIndex, rowIndex, align: "center" });
+      }
+    }
+  }, [viewMode, accumulatedFiles.length, isImageOnlyMode, useMasonry]);
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // When preview is open, don't handle keyboard shortcuts
+      if (preview.isOpen) return;
+
+      // When input is focused, don't handle keyboard shortcuts
+      if (e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'l': // List view
+          setViewMode('list');
+          break;
+        case 'g': // Grid view
+          setViewMode('grid');
+          break;
+        case 'i': // Image view
+          if (e.shiftKey) { // Shift+I switch to image only mode
+            if (!isSearching) {
+              setIsImageOnlyMode(!isImageOnlyMode);
+            }
+          } else {
+            setViewMode('image');
+          }
+          break;
+
+        case 'escape': // Exit selection mode
+          if (isSelecting) {
+            setIsSelecting(false);
+            setSelectedFiles([]);
+          }
+          break;
+        case 's': // Toggle selection mode
+          setIsSelecting(!isSelecting);
+          break;
+        case 'a': // Select all files (using Ctrl/Cmd)
+          if ((e.ctrlKey || e.metaKey) && isSelecting) {
+            e.preventDefault();
+            handleSelectAll();
+          }
+          break;
+        case 'c': // Clear selection or copy (using Ctrl/Cmd)
+          if ((e.ctrlKey || e.metaKey) && isSelecting) {
+            if (selectedFiles.length > 0) {
+              e.preventDefault();
+              handleCopyMultiple(selectedFiles);
+            }
+          } else if (isSelecting) {
+            handleClearSelection();
+          }
+          break;
+        case 'x': // Cut selected files (using Ctrl/Cmd)
+          if ((e.ctrlKey || e.metaKey) && isSelecting && selectedFiles.length > 0) {
+            e.preventDefault();
+            handleMoveFromMultiple(selectedFiles);
+          }
+          break;
+        case 'v': // Paste file (using Ctrl/Cmd)
+          if ((e.ctrlKey || e.metaKey) && filesToClone.length > 0) {
+            e.preventDefault();
+            setCloneComfirmDialogOpen(true);
+          } else if ((e.ctrlKey || e.metaKey) && filesToMove.length > 0) {
+            e.preventDefault();
+            setMoveComfirmDialogOpen(true);
+          }
+          break;
+        case 'd': // download selected files
+        if (isSelecting && selectedFiles.length > 0) {
+            e.preventDefault();
+            handleDownloadMultiple2(selectedFiles);
+          } else if (focusedFileIndex !== null && accumulatedFiles[focusedFileIndex]) {
+            e.preventDefault();
+            handleDownload(accumulatedFiles[focusedFileIndex].path);
+          }
+          break;
+        case 'delete': // Delete selected files
+          if (selectedFiles.length > 0) {
+            handleDeleteMultiple(selectedFiles);
+          } else if (focusedFileIndex !== null && accumulatedFiles[focusedFileIndex]) {
+            handleDelete(accumulatedFiles[focusedFileIndex].path);
+          }
+          break;
+
+        case 'h': // Go home
+          goHome();
+          break;
+        case 'b': // Go back
+          if (canGoBack) {
+            goBack();
+          }
+          break;
+        case 'r': // Refresh file list
+          refetchData();
+          break;
+        case 'u': // Upload file
+          handleUpload();
+          break;
+
+        case '/': // Focus search
+          e.preventDefault();
+          const searchInput = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+          if (searchInput) {
+            searchInput.focus();
+          }
+          break;
+        case 'f': // Focus search (using Ctrl/Cmd)
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const searchInput = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+            if (searchInput) {
+              searchInput.focus();
+            }
+          }
+          break;
+
+        case 'arrowup': // Navigate up
+          e.preventDefault(); // Prevent page scroll
+          if (focusedFileIndex !== null && focusedFileIndex > 0) {
+            let newIndex;
+            if (viewMode === 'list') {
+              // List view: Simply move to the previous item
+              newIndex = focusedFileIndex - 1;
+            } else {
+              // Grid view: Move to the previous row in the same column
+              const columnCount = getColumnCount(window.innerWidth);
+              if (focusedFileIndex >= columnCount) {
+                newIndex = focusedFileIndex - columnCount;
+              } else {
+                newIndex = focusedFileIndex;
+              }
+            }
+            setFocusedFileIndex(newIndex);
+            scrollToFocusedItem(newIndex);
+          } else if (focusedFileIndex === null && accumulatedFiles.length > 0) {
+            setFocusedFileIndex(0);
+            scrollToFocusedItem(0);
+          }
+          break;
+        case 'arrowdown': // Navigation through files
+          e.preventDefault(); // Prevent page scroll
+          if (focusedFileIndex !== null && focusedFileIndex < accumulatedFiles.length - 1) {
+            let newIndex;
+            if (viewMode === 'list') {
+              // List view: Simply move to the next item
+              newIndex = focusedFileIndex + 1;
+            } else {
+              // Grid view: Move to the next row in the same column
+              const columnCount = getColumnCount(window.innerWidth);
+              const nextRowIndex = focusedFileIndex + columnCount;
+              if (nextRowIndex < accumulatedFiles.length) {
+                newIndex = nextRowIndex;
+              } else {
+                newIndex = focusedFileIndex;
+              }
+            }
+            setFocusedFileIndex(newIndex);
+            scrollToFocusedItem(newIndex);
+          } else if (focusedFileIndex === null && accumulatedFiles.length > 0) {
+            setFocusedFileIndex(0);
+            scrollToFocusedItem(0);
+          }
+          break;
+        case 'arrowleft': // Navigate left (only for grid view)
+          if ((viewMode === 'grid' || viewMode === 'image') && focusedFileIndex !== null && focusedFileIndex > 0) {
+            e.preventDefault();
+            const newIndex = focusedFileIndex - 1;
+            setFocusedFileIndex(newIndex);
+            scrollToFocusedItem(newIndex);
+          }
+          break;
+        case 'arrowright': // Navigate right (only for grid view)
+          if ((viewMode === 'grid' || viewMode === 'image') && focusedFileIndex !== null && focusedFileIndex < accumulatedFiles.length - 1) {
+            e.preventDefault();
+            const newIndex = focusedFileIndex + 1;
+            setFocusedFileIndex(newIndex);
+            scrollToFocusedItem(newIndex);
+          }
+          break;
+
+        case 'enter': // Open focused file
+          if (focusedFileIndex !== null && accumulatedFiles[focusedFileIndex]) {
+            const file = accumulatedFiles[focusedFileIndex];
+            handleFileClick(file.path, file.mimeType || 'application/octet-stream', file.isDirectory);
+          }
+          break;
+        case ' ': // Use space to quick select
+          if (isSelecting && focusedFileIndex !== null && accumulatedFiles[focusedFileIndex]) {
+            e.preventDefault(); // Prevent page scroll
+            handleQuickSelect(accumulatedFiles[focusedFileIndex].path);
+          }
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    preview.isOpen,
+    viewMode,
+    isSelecting,
+    selectedFiles,
+    isImageOnlyMode,
+    isSearching,
+    canGoBack,
+    filesToClone,
+    filesToMove,
+    focusedFileIndex,
+    accumulatedFiles,
+    handleQuickSelect,
+    handleSelectAll,
+    handleClearSelection,
+    handleCopyMultiple,
+    handleMoveFromMultiple,
+    handleDeleteMultiple,
+    handleDelete,
+    refetchData,
+    goHome,
+    goBack,
+    scrollToFocusedItem,
+  ]);
+
 
   const renderList = useCallback(({ height, width }: { height: number; width: number }) => (
     <List
@@ -1850,7 +2114,8 @@ function FileExplorerContent() {
         onDelete: handleDelete,
         onShowDetails: handleShowDetails,
         onQuickSelect: handleQuickSelect,
-        onRename: handleRename
+        onRename: handleRename,
+        focusedIndex: focusedFileIndex
       }}
       className="custom-scrollbar"
       onScroll={handleVirtualizedScroll}
@@ -1864,7 +2129,7 @@ function FileExplorerContent() {
       {FileRow}
     </List>
   ),
-    [accumulatedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+    [accumulatedFiles, selectedFiles, isSelecting, isSearching, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered, focusedFileIndex]);
 
   const renderGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1895,7 +2160,8 @@ function FileExplorerContent() {
           onDelete: handleDelete,
           onShowDetails: handleShowDetails,
           onQuickSelect: handleQuickSelect,
-          onRename: handleRename
+          onRename: handleRename,
+          focusedIndex: focusedFileIndex
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1909,7 +2175,7 @@ function FileExplorerContent() {
         {FileCell}
       </Grid>
     );
-  }, [accumulatedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+  }, [accumulatedFiles, selectedFiles, isSelecting, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered, focusedFileIndex]);
 
   const renderImageGrid = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1943,6 +2209,7 @@ function FileExplorerContent() {
           onShowDetails: handleShowDetails,
           onQuickSelect: handleQuickSelect,
           onRename: handleRename,
+          focusedIndex: focusedFileIndex
         }}
         className="custom-scrollbar"
         onScroll={handleVirtualizedScroll}
@@ -1956,7 +2223,7 @@ function FileExplorerContent() {
         {ImageCell}
       </Grid>
     );
-  }, [token, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered]);
+  }, [token, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, handleItemsRendered, focusedFileIndex]);
 
   const renderMasonry = useCallback(({ height, width }: { height: number; width: number }) => {
     const columnCount = getColumnCount(width);
@@ -1993,12 +2260,13 @@ function FileExplorerContent() {
               onShowDetails: handleShowDetails,
               onQuickSelect: handleQuickSelect,
               onRename: handleRename,
+              focusedIndex: focusedFileIndex
             }}
           />
         ))}
       </div>
     );
-  }, [token, useMasonry, gridDirection, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename]);
+  }, [token, useMasonry, gridDirection, accumulatedFiles, selectedFiles, isSelecting, useImageQuickPreview, handleFileClick, handleDownload, handleDelete, handleShowDetails, handleQuickSelect, handleRename, focusedFileIndex]);
 
 
 
@@ -2189,6 +2457,7 @@ function FileExplorerContent() {
         backgroundRepeat: 'no-repeat',
         backgroundAttachment: 'fixed',
       }}
+      onClick={() => setFocusedFileIndex(null)}
       onContextMenu={(e) => e.preventDefault()}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -2319,59 +2588,18 @@ function FileExplorerContent() {
             </div>
 
             <form onSubmit={handleSearch} className="flex-1 max-md:hidden max-w-sm flex gap-1 justify-center">
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <Input
-                    name="searchQuery"
-                    placeholder="Search files..."
-                    defaultValue={searchQuery}
-                    className={cn(
-                      "w-full",
-                      "backdrop-blur-sm",
-                      "text-white",
-                      "selection:bg-white selection:text-black",
-                      "focus-visible:ring-[1px]"
-                    )}
-                  />
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={() => {
-                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                    if (input) {
-                      navigator.clipboard.writeText(input.value);
-                    }
-                  }}>
-                    <ClipboardCopy size={18} /> Copy
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={() => {
-                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                    if (input) {
-                      navigator.clipboard.writeText(input.value);
-                      input.value = '';
-                      input.focus();
-                    }
-                  }}>
-                    <Scissors size={18} /> Cut
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={async () => {
-                    try {
-                      const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                      if (input) {
-                        const text = await navigator.clipboard.readText();
-                        input.value = text;
-                        input.focus();
-                      }
-                    } catch (err) {
-                      console.error('Failed to read clipboard contents: ', err);
-                    }
-                  }}>
-                    <ClipboardPaste size={18} /> Paste
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={() => setRecursiveSearch(!recursiveSearch)}>
-                    <Search size={18} /><span className={cn(!recursiveSearch && 'line-through')}>Recursive</span>
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
+              <Input
+                name="searchQuery"
+                placeholder="Search files..."
+                defaultValue={searchQuery}
+                className={cn(
+                  "w-full",
+                  "backdrop-blur-sm",
+                  "text-white",
+                  "selection:bg-white selection:text-black",
+                  "focus-visible:ring-[1px]"
+                )}
+              />
               <Button type="submit" variant="secondary" size="icon">
                 <Search size={18} />
               </Button>
@@ -2575,59 +2803,18 @@ function FileExplorerContent() {
           </div>
 
           <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
-            <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <Input
-                  name="searchQuery"
-                  placeholder="Search files..."
-                  defaultValue={searchQuery}
-                  className={cn(
-                    "w-full",
-                    "backdrop-blur-sm",
-                    "text-white",
-                    "selection:bg-white selection:text-black",
-                    "focus-visible:ring-[1px]"
-                  )}
-                />
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => {
-                  const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                  if (input) {
-                    navigator.clipboard.writeText(input.value);
-                  }
-                }}>
-                  <ClipboardCopy size={18} /> Copy
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => {
-                  const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                  if (input) {
-                    navigator.clipboard.writeText(input.value);
-                    input.value = '';
-                    input.focus();
-                  }
-                }}>
-                  <Scissors size={18} /> Cut
-                </ContextMenuItem>
-                <ContextMenuItem onClick={async () => {
-                  try {
-                    const input = document.querySelector('input[name="searchQuery"]') as HTMLInputElement;
-                    if (input) {
-                      const text = await navigator.clipboard.readText();
-                      input.value = text;
-                      input.focus();
-                    }
-                  } catch (err) {
-                    console.error('Failed to read clipboard contents: ', err);
-                  }
-                }}>
-                  <ClipboardPaste size={18} /> Paste
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => setRecursiveSearch(!recursiveSearch)}>
-                  <Search size={18} /><span className={cn(!recursiveSearch && 'line-through')}>Recursive</span>
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+            <Input
+              name="searchQuerySmall"
+              placeholder="Search files..."
+              defaultValue={searchQuery}
+              className={cn(
+                "w-full",
+                "backdrop-blur-sm",
+                "text-white",
+                "selection:bg-white selection:text-black",
+                "focus-visible:ring-[1px]"
+              )}
+            />
             <Button type="submit" variant="secondary" size="icon">
               <Search size={18} />
             </Button>
@@ -2644,16 +2831,17 @@ function FileExplorerContent() {
           {!isSelecting ? (
             <nav ref={navRef} className="flex-1">
               {isSearching ? (
-                <div className="bg-muted p-1 rounded-md text-sm">
+                <div className="h-9 bg-muted p-1 rounded-md text-sm flex items-center">
                   Searching: "{searchQuery}" in {currentPath || 'root'}
                 </div>
               ) : (
-                <div className="bg-muted p-1 rounded-md">
+                <div className="h-9 bg-muted p-1 rounded-md flex items-center">
                   <BreadcrumbNav
                     currentPath={currentPath}
                     onNavigate={navigateTo}
                     showRootIcon
                     onRootClick={goHome}
+                    className="h-full"
                   />
                 </div>
               )}
@@ -2721,7 +2909,7 @@ function FileExplorerContent() {
           )}
         </div>
 
-        <div className="relative w-full flex-1">
+        <div className="relative w-full flex-1 select-none">
           {isCheckingAuth ? (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
               <Loading message="Checking authentication..." />

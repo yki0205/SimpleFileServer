@@ -654,7 +654,7 @@ export const Video = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [volume, brightness, playbackRate, isFullscreen]);
+  }, [volume, brightness, isPlaying, playbackRate, isFullscreen]);
 
   // Clean up timeouts
   useEffect(() => {
