@@ -15,12 +15,13 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   List as ListIcon, Grid3x3 as Grid3x3Icon, Image as ImageIcon, Search, ArrowLeft, ArrowUp,
   Download, Upload, Edit, Trash2, ClipboardCopy, ClipboardPaste, MoveHorizontal, Layout,
   Info, Database, Eye, MoreHorizontal, TestTube2, LogIn, LogOut, User, Scissors, Check,
   CircleCheck, CircleX, ArrowLeftRight, RefreshCcw, FolderUp, FolderPlus, CheckCheck,
-  Loader2, Square, Home, X, Menu
+  Loader2, Square, Home, X, Menu, MousePointer2
 } from "lucide-react";
 
 import { BreadcrumbNav } from "@/components/nav";
@@ -534,6 +535,12 @@ const previewSupported: Record<string, boolean> = {
 
 function FileExplorerContent() {
   const { isAuthenticated, isCheckingAuth, username, permissions, logout, token } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated && !isCheckingAuth) {
+      setIsLoginDialogOpen(true);
+    }
+  }, [isAuthenticated, isCheckingAuth]);
+
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -543,22 +550,31 @@ function FileExplorerContent() {
 
   const [focusedFileIndex, setFocusedFileIndex] = useState<number | null>(null);
 
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (!isAuthenticated && !isCheckingAuth) {
-      setIsLoginDialogOpen(true);
-    }
-  }, [isAuthenticated, isCheckingAuth]);
+    // Clean up timer on unmount
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
 
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [recursiveSearch, setRecursiveSearch] = useState(true);
 
   const currentPath = searchParams.get('p') || '';
   const searchQuery = searchParams.get('q') || '';
   const isSearching = !!searchQuery;
   const canGoBack = currentPath !== '' || isSearching;
 
-  const [useBlur, setUseBlur] = useState(true);
-  const [useDirectionMenu, setUseDirectionMenu] = useState(true);
 
   const [isImageOnlyMode, setIsImageOnlyModeTemp] = useState(false);
   const setIsImageOnlyMode = (mode: boolean) => {
@@ -583,6 +599,14 @@ function FileExplorerContent() {
   const [downloadComfirmDialogOpen, setDownloadComfirmDialogOpen] = useState(false);
   const [downloadMultipleDialogOpen, setDownloadMultipleDialogOpen] = useState(false);
 
+  const xhrRefsRef = useRef<Map<string, XMLHttpRequest>>(new Map());
+  // States for upload progress tracking
+  const [uploadFiles, setUploadFiles] = useState<any[]>([]);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  // States for download progress tracking
+  const [downloadFiles, setDownloadFiles] = useState<any[]>([]);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+
   const [fileToDelete, setFileToDelete] = useState('');
   const [deleteComfirmDialogOpen, setDeleteComfirmDialogOpen] = useState(false);
   const [deleteMultipleDialogOpen, setDeleteMultipleDialogOpen] = useState(false);
@@ -593,61 +617,8 @@ function FileExplorerContent() {
   const [filesToMove, setFilesToMove] = useState<string[]>([]);
   const [moveComfirmDialogOpen, setMoveComfirmDialogOpen] = useState(false);
 
-  const [fileToShowDetails, setFileToShowDetails] = useState<FileData | null>(null);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image'>('list');
-  const viewModeRef = useRef(viewMode);
-
-  // EXPERIMENTAL FEATURE FOR GRID VIEW, IMAGE VIEW & IMAGE ONLY VIEW
-  const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
-
-  // EXPERIMENTAL FEATURE FOR IMAGE ONLY VIEW (MASONRY)
-  const [useMasonry, setUseMasonry] = useState(false);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  // EXPERIMENTAL FEATURE FOR IMAGE VIEW
-  const [showDirectoryCovers, setShowDirectoryCovers] = useState(false);
-
-  const [useImageQuickPreview, setUseImageQuickPreview] = useState(false);
-
-  // Create refs for the virtualized lists/grids
-  const listRef = useRef<List>(null);
-  const gridRef = useRef<Grid>(null);
-  const imageGridRef = useRef<Grid>(null);
-  const masonryRef = useRef<HTMLDivElement>(null);
-  const activeScrollRef = useRef<any>(null);
-  const scrollPosition = useRef(0);
-  const navRef = useRef<HTMLDivElement>(null);
-
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  const [preview, setPreview] = useState<PreviewState>({
-    isOpen: false,
-    path: '',
-    type: '',
-  });
-
-  // States for upload progress tracking
-  const [uploadFiles, setUploadFiles] = useState<any[]>([]);
-  const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const xhrRefsRef = useRef<Map<string, XMLHttpRequest>>(new Map());
-
-  // States for download progress tracking
-  const [downloadFiles, setDownloadFiles] = useState<any[]>([]);
-  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
-
-  // EXPERIMENTAL FEATURE FOR FILE INDEXING
-  const [useFileIndex, setUseFileIndex] = useState(true);
-  const [useFileWatcher, setUseFileWatcher] = useState(true);
-  const [showIndexDialog, setShowIndexDialog] = useState(false);
-  const [showWatcherDialog, setShowWatcherDialog] = useState(false);
-
-
   const cloneTimerRef = useRef<NodeJS.Timeout | null>(null);
   const moveTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   // Automatically clear filesToClone and filesToMove after 5 minutes
   useEffect(() => {
     if (filesToClone.length > 0) {
@@ -668,6 +639,44 @@ function FileExplorerContent() {
     };
   }, [filesToClone, filesToMove]);
 
+  const [fileToShowDetails, setFileToShowDetails] = useState<FileData | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'image'>('list');
+  const viewModeRef = useRef(viewMode);
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // EXPERIMENTAL FEATURE
+  const [gridDirection, setGridDirection] = useState<'ltr' | 'rtl'>('ltr');
+  const [useMasonry, setUseMasonry] = useState(false);
+  const [showDirectoryCovers, setShowDirectoryCovers] = useState(false);
+  const [useImageQuickPreview, setUseImageQuickPreview] = useState(false);
+  const [useDirectionMenu, setUseDirectionMenu] = useState(true);
+  const [useBlur, setUseBlur] = useState(true);
+  const [useDoubleClick, setUseDoubleClick] = useState(true);
+  const [doubleClickAction, setDoubleClickAction] = useState<'imageOnly' | 'recursiveSearch' | 'refresh'>('imageOnly');
+
+  // EXPERIMENTAL FEATURE FOR FILE INDEXING
+  const [useFileIndex, setUseFileIndex] = useState(true);
+  const [useFileWatcher, setUseFileWatcher] = useState(true);
+  const [showIndexDialog, setShowIndexDialog] = useState(false);
+  const [showWatcherDialog, setShowWatcherDialog] = useState(false);
+
+  const listRef = useRef<List>(null);
+  const gridRef = useRef<Grid>(null);
+  const imageGridRef = useRef<Grid>(null);
+  const masonryRef = useRef<HTMLDivElement>(null);
+  const activeScrollRef = useRef<any>(null);
+  const scrollPosition = useRef(0);
+  const navRef = useRef<HTMLDivElement>(null);
+
+  const [preview, setPreview] = useState<PreviewState>({
+    isOpen: false,
+    path: '',
+    type: '',
+  });
+
 
   // Pagination state
   const [usePagination, setUsePagination] = useState(false);
@@ -683,7 +692,6 @@ function FileExplorerContent() {
   // Buffer to trigger next page load before reaching the end
   const SCROLL_BUFFER = 10;
 
-  const [recursiveSearch, setRecursiveSearch] = useState(true);
 
   // isChangingPath will be true when navigateTo is called or the browser uses the forward/backward logic,
   // and false when the searchQuery or currentPath triggers the useEffect.
@@ -2427,6 +2435,41 @@ function FileExplorerContent() {
     }
   }, [currentPath, token, refetchData]);
 
+  const handleDoubleClick = useCallback(() => {
+    if (preview.isOpen || !useDoubleClick) return;
+
+    switch (doubleClickAction) {
+      case 'imageOnly':
+        if (!isSearching) {
+          setIsImageOnlyMode(!isImageOnlyMode);
+          setToastMessage(`Image Only Mode: ${!isImageOnlyMode ? 'On' : 'Off'}`);
+        } else {
+          setToastMessage('Cannot toggle Image Only Mode during search');
+        }
+        break;
+      case 'recursiveSearch':
+        setRecursiveSearch(!recursiveSearch);
+        setToastMessage(`Recursive Search: ${!recursiveSearch ? 'On' : 'Off'}`);
+        break;
+      case 'refresh':
+        refetchData();
+        setToastMessage('Page Refreshed');
+        break;
+    }
+
+    // Show toast notification
+    setShowToast(true);
+
+    // Clear any existing timer
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+
+    // Hide toast after 2 seconds
+    toastTimerRef.current = setTimeout(() => {
+      setShowToast(false);
+    }, 2000);
+  }, [preview.isOpen, doubleClickAction, isImageOnlyMode, isSearching, recursiveSearch, refetchData]);
+
+
 
   const useAdaptiveBg = true;
 
@@ -2474,12 +2517,20 @@ function FileExplorerContent() {
         backgroundAttachment: 'fixed',
       }}
       onClick={() => setFocusedFileIndex(null)}
+      onDoubleClick={handleDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Toast notification */}
+      {showToast && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/70 text-white px-4 py-2 rounded-md shadow-lg z-50 transition-opacity duration-300">
+          {toastMessage}
+        </div>
+      )}
+
       {/* Drag and Drop indicator */}
       {isDragging && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
@@ -2753,66 +2804,131 @@ function FileExplorerContent() {
                     <MoreHorizontal size={18} />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-1">
-                  <div className="grid gap-1">
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
-                      <ListIcon size={18} /> List View
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
-                      <Grid3x3Icon size={18} /> Grid View
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
-                      <ImageIcon size={18} /> Image View
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
-                      <ImageIcon size={18} className="text-yellow-500" /> Image Only
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
-                      <Upload size={18} /> Upload Files
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
-                      <FolderUp size={18} /> Upload Folder
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
-                      <FolderPlus size={18} /> Create Directory
-                    </Button>
-                    {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
-                      <Database size={18} /> Index Settings
-                    </Button>}
-                    {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
-                      <Eye size={18} /> Watcher Settings
-                    </Button>}
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
-                      <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
-                      <TestTube2 size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
-                      <TestTube2 size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
-                      <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
-                      <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
-                      <TestTube2 size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseBlur(!useBlur)}>
-                      <Square size={18} /> {useBlur ? 'Disable Blur' : 'Enable Blur'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseDirectionMenu(!useDirectionMenu)}>
-                      <Menu size={18} /> {useDirectionMenu ? 'Disable Direction Menu' : 'Enable Direction Menu'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" onClick={() => setRecursiveSearch(!recursiveSearch)}>
-                      <Search size={18} /> {recursiveSearch ? 'Disable Recursive Search' : 'Enable Recursive Search'}
-                    </Button>
-                    {/* <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
-                    <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
-                  </Button> */}
-                  </div>
+                <PopoverContent className="w-auto p-1 select-none">
+                  <ScrollArea className="max-h-[calc(100vh-10rem)]">
+                    <div className="grid gap-1">
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center sm:hidden">View Mode</div>
+                      <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
+                        <ListIcon size={18} /> List View
+                      </Button>
+                      <Button variant={viewMode === 'grid' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
+                        <Grid3x3Icon size={18} /> Grid View
+                      </Button>
+                      <Button variant={viewMode === 'image' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
+                        <ImageIcon size={18} /> Image View
+                      </Button>
+
+                      <Separator className="my-1 sm:hidden" />
+
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center">Image Options</div>
+                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
+                        <ImageIcon size={18} className="text-yellow-500" /> Image Only
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
+                        <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
+                        <ImageIcon size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
+                        <ImageIcon size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
+                      </Button>
+
+                      <Separator className="my-1 sm:hidden" />
+
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center sm:hidden">File Operations</div>
+                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
+                        <Upload size={18} /> Upload Files
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
+                        <FolderUp size={18} /> Upload Folder
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
+                        <FolderPlus size={18} /> Create Directory
+                      </Button>
+
+                      <Separator className="my-1" />
+
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center">Search Options</div>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUsePagination(!usePagination)}>
+                        <Search size={18} /> {usePagination ? 'Disable Pagination' : 'Enable Pagination'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setRecursiveSearch(!recursiveSearch)}>
+                        <Search size={18} /> {recursiveSearch ? 'Disable Recursive Search' : 'Enable Recursive Search'}
+                      </Button>
+
+
+                      <Separator className="my-1" />
+
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center">File Indexing</div>
+                      {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
+                        <Database size={18} /> Index Settings
+                      </Button>}
+                      {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
+                        <Eye size={18} /> Watcher Settings
+                      </Button>}
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
+                        <TestTube2 size={18} /> {useFileIndex ? 'Disable Index' : 'Enable Index'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileWatcher(!useFileWatcher)}>
+                        <TestTube2 size={18} /> {useFileWatcher ? 'Disable Watcher' : 'Enable Watcher'}
+                      </Button>
+
+                      <Separator className="my-1" />
+
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "px-2 py-1 text-sm font-semibold",
+                          !useDoubleClick && "line-through"
+                        )}
+                        onClick={() => setUseDoubleClick(!useDoubleClick)}
+                      >
+                        <MousePointer2 size={18} /> Double-Click Action
+                      </Button>
+                      {useDoubleClick && (
+                        <>
+                          <Button
+                            variant={doubleClickAction === 'imageOnly' ? "default" : "outline"}
+                            size="sm"
+                            className="justify-start"
+                            onClick={() => setDoubleClickAction('imageOnly')}
+                          >
+                            <ImageIcon size={18} className="mr-2" /> Toggle Image Only
+                          </Button>
+                          <Button
+                            variant={doubleClickAction === 'recursiveSearch' ? "default" : "outline"}
+                            size="sm"
+                            className="justify-start"
+                            onClick={() => setDoubleClickAction('recursiveSearch')}
+                          >
+                            <Search size={18} className="mr-2" /> Toggle Recursive Search
+                          </Button>
+                          <Button
+                            variant={doubleClickAction === 'refresh' ? "default" : "outline"}
+                            size="sm"
+                            className="justify-start"
+                            onClick={() => setDoubleClickAction('refresh')}
+                          >
+                            <RefreshCcw size={18} className="mr-2" /> Refresh Page
+                          </Button>
+                        </>
+                      )}
+
+                      <Separator className="my-1" />
+
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center">Other Options</div>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseBlur(!useBlur)}>
+                        <Square size={18} /> {useBlur ? 'Disable Blur' : 'Enable Blur'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseDirectionMenu(!useDirectionMenu)}>
+                        <Menu size={18} /> {useDirectionMenu ? 'Disable Direction Menu' : 'Enable Direction Menu'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setGridDirection(gridDirection === 'ltr' ? 'rtl' : 'ltr')}>
+                        <ArrowLeftRight size={18} /> Grid Direction: {gridDirection === 'ltr' ? 'LTR' : 'RTL'}
+                      </Button>
+                    </div>
+                  </ScrollArea>
                 </PopoverContent>
               </Popover>
             </div>
