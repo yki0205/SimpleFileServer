@@ -518,7 +518,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
   // Handle keyboard events for navigation
   useEffect(() => {
-    if (!isOpen || !enableHandleKeyboard) return;
+    if (!isOpen || !isMounted || !enableHandleKeyboard) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const defaultArrowLeftHandler = () => {
@@ -571,7 +571,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    isOpen, onClose, onPrev, onNext, direction, 
+    isOpen, isMounted, onClose, onPrev, onNext, direction, 
     enableHandleKeyboard, enableBaseHandleKeyboard, customKeyHandlers,
     isFullScreen, useBrowserFullscreenAPI, handleFullScreen, onFullScreenChange, 
   ]);
