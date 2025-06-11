@@ -655,7 +655,7 @@ function FileExplorerContent() {
   const [useDirectionMenu, setUseDirectionMenu] = useState(true);
   const [useBlur, setUseBlur] = useState(true);
   const [useDoubleClick, setUseDoubleClick] = useState(true);
-  const [doubleClickAction, setDoubleClickAction] = useState<'imageOnly' | 'recursiveSearch' | 'refresh'>('imageOnly');
+  const [doubleClickAction, setDoubleClickAction] = useState<'imageOnly' | 'recursiveSearch' | 'refresh'>('recursiveSearch');
 
   // EXPERIMENTAL FEATURE FOR FILE INDEXING
   const [useFileIndex, setUseFileIndex] = useState(true);
@@ -2541,6 +2541,7 @@ function FileExplorerContent() {
           </div>
         </div>
       )}
+
       <main className="container mx-auto min-h-screen flex flex-col p-4 pb-8 gap-2">
         <header className="flex flex-col md:flex-row gap-1">
           <div className="w-full flex justify-between gap-1">
@@ -2578,7 +2579,7 @@ function FileExplorerContent() {
                   "text-black",
                   "bg-white hover:bg-white/80",
                   "transition-colors duration-200",
-                  "max-sm:hidden"
+                  "max-md:hidden"
                 )}
               >
                 <Upload size={18} />
@@ -2591,7 +2592,7 @@ function FileExplorerContent() {
                   "text-black",
                   "bg-white hover:bg-white/80",
                   "transition-colors duration-200",
-                  "max-sm:hidden"
+                  "max-md:hidden"
                 )}
               >
                 <FolderUp size={18} />
@@ -2604,7 +2605,7 @@ function FileExplorerContent() {
                   "text-black",
                   "bg-white hover:bg-white/80",
                   "transition-colors duration-200",
-                  "max-sm:hidden"
+                  "max-md:hidden"
                 )}
               >
                 <FolderPlus size={18} />
@@ -2618,7 +2619,7 @@ function FileExplorerContent() {
                     "text-black",
                     "bg-white hover:bg-white/80",
                     "transition-colors duration-200",
-                    "max-sm:hidden"
+                    "max-md:hidden"
                   )}
                 >
                   <Database size={18} />
@@ -2633,7 +2634,7 @@ function FileExplorerContent() {
                     "text-black",
                     "bg-white hover:bg-white/80",
                     "transition-colors duration-200",
-                    "max-sm:hidden"
+                    "max-md:hidden"
                   )}
                 >
                   <Eye size={18} />
@@ -2728,7 +2729,7 @@ function FileExplorerContent() {
                 variant={viewMode === 'list' ? 'default' : 'outline'}
                 size="icon"
                 onClick={() => setViewMode('list')}
-                className="max-sm:hidden"
+                className="max-md:hidden"
               >
                 <ListIcon size={18} />
               </Button>
@@ -2736,7 +2737,7 @@ function FileExplorerContent() {
                 variant={viewMode === 'grid' ? 'default' : 'outline'}
                 size="icon"
                 onClick={() => setViewMode('grid')}
-                className="max-sm:hidden"
+                className="max-md:hidden"
               >
                 <Grid3x3Icon size={18} />
               </Button>
@@ -2744,7 +2745,7 @@ function FileExplorerContent() {
                 variant={viewMode === 'image' ? 'default' : 'outline'}
                 size="icon"
                 onClick={() => setViewMode('image')}
-                className="max-sm:hidden"
+                className="max-md:hidden"
               >
                 <ImageIcon size={18} />
               </Button>
@@ -2753,7 +2754,7 @@ function FileExplorerContent() {
                 size="icon"
                 onClick={() => setIsImageOnlyMode(!isImageOnlyMode)}
                 className={cn(
-                  "max-sm:hidden",
+                  "max-md:hidden",
                   "text-yellow-500 hover:text-white hover:bg-yellow-500/20",
                   isSearching && 'hidden',
                   isImageOnlyMode && 'text-white bg-yellow-600/20 hover:bg-yellow-400/50'
@@ -2791,7 +2792,7 @@ function FileExplorerContent() {
                     size="icon"
                     onClick={() => setIsLoginDialogOpen(true)}
                     title="Login"
-                    className="max-sm:hidden"
+                    className="max-md:hidden"
                   >
                     <LogIn className="w-4 h-4" />
                   </Button>
@@ -2805,24 +2806,27 @@ function FileExplorerContent() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-1 select-none">
-                  <ScrollArea className="max-h-[calc(100vh-10rem)]">
+                  <ScrollArea className="h-[50vh]">
                     <div className="grid gap-1">
-                      <div className="px-2 py-1 text-sm font-semibold flex justify-center sm:hidden">View Mode</div>
-                      <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('list')}>
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center md:hidden">View Mode</div>
+                      <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" className="justify-start md:hidden" onClick={() => setViewMode('list')}>
                         <ListIcon size={18} /> List View
                       </Button>
-                      <Button variant={viewMode === 'grid' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('grid')}>
+                      <Button variant={viewMode === 'grid' ? 'default' : 'outline'} size="sm" className="justify-start md:hidden" onClick={() => setViewMode('grid')}>
                         <Grid3x3Icon size={18} /> Grid View
                       </Button>
-                      <Button variant={viewMode === 'image' ? 'default' : 'outline'} size="sm" className="justify-start sm:hidden" onClick={() => setViewMode('image')}>
+                      <Button variant={viewMode === 'image' ? 'default' : 'outline'} size="sm" className="justify-start md:hidden" onClick={() => setViewMode('image')}>
                         <ImageIcon size={18} /> Image View
                       </Button>
 
-                      <Separator className="my-1 sm:hidden" />
+                      <Separator className="my-1 md:hidden" />
 
                       <div className="px-2 py-1 text-sm font-semibold flex justify-center">Image Options</div>
-                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setIsImageOnlyMode(true)}>
-                        <ImageIcon size={18} className="text-yellow-500" /> Image Only
+                      <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => setIsImageOnlyMode(!isImageOnlyMode)}>
+                        <ImageIcon size={18} className={cn(
+                          "text-yellow-500",
+                          isImageOnlyMode && "fill-yellow-300"
+                        )} /> Image Only
                       </Button>
                       <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseImageQuickPreview(!useImageQuickPreview)}>
                         <ImageIcon size={18} /> {useImageQuickPreview ? 'Disable Quick Preview' : 'Enable Quick Preview'}
@@ -2830,20 +2834,20 @@ function FileExplorerContent() {
                       <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseMasonry(!useMasonry)}>
                         <ImageIcon size={18} /> {useMasonry ? 'Disable Masonry' : 'Enable Masonry'}
                       </Button>
-                      <Button variant="outline" size="sm" className="justify-start" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
+                      <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => setShowDirectoryCovers(!showDirectoryCovers)}>
                         <ImageIcon size={18} /> {showDirectoryCovers ? 'Hide Directory Covers' : 'Show Directory Covers'}
                       </Button>
 
-                      <Separator className="my-1 sm:hidden" />
+                      <Separator className="my-1 md:hidden" />
 
-                      <div className="px-2 py-1 text-sm font-semibold flex justify-center sm:hidden">File Operations</div>
-                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleUpload()}>
+                      <div className="px-2 py-1 text-sm font-semibold flex justify-center md:hidden">File Operations</div>
+                      <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => handleUpload()}>
                         <Upload size={18} /> Upload Files
                       </Button>
-                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => handleFolderUpload()}>
+                      <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => handleFolderUpload()}>
                         <FolderUp size={18} /> Upload Folder
                       </Button>
-                      <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={handleMkdir}>
+                      <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={handleMkdir}>
                         <FolderPlus size={18} /> Create Directory
                       </Button>
 
@@ -2861,10 +2865,10 @@ function FileExplorerContent() {
                       <Separator className="my-1" />
 
                       <div className="px-2 py-1 text-sm font-semibold flex justify-center">File Indexing</div>
-                      {useFileIndex && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowIndexDialog(true)}>
+                      {useFileIndex && <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => setShowIndexDialog(true)}>
                         <Database size={18} /> Index Settings
                       </Button>}
-                      {useFileWatcher && <Button variant="outline" size="sm" className="justify-start sm:hidden" onClick={() => setShowWatcherDialog(true)}>
+                      {useFileWatcher && <Button variant="outline" size="sm" className="justify-start md:hidden" onClick={() => setShowWatcherDialog(true)}>
                         <Eye size={18} /> Watcher Settings
                       </Button>}
                       <Button variant="outline" size="sm" className="justify-start" onClick={() => setUseFileIndex(!useFileIndex)}>
@@ -2989,40 +2993,40 @@ function FileExplorerContent() {
                   className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
                 >
                   <Scissors size={18} />
-                  <span className="text-sm max-sm:hidden">Cut</span>
+                  <span className="text-sm max-md:hidden">Cut</span>
                 </button>
                 <button
                   onClick={() => { handleCopyMultiple(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
                   className="flex items-center gap-1 text-gray-500 hover:text-gray-600"
                 >
                   <ClipboardCopy size={18} />
-                  <span className="text-sm max-sm:hidden">Copy</span>
+                  <span className="text-sm max-md:hidden">Copy</span>
                 </button>
                 <button
                   onClick={() => { handleDownloadMultiple2(selectedFiles); setIsSelecting(false); setSelectedFiles([]) }}
                   className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
                 >
                   <Download size={18} />
-                  <span className="text-sm max-sm:hidden">Download</span>
+                  <span className="text-sm max-md:hidden">Download</span>
                 </button>
                 <button
                   onClick={() => { handleDeleteMultiple(selectedFiles) }}
                   className="flex items-center gap-1 text-red-500 hover:text-red-600"
                 >
                   <Trash2 size={18} />
-                  <span className="text-sm max-sm:hidden">Delete</span>
+                  <span className="text-sm max-md:hidden">Delete</span>
                 </button>
                 <button onClick={handleInvertSelection} className="flex items-center gap-1 hover:text-gray-500">
                   <ArrowLeftRight size={18} />
-                  <span className="text-sm max-sm:hidden">Invert</span>
+                  <span className="text-sm max-md:hidden">Invert</span>
                 </button>
                 <button onClick={handleSelectAll} className="flex items-center gap-1 text-green-700 hover:text-green-800">
                   <CheckCheck size={18} />
-                  <span className="text-sm max-sm:hidden">Select All</span>
+                  <span className="text-sm max-md:hidden">Select All</span>
                 </button>
                 <button onClick={handleClearSelection} className="flex items-center gap-1 text-red-700 hover:text-red-800">
                   <X size={18} />
-                  <span className="text-sm max-sm:hidden">Clear</span>
+                  <span className="text-sm max-md:hidden">Clear</span>
                 </button>
               </div>
             </div>
