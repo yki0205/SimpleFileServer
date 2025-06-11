@@ -210,6 +210,12 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     onDirectionChange,
   } = callbacks || {};
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+
   // Internal state management
   const [showControls, setShowControls] = useState(true);
 
@@ -400,7 +406,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     if (e.touches.length === 2) {
       touchStartX.current = null;
       touchEndX.current = null;
-      
+
       if (enablePinchZoom) {
         setIsPinching(true);
         const distance = getTouchDistance(e);
@@ -512,7 +518,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
   // Handle keyboard events for navigation
   useEffect(() => {
-    if (!enableHandleKeyboard) return;
+    if (!isOpen || !enableHandleKeyboard) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const defaultArrowLeftHandler = () => {
@@ -524,11 +530,21 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
       }
 
       const defaultEscapeHandler = () => {
-        setIsFullScreen(false);
-        onFullScreenChange?.(false);
+        if (isFullScreen) {
+          if (!useBrowserFullscreenAPI) {
+            // If we are using the browser fullscreen API,
+            // the exit fullscreen operation will be handled by the browser automatically
+            handleFullScreen();
+          }
+          setIsFullScreen(false);
+          onFullScreenChange?.(false);
+        } else {
+          onClose?.();
+        }
       }
 
       const defaultEnterHandler = () => {
+        console.log("Enter key pressed, toggling fullscreen");
         handleFullScreen();
       }
 
@@ -555,8 +571,9 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    handleFullScreen, onFullScreenChange, onPrev, onNext,
-    direction, enableHandleKeyboard, enableBaseHandleKeyboard, customKeyHandlers,
+    isOpen, onClose, onPrev, onNext, direction, 
+    enableHandleKeyboard, enableBaseHandleKeyboard, customKeyHandlers,
+    isFullScreen, useBrowserFullscreenAPI, handleFullScreen, onFullScreenChange, 
   ]);
 
 
