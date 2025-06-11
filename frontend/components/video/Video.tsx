@@ -36,6 +36,12 @@ export const Video = ({
   onFullscreen,
   onPictureInPicture,
 }: VideoProps) => {
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Core video refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -591,6 +597,8 @@ export const Video = ({
 
   // Keyboard shortcuts
   useEffect(() => {
+    if (!isMounted) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
 
       switch (e.key) {
@@ -654,7 +662,7 @@ export const Video = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [volume, brightness, isPlaying, playbackRate, isFullscreen]);
+  }, [isMounted, volume, brightness, isPlaying, playbackRate, isFullscreen]);
 
   // Clean up timeouts
   useEffect(() => {

@@ -2940,7 +2940,7 @@ function FileExplorerContent() {
 
           <form onSubmit={handleSearch} className="flex-1 md:hidden w-full flex gap-1 justify-center">
             <Input
-              name="searchQuerySmall"
+              name="searchQuery"
               placeholder="Search files..."
               defaultValue={searchQuery}
               className={cn(

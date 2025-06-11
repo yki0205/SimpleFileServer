@@ -23,6 +23,12 @@ interface ComicReaderProps {
 }
 
 export function ComicReader({ title, src, className, onClose, onDownload, onNext, onPrev, onFullScreenChange }: ComicReaderProps) {
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<string[]>([]);
@@ -788,6 +794,8 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
 
   // Handle keyboard shortcuts
   useEffect(() => {
+    if (!isMounted) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle keyboard navigation when zoomed in
       if (zoom > 1 && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === ' ')) {
@@ -823,7 +831,7 @@ export function ComicReader({ title, src, className, onClose, onDownload, onNext
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoom, isRightToLeft, onClose, debouncedNextPage, debouncedPrevPage, useFullScreen, handleFullScreenChange]);
+  }, [isMounted, zoom, isRightToLeft, onClose, debouncedNextPage, debouncedPrevPage, useFullScreen, handleFullScreenChange]);
 
   // Clear timeout when component unmounts
   useEffect(() => {

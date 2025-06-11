@@ -64,6 +64,12 @@ export const EPUBReader = ({
   src,
   className,
 }: EPUBReaderProps) => {
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [location, setLocation] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isRTL, setIsRTL] = useState(false);
@@ -434,6 +440,19 @@ export const EPUBReader = ({
       setSearchPosition({ x: 0, y: 0 });
     }
   }, [showSearch]);
+
+  const goNext = () => {
+    renditionRef.current?.next();
+  }
+
+  const goPrev = () => {
+    renditionRef.current?.prev();
+  }
+
+  // Handle keyboard events
+  useEffect(() => {
+    if (!isMounted) return;
+  }, [isMounted]);
 
   return (
     <div className={cn("h-full w-full relative", className)}>

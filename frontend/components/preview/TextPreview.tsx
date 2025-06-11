@@ -37,9 +37,13 @@ export const TextPreview: React.FC<TextPreviewProps> = ({
       hasError={hasError || isContentError}
       errorMessage={isContentError ? contentToDisplay : undefined}
       controls={{
-        showClose: false,
-        showDownload: false,
+        enableBackdropClose: true,
+
+        useBrowserFullscreenAPI: true,
+
+        enableHandleKeyboard: true,
         enableBaseHandleKeyboard: true,
+
         ...controls,
       }}
       {...restProps}

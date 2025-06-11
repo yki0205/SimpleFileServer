@@ -24,16 +24,13 @@ export const ComicPreview: React.FC<ComicPreviewProps> = ({
     <PreviewBase
       title={""}
       controls={{
-        showClose: false,
-        showDownload: false,
-        showNavigation: false,
-        showFullscreen: false,
-        enableFullscreenToolbar: false,
-        enableFullscreenNavigation: false,
-        enableHandleKeyboard: false,
+        enableBackdropClose: true,
         preventBrowserZoom: true,
         preventPinchZoom: true,
         preventContextMenu: true,
+        preventTextSelection: true,
+        preventDrag: true,
+        preventBrowserNavigation: true,
         preventPullToRefresh: true,
         ...controls
       }}

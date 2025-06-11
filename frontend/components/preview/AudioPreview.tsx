@@ -104,6 +104,10 @@ export const AudioPreview: React.FC<AudioPreviewProps> = ({
       isLoading={isLoading}
       hasError={hasError}
       controls={{
+        showClose: true,
+        enableBackdropClose: true,
+        showDownload: true,
+        showNavigation: true,
         ...controls
       }}
       {...restProps}

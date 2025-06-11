@@ -406,22 +406,40 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       isLoading={isLoading}
       hasError={hasError}
       controls={{
+        showClose: true,
+        enableBackdropClose: true,
+
+        showDownload: true,
+
         showZoom: true,
-        showFullscreen: true,
-        useBrowserFullscreenAPI: true,
-        showDirectionToggle: true,
-        enableTouchNavigation: zoom <= 1,
-        enableWheelNavigation: zoom <= 1,
-        enablePinchZoom: true,
         enableCtrlWheelZoom: true,
-        enableBaseHandleKeyboard: true,
-        enableFullscreenNavigation: zoom == 1,
-        enableFullscreenToolbar: true,
-        preventDrag: true,
-        preventPullToRefresh: true,
-        removeTouchDelay: true,
+        enablePinchZoom: true,
         onZoomIn: handleZoomIn,
         onZoomOut: handleZoomOut,
+
+        showDirectionToggle: true,
+
+        showNavigation: true,
+        enableTouchNavigation: zoom <= 1,
+        enableWheelNavigation: zoom <= 1,
+
+        showFullscreen: true,
+        useBrowserFullscreenAPI: true,
+        enableFullscreenNavigation: zoom == 1,
+        enableFullscreenToolbar: true,
+        
+        enableHandleKeyboard: true,
+        enableBaseHandleKeyboard: true,
+
+        preventBrowserZoom: true,
+        preventPinchZoom: true,
+        preventContextMenu: true,
+        preventTextSelection: true,
+        preventDrag: true,
+        preventBrowserNavigation: true,
+        preventPullToRefresh: true,
+        removeTouchDelay: true,
+
         ...controls
       }}
       callbacks={{

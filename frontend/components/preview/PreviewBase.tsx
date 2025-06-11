@@ -115,10 +115,10 @@ export interface PreviewBaseProps {
 }
 
 const defaultControls = {
-  showClose: true,
-  enableBackdropClose: true,
+  showClose: false,
+  enableBackdropClose: false,
 
-  showDownload: true,
+  showDownload: false,
 
   showZoom: false,
   enableCtrlWheelZoom: false,
@@ -127,7 +127,7 @@ const defaultControls = {
   showDirectionToggle: false,
   direction: undefined as 'ltr' | 'rtl' | undefined,
 
-  showNavigation: true,
+  showNavigation: false,
   enableWheelNavigation: false,
   enableTouchNavigation: false,
   reverseWheelNavigation: false,
@@ -135,18 +135,18 @@ const defaultControls = {
   showFullscreen: false,
   useFullScreen: false,
   useBrowserFullscreenAPI: false,
-  enableFullscreenNavigation: true,
-  enableFullscreenToolbar: true,
+  enableFullscreenNavigation: false,
+  enableFullscreenToolbar: false,
 
-  enableHandleKeyboard: true,
-  enableBaseHandleKeyboard: true,
+  enableHandleKeyboard: false,
+  enableBaseHandleKeyboard: false,
   customKeyHandlers: {},
 
   preventBrowserZoom: false,
+  preventPinchZoom: false,
   preventContextMenu: false,
   preventTextSelection: false,
   preventDrag: false,
-  preventPinchZoom: false,
   preventBrowserNavigation: false,
   preventPullToRefresh: false,
   removeTouchDelay: false,
@@ -518,7 +518,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
 
   // Handle keyboard events for navigation
   useEffect(() => {
-    if (!isOpen || !isMounted || !enableHandleKeyboard) return;
+    if (!isMounted || !enableHandleKeyboard) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const defaultArrowLeftHandler = () => {
@@ -571,7 +571,7 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    isOpen, isMounted, onClose, onPrev, onNext, direction, 
+    isMounted, onClose, onPrev, onNext, direction, 
     enableHandleKeyboard, enableBaseHandleKeyboard, customKeyHandlers,
     isFullScreen, useBrowserFullscreenAPI, handleFullScreen, onFullScreenChange, 
   ]);
@@ -712,6 +712,35 @@ export const PreviewBase: React.FC<PreviewBaseProps> = ({
     enableCtrlWheelZoom,
     enableTouchNavigation,
   ]);
+
+  // Handle browser back button to close preview
+  useEffect(() => {
+    if (!onClose) return;
+    
+    // Push a new history state when preview opens
+    const currentState = { preview: true };
+    window.history.pushState(currentState, '');
+    
+    // Handle popstate event (browser back button)
+    const handlePopState = (event: PopStateEvent) => {
+      // When browser back button is clicked, close the preview
+      onClose();
+      // Prevent default browser back navigation
+      event.preventDefault();
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    
+    // Cleanup: remove the event listener and fix history if needed
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      
+      // If we're unmounting while preview is still open,
+      // we need to clean up the history state we added
+      // Go forward to neutralize the back that just happened
+      window.history.go(1);
+    };
+  }, [onClose]);
 
 
   return (

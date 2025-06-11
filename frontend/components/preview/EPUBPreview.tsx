@@ -22,12 +22,20 @@ export const EPUBPreview: React.FC<EPUBPreviewProps> = ({
   return (
     <PreviewBase
       controls={{
-        showNavigation: false,
-        useBrowserFullscreenAPI: true,
+        showClose: true,
+        enableBackdropClose: true,
+
+        showDownload: true,
+
         showFullscreen: true,
-        enableFullscreenToolbar: false,
-        enableFullscreenNavigation: false,
-        enableHandleKeyboard: false,
+        useBrowserFullscreenAPI: true,
+
+        preventBrowserZoom: true,
+        preventPinchZoom: true,
+        preventDrag: true,
+        preventBrowserNavigation: true,
+        preventPullToRefresh: true,
+
         ...controls
       }}
       callbacks={{

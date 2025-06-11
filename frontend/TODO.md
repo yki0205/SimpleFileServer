@@ -27,3 +27,10 @@
 # 6
 
 搜索框的右键点击事件会被directionMenu拦截
+
+# TODO
+
+- [ ] 改Audio的组件
+- [ ] 改PDF组件
+- [ ] epubReader需要自行处理keyboard事件
+- [ ] 让epubReader接管onClose onDownload onFullScreenChange

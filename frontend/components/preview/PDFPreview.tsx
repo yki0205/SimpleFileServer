@@ -18,9 +18,16 @@ export const PDFPreview: React.FC<PDFPreviewProps> = ({
   ...restProps
 }) => {
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   useEffect(() => {
+    if (!isMounted) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -44,15 +51,12 @@ export const PDFPreview: React.FC<PDFPreviewProps> = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isFullScreen, controls?.onClose]);
+  }, [isMounted, isFullScreen, controls?.onClose]);
 
   return (
     <PreviewBase
       controls={{
-        showClose: false,
-        showDownload: false,
-        showNavigation: false,
-        enableHandleKeyboard: false,
+        enableBackdropClose: true,
         ...controls
       }}
       {...restProps}

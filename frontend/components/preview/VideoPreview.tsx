@@ -111,11 +111,16 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       isLoading={isLoading}
       hasError={hasError}
       controls={{
-        showClose: false,
-        showDownload: false,
-        showNavigation: false,
-        enableHandleKeyboard: false,
+        enableBackdropClose: true,
+
+        preventBrowserZoom: true,
+        preventPinchZoom: true,
         preventContextMenu: true,
+        preventTextSelection: true,
+        preventDrag: true,
+        preventBrowserNavigation: true,
+        preventPullToRefresh: true,
+
         ...controls
       }}
       {...restProps}
