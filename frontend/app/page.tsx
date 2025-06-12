@@ -3221,11 +3221,11 @@ function FileExplorerContent() {
         <Separator />
         <footer className="flex justify-center items-center">
           <p className="text-sm text-muted-foreground font-bold font-mono">
-            Developed by <a href="https://github.com/Kobayashi2003" className="underline">Kobayashi2003</a>
+            Developed by <a href="https://github.com/yki0205" className="underline">ljz/jhy/lxd/lyf/lwc</a>
           </p>
           <span className="mx-2">•</span>
-          <a href="https://github.com/Kobayashi2003" className="rounded-full overflow-hidden">
-            <img src="github_icon.png" alt="GitHub" className="w-4 h-4" />
+          <a href="https://github.com/yki0205" className="rounded-full overflow-hidden">
+            <img src="icon.png" alt="GitHub" className="w-4 h-4" />
           </a>
         </footer>
 
