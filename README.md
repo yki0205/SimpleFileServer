@@ -97,7 +97,8 @@ npm start
 5. Access the application
 Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
-
+## 如何测试各种格式的预览功能
+在tests文件夹目录下存放各种格式的example  
 ## Comic Preview
 
 ### 支持格式
@@ -225,13 +226,9 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
 ![Video Preview](./example/video-preview-1.png)
 
-### Video Preview 下禁用的浏览器默认行为
 
-- 右键菜单
 
-### BUG
 
--   有时候视频播放无声，未找到具体BUG源，猜测是音轨问题。
 
 ## Image Preview
 

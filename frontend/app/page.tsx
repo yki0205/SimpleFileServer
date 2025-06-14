@@ -2471,7 +2471,7 @@ function FileExplorerContent() {
 
 
 
-  const useAdaptiveBg = true;
+  const useAdaptiveBg = false;
 
   let bgImage = 'api/bg';
 
