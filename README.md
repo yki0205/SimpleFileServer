@@ -336,7 +336,7 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
 ### 示例
 
-[PDF Preview](./example/pdf.jpg)
+![PDF Preview](./example/pdf.jpg)
 
 ## Audio Preview
 
@@ -350,7 +350,7 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 ### 功能实现
 倍速播放，拖拽进度条播放音频
 ### 示例
-[Audio Preview](./example/audio.jpg)
+![Audio Preview](./example/audio.jpg)
 
 ## 四种ViewMode+masonry布局
 
