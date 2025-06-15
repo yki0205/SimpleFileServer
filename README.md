@@ -96,9 +96,10 @@ npm start
 
 5. Access the application
 Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
-
+默认账号：admin
+默认密码：admin123
 ## 如何测试各种格式的预览功能
-在tests文件夹目录下存放各种格式的example  
+在tests文件夹目录下存放各种格式的example,可供预览查看  
 ## Comic Preview
 
 ### 支持格式
@@ -324,8 +325,9 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
 ### 功能实现
 
-### 示例
 
+### 示例
+![epub](./example/epub.jpg)
 ## PDF Preview
 
 ### 支持格式
@@ -334,7 +336,7 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 
 ### 示例
 
-![PDF Preview](./example/pdf-preview-1.png)
+[PDF Preview](./example/pdf.jpg)
 
 ## Audio Preview
 
@@ -346,9 +348,9 @@ Open your browser and navigate to `http://localhost:${YOUR_PORT_HERE}`
 -   .flac
 
 ### 功能实现
-
+倍速播放，拖拽进度条播放音频
 ### 示例
-
+[Audio Preview](./example/audio.jpg)
 
 ## 四种ViewMode+masonry布局
 
